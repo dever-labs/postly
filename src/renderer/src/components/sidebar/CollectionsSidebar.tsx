@@ -1,5 +1,5 @@
-import { Plus } from 'lucide-react'
-import React, { useEffect } from 'react'
+import { Check, Plus, X } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Button } from '@/components/ui/Button'
@@ -13,21 +13,46 @@ export function CollectionsSidebar() {
   const addToast = useUIStore((s) => s.addToast)
   const openSettings = useUIStore((s) => s.openSettings)
 
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     loadSettings()
     load()
   }, [load, loadSettings])
 
-  const handleNewCollection = async () => {
-    const name = window.prompt('Collection name:')
-    if (!name?.trim()) return
-    const { error } = await (window as any).api.collections.create({ name: name.trim(), source: 'local' })
+  useEffect(() => {
+    if (creating) inputRef.current?.focus()
+  }, [creating])
+
+  const startCreating = () => {
+    setNewName('')
+    setCreating(true)
+  }
+
+  const cancelCreating = () => {
+    setCreating(false)
+    setNewName('')
+  }
+
+  const confirmCreate = async () => {
+    const name = newName.trim()
+    if (!name) { cancelCreating(); return }
+    setCreating(false)
+    setNewName('')
+    const { error } = await (window as any).api.collections.create({ name, source: 'local' })
     if (error) {
       addToast('Failed to create collection', 'error')
     } else {
-      addToast('Collection created', 'success')
+      addToast(`Collection "${name}" created`, 'success')
       load()
     }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') confirmCreate()
+    if (e.key === 'Escape') cancelCreating()
   }
 
   return (
@@ -50,6 +75,26 @@ export function CollectionsSidebar() {
           />
         ))}
 
+        {/* Inline new-collection input */}
+        {creating && (
+          <div className="mx-2 mt-1 flex items-center gap-1 rounded-md border border-blue-500/50 bg-neutral-900 px-2 py-1">
+            <input
+              ref={inputRef}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Collection name…"
+              className="flex-1 bg-transparent text-xs text-neutral-200 placeholder-neutral-500 outline-none"
+            />
+            <button onClick={confirmCreate} className="text-green-400 hover:text-green-300">
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={cancelCreating} className="text-neutral-500 hover:text-neutral-300">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Prompt to configure integrations if only local is present */}
         {configuredSources.length === 1 && (
           <button
@@ -63,7 +108,7 @@ export function CollectionsSidebar() {
 
       {/* Bottom bar */}
       <div className="flex items-center gap-2 border-t border-neutral-800 px-2 py-2">
-        <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={handleNewCollection}>
+        <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={startCreating}>
           <Plus className="h-3.5 w-3.5" />
           New Collection
         </Button>

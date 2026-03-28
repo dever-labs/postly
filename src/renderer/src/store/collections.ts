@@ -70,37 +70,36 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
 
   load: async () => {
     const api = (window as any).api
-    const { data: collectionsData, error: collectionsError } = await api.collections.list()
-    if (collectionsError) {
+    const { data, error: collectionsError } = await api.collections.list()
+    if (collectionsError || !data) {
       console.error('Failed to load collections:', collectionsError)
       return
     }
 
-    const collections: Collection[] = (collectionsData ?? []).map((c: Record<string, unknown>) => ({
+    // IPC returns { collections: [...], groups: [...] } as two flat arrays
+    const rawCollections: Record<string, unknown>[] = data.collections ?? []
+    const rawGroups: Record<string, unknown>[] = data.groups ?? []
+
+    const collections: Collection[] = rawCollections.map((c) => ({
       id: c.id as string,
       name: c.name as string,
       source: (c.source ?? 'local') as CollectionSource,
-      sourceMeta: parseJsonField<Record<string, string>>(c.sourceMeta ?? c.source_meta, undefined as any),
-      createdAt: (c.createdAt ?? c.created_at ?? 0) as number,
-      updatedAt: (c.updatedAt ?? c.updated_at ?? 0) as number,
+      sourceMeta: parseJsonField<Record<string, string>>(c.source_meta, undefined as any),
+      createdAt: (c.created_at ?? 0) as number,
+      updatedAt: (c.updated_at ?? 0) as number,
     }))
 
-    const allGroups: Group[] = []
+    const allGroups: Group[] = rawGroups.map(normalizeGroup)
     const allRequests: Request[] = []
 
-    for (const col of collectionsData ?? []) {
-      const groups: Group[] = (col.groups ?? []).map(normalizeGroup)
-      allGroups.push(...groups)
-
-      for (const group of groups) {
-        const { data: reqData, error: reqError } = await api.requests.list({ groupId: group.id })
-        if (reqError) {
-          console.error(`Failed to load requests for group ${group.id}:`, reqError)
-          continue
-        }
-        const reqs: Request[] = (reqData ?? []).map((r: Record<string, unknown>) => normalizeRequest(r))
-        allRequests.push(...reqs)
+    for (const group of allGroups) {
+      const { data: reqData, error: reqError } = await api.requests.list({ groupId: group.id })
+      if (reqError) {
+        console.error(`Failed to load requests for group ${group.id}:`, reqError)
+        continue
       }
+      const reqs: Request[] = (reqData ?? []).map((r: Record<string, unknown>) => normalizeRequest(r))
+      allRequests.push(...reqs)
     }
 
     set({ collections, groups: allGroups, requests: allRequests })
