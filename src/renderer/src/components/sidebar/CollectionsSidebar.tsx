@@ -11,16 +11,13 @@ import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
-type SidebarTab = 'apis' | 'environments'
-
 export function CollectionsSidebar() {
   const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
   const { integrations, load: loadIntegrations } = useIntegrationsStore()
   const { activeEnv, load: loadEnvironments } = useEnvironmentsStore()
   const addToast = useUIStore((s) => s.addToast)
-  const { openSettings } = useUIStore()
+  const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
 
-  const [tab, setTab] = useState<SidebarTab>('apis')
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [connectDialogOpen, setConnectDialogOpen] = useState(false)
@@ -59,10 +56,10 @@ export function CollectionsSidebar() {
       {/* Tab switcher */}
       <div className="flex shrink-0 border-b border-neutral-800">
         <button
-          onClick={() => setTab('apis')}
+          onClick={() => setSidebarTab('apis')}
           className={cn(
             'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors focus:outline-none',
-            tab === 'apis'
+            sidebarTab === 'apis'
               ? 'border-b-2 border-blue-500 text-neutral-100'
               : 'text-neutral-500 hover:text-neutral-300'
           )}
@@ -71,10 +68,10 @@ export function CollectionsSidebar() {
           APIs
         </button>
         <button
-          onClick={() => setTab('environments')}
+          onClick={() => setSidebarTab('environments')}
           className={cn(
             'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors focus:outline-none',
-            tab === 'environments'
+            sidebarTab === 'environments'
               ? 'border-b-2 border-blue-500 text-neutral-100'
               : 'text-neutral-500 hover:text-neutral-300'
           )}
@@ -88,12 +85,13 @@ export function CollectionsSidebar() {
       </div>
 
       {/* ── APIs tab ─────────────────────────────────────────────────────── */}
-      {tab === 'apis' && (
+      {sidebarTab === 'apis' && (
         <>
-          <div className="p-2">
+          <div className="shrink-0 p-2">
             <SidebarSearch />
           </div>
 
+          {/* Scrollable tree */}
           <div className="flex-1 overflow-y-auto py-1">
             <GroupSection
               source="local"
@@ -135,34 +133,38 @@ export function CollectionsSidebar() {
                 </button>
               </div>
             )}
-
-            <button
-              onClick={() => setConnectDialogOpen(true)}
-              className="mx-2 mt-3 w-[calc(100%-1rem)] rounded-md border border-dashed border-neutral-700 px-3 py-2.5 text-left text-xs text-neutral-500 transition-colors hover:border-neutral-600 hover:text-neutral-400"
-            >
-              + Add integration (GitHub, GitLab, Backstage) →
-            </button>
           </div>
 
-          {/* APIs footer */}
-          <div className="flex shrink-0 items-center gap-1 border-t border-neutral-800 px-2 py-2">
-            <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={startCreating}>
-              <Plus className="h-3.5 w-3.5" />
-              New Collection
-            </Button>
-            <button
-              onClick={() => openSettings()}
-              className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
-              title="Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
+          {/* APIs footer — always visible */}
+          <div className="shrink-0 border-t border-neutral-800">
+            <div className="flex items-center gap-1 px-2 py-2">
+              <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={startCreating}>
+                <Plus className="h-3.5 w-3.5" />
+                New Collection
+              </Button>
+              <button
+                onClick={() => openSettings()}
+                className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+                title="Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-2 pb-2">
+              <button
+                onClick={() => setConnectDialogOpen(true)}
+                className="flex w-full items-center gap-2 rounded-md border border-dashed border-neutral-700 px-3 py-2 text-sm text-neutral-500 transition-colors hover:border-neutral-500 hover:text-neutral-300 focus:outline-none"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                Add Integration
+              </button>
+            </div>
           </div>
         </>
       )}
 
       {/* ── Environments tab ──────────────────────────────────────────────── */}
-      {tab === 'environments' && (
+      {sidebarTab === 'environments' && (
         <div className="flex flex-1 flex-col overflow-hidden">
           <EnvironmentsPanel />
         </div>

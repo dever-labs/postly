@@ -36,6 +36,7 @@ const api = {
   environments: {
     list: () => ipcRenderer.invoke('postly:environments:list'),
     create: (data: { name: string }) => ipcRenderer.invoke('postly:environments:create', data),
+    rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:environments:rename', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:environments:delete', data),
     setActive: (data: { id: string }) => ipcRenderer.invoke('postly:environments:set-active', data),
     vars: {

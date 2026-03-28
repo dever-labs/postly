@@ -21,6 +21,13 @@ export function registerEnvironmentHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
+  ipcMain.handle('postly:environments:rename', async (_, args: { id: string; name: string }) => {
+    try {
+      run('UPDATE environments SET name = ?, updated_at = ? WHERE id = ?', [args.name, Date.now(), args.id])
+      return { data: true }
+    } catch (err) { return { error: String(err) } }
+  })
+
   ipcMain.handle('postly:environments:delete', async (_, args: { id: string }) => {
     try {
       run('DELETE FROM environments WHERE id = ?', [args.id])

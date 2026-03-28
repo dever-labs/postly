@@ -9,12 +9,16 @@ interface ToastItem {
 interface UIState {
   settingsOpen: boolean
   settingsTab: string
+  sidebarTab: 'apis' | 'environments'
+  selectedEnvId: string | null
   sidebarWidth: number
   editorHeight: number
   activeCommitRequestId: string | null
   toasts: ToastItem[]
   openSettings: (tab?: string) => void
   closeSettings: () => void
+  setSidebarTab: (tab: 'apis' | 'environments') => void
+  setSelectedEnvId: (id: string | null) => void
   setSidebarWidth: (w: number) => void
   setEditorHeight: (h: number) => void
   openCommitPanel: (requestId: string) => void
@@ -26,6 +30,8 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   settingsOpen: false,
   settingsTab: 'general',
+  sidebarTab: 'apis',
+  selectedEnvId: null,
   sidebarWidth: 280,
   editorHeight: 300,
   activeCommitRequestId: null,
@@ -33,6 +39,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   openSettings: (tab = 'general') => set({ settingsOpen: true, settingsTab: tab }),
   closeSettings: () => set({ settingsOpen: false }),
+
+  setSidebarTab: (tab) => set({ sidebarTab: tab }),
+  setSelectedEnvId: (id) => set({ selectedEnvId: id }),
 
   setSidebarWidth: (w: number) => set({ sidebarWidth: w }),
   setEditorHeight: (h: number) => set({ editorHeight: h }),
