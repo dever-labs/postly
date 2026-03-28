@@ -66,12 +66,13 @@ interface CollectionRowProps {
   collection: Collection
   open: boolean
   onToggle: () => void
+  onAddRequest: () => void
   onAddGroup: () => void
   onRename: () => void
   onDelete: () => void
 }
 
-function CollectionRow({ collection, open, onToggle, onAddGroup, onRename, onDelete }: CollectionRowProps) {
+function CollectionRow({ collection, open, onToggle, onAddRequest, onAddGroup, onRename, onDelete }: CollectionRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -87,11 +88,18 @@ function CollectionRow({ collection, open, onToggle, onAddGroup, onRename, onDel
       {/* hover actions */}
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
+          title="Add request"
+          onClick={(e) => { e.stopPropagation(); onAddRequest() }}
+          className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
           title="Add group"
           onClick={(e) => { e.stopPropagation(); onAddGroup() }}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <FolderOpen className="h-3.5 w-3.5" />
         </button>
         <button
           title="More"
@@ -139,6 +147,7 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
     hiddenSources,
     deleteRequest,
     createGroup,
+    addRequestToCollection,
     deleteCollection,
     renameCollection,
     createLocalRequest,
@@ -224,6 +233,7 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
                     collection={collection}
                     open={isOpen}
                     onToggle={() => toggleCollection(collection.id)}
+                    onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
                     onDelete={() => deleteCollection(collection.id)}
@@ -290,14 +300,9 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
                       />
                     )}
 
-                    {/* Empty state */}
+                    {/* Empty state - only show add-group prompt, not blocking */}
                     {collectionGroups.length === 0 && addingGroupTo !== collection.id && (
-                      <button
-                        onClick={() => setAddingGroupTo(collection.id)}
-                        className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-xs text-neutral-600 hover:text-neutral-500 focus:outline-none"
-                      >
-                        <Plus className="h-3 w-3" /> Add a group
-                      </button>
+                      <p className="px-2 py-1 text-xs text-neutral-600 italic">No groups — hover collection to add</p>
                     )}
                   </div>
                 )}

@@ -12,6 +12,7 @@ interface CollectionsState {
   toggleSourceHidden: (source: CollectionSource) => void
   setSearchQuery: (q: string) => void
   createGroup: (collectionId: string, name: string) => Promise<void>
+  addRequestToCollection: (collectionId: string) => Promise<void>
   deleteCollection: (id: string) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
@@ -164,6 +165,22 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({
       collections: state.collections.map((c) => c.id === id ? { ...c, name } : c),
     }))
+  },
+
+  addRequestToCollection: async (collectionId: string) => {
+    const api = (window as any).api
+    // reuse an existing group or auto-create a "Default" one
+    let group = get().groups.find((g) => g.collectionId === collectionId)
+    if (!group) {
+      const { data, error } = await api.groups.create({ collectionId, name: 'Default' })
+      if (error) { console.error('Failed to create default group:', error); return }
+      group = normalizeGroup(data as Record<string, unknown>)
+      set((state) => ({ groups: [...state.groups, group!] }))
+    }
+    const { data, error } = await api.requests.create({ groupId: group.id, name: 'New Request', method: 'GET' })
+    if (error) { console.error('Failed to create request:', error); return }
+    const req = normalizeRequest(data as Record<string, unknown>)
+    set((state) => ({ requests: [...state.requests, req] }))
   },
 
   createLocalRequest: async (groupId: string) => {
