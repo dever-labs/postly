@@ -3,12 +3,14 @@ import React, { useEffect, useState } from 'react'
 import type { GitLabSettings } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { useSettingsStore } from '@/store/settings'
 import { useUIStore } from '@/store/ui'
 
 const DEFAULTS: GitLabSettings = { baseUrl: 'https://gitlab.com', token: '', groups: [] }
 
 export function GitLabSettings() {
   const addToast = useUIStore((s) => s.addToast)
+  const loadSettings = useSettingsStore((s) => s.load)
   const [settings, setSettings] = useState<GitLabSettings>(DEFAULTS)
   const [newGroup, setNewGroup] = useState('')
   const [syncing, setSyncing] = useState(false)
@@ -21,8 +23,12 @@ export function GitLabSettings() {
 
   const save = async () => {
     const { error } = await (window as any).api.settings.set({ key: 'gitlab', value: settings })
-    if (error) addToast('Failed to save GitLab settings', 'error')
-    else addToast('GitLab settings saved', 'success')
+    if (error) {
+      addToast('Failed to save GitLab settings', 'error')
+    } else {
+      addToast('GitLab settings saved', 'success')
+      loadSettings()
+    }
   }
 
   const addGroup = () => {

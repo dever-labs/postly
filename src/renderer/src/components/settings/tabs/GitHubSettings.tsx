@@ -3,12 +3,14 @@ import React, { useEffect, useState } from 'react'
 import type { GitHubSettings } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { useSettingsStore } from '@/store/settings'
 import { useUIStore } from '@/store/ui'
 
 const DEFAULTS: GitHubSettings = { token: '', orgs: [] }
 
 export function GitHubSettings() {
   const addToast = useUIStore((s) => s.addToast)
+  const loadSettings = useSettingsStore((s) => s.load)
   const [settings, setSettings] = useState<GitHubSettings>(DEFAULTS)
   const [newOrg, setNewOrg] = useState('')
   const [syncing, setSyncing] = useState(false)
@@ -21,8 +23,12 @@ export function GitHubSettings() {
 
   const save = async () => {
     const { error } = await (window as any).api.settings.set({ key: 'github', value: settings })
-    if (error) addToast('Failed to save GitHub settings', 'error')
-    else addToast('GitHub settings saved', 'success')
+    if (error) {
+      addToast('Failed to save GitHub settings', 'error')
+    } else {
+      addToast('GitHub settings saved', 'success')
+      loadSettings()
+    }
   }
 
   const addOrg = () => {

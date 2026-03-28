@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react'
 import type { BackstageSettings } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { useSettingsStore } from '@/store/settings'
 import { useUIStore } from '@/store/ui'
 
 const DEFAULTS: BackstageSettings = { baseUrl: '', token: '', autoSync: false }
 
 export function BackstageSettings() {
   const addToast = useUIStore((s) => s.addToast)
+  const loadSettings = useSettingsStore((s) => s.load)
   const [settings, setSettings] = useState<BackstageSettings>(DEFAULTS)
   const [syncing, setSyncing] = useState(false)
 
@@ -19,8 +21,12 @@ export function BackstageSettings() {
 
   const save = async () => {
     const { error } = await (window as any).api.settings.set({ key: 'backstage', value: settings })
-    if (error) addToast('Failed to save Backstage settings', 'error')
-    else addToast('Backstage settings saved', 'success')
+    if (error) {
+      addToast('Failed to save Backstage settings', 'error')
+    } else {
+      addToast('Backstage settings saved', 'success')
+      loadSettings()
+    }
   }
 
   const syncNow = async () => {
