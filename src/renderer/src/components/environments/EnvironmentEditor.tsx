@@ -121,9 +121,6 @@ export function EnvironmentEditor() {
             onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
             className="bg-transparent text-lg font-semibold text-neutral-100 outline-none placeholder-neutral-600 focus:border-b focus:border-blue-500"
           />
-          {env.isActive && (
-            <span className="rounded bg-emerald-900/50 px-2 py-0.5 text-xs font-medium text-emerald-400">active</span>
-          )}
         </div>
 
         <div className="flex items-center gap-2">

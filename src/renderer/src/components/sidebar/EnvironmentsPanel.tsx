@@ -75,10 +75,6 @@ export function EnvironmentsPanel() {
 
               <span className="flex-1 truncate">{env.name}</span>
 
-              {isActive && (
-                <span className="shrink-0 rounded bg-emerald-900/50 px-1 py-px text-[10px] font-medium text-emerald-400">active</span>
-              )}
-
               <button
                 onClick={(e) => { e.stopPropagation(); if (isSelected) setSelectedEnvId(null); deleteEnvironment(env.id) }}
                 className="shrink-0 rounded p-0.5 text-neutral-600 opacity-0 hover:text-rose-400 focus:outline-none group-hover/env:opacity-100"

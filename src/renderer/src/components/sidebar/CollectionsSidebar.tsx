@@ -79,7 +79,7 @@ export function CollectionsSidebar() {
           <Globe className="h-3.5 w-3.5" />
           Environments
           {activeEnv && (
-            <span className="rounded bg-emerald-900/60 px-1 py-px text-[9px] text-emerald-400">{activeEnv.name}</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" title={`Active: ${activeEnv.name}`} />
           )}
         </button>
       </div>
