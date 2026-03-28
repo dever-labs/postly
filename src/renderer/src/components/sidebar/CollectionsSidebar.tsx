@@ -1,17 +1,21 @@
-import { Check, Plus, X } from 'lucide-react'
+import { Check, Plus, Settings, X } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Button } from '@/components/ui/Button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useCollectionsStore } from '@/store/collections'
+import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 
 export function CollectionsSidebar() {
   const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
   const { integrations, load: loadIntegrations } = useIntegrationsStore()
+  const { environments, activeEnv, setActive, load: loadEnvironments } = useEnvironmentsStore()
   const addToast = useUIStore((s) => s.addToast)
+  const { openSettings } = useUIStore()
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -21,7 +25,8 @@ export function CollectionsSidebar() {
   useEffect(() => {
     load()
     loadIntegrations()
-  }, [load, loadIntegrations])
+    loadEnvironments()
+  }, [load, loadIntegrations, loadEnvironments])
 
   useEffect(() => {
     if (creating) inputRef.current?.focus()
@@ -116,12 +121,40 @@ export function CollectionsSidebar() {
         </button>
       </div>
 
-      {/* Bottom bar */}
-      <div className="flex items-center gap-2 border-t border-neutral-800 px-2 py-2">
-        <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={startCreating}>
-          <Plus className="h-3.5 w-3.5" />
-          New Collection
-        </Button>
+      {/* Footer */}
+      <div className="shrink-0 border-t border-neutral-800">
+        {/* Environment picker */}
+        <div className="px-2 pt-2 pb-1">
+          <Select
+            value={activeEnv?.id ?? '__none__'}
+            onValueChange={(val) => setActive(val === '__none__' ? '' : val)}
+          >
+            <SelectTrigger className="h-8 w-full text-xs">
+              <SelectValue placeholder="No environment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No environment</SelectItem>
+              {environments.map((env) => (
+                <SelectItem key={env.id} value={env.id}>{env.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* New collection + settings */}
+        <div className="flex items-center gap-1 px-2 pb-2">
+          <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-neutral-400" onClick={startCreating}>
+            <Plus className="h-3.5 w-3.5" />
+            New Collection
+          </Button>
+          <button
+            onClick={() => openSettings()}
+            className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <ConnectIntegrationDialog
