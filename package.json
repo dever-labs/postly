@@ -2,7 +2,7 @@
   "name": "postly",
   "version": "0.1.0",
   "description": "Cross-platform API client with Backstage and source control integration",
-  "main": "dist-electron/main/index.js",
+  "main": "out/main/index.js",
   "scripts": {
     "test": "vitest run",
     "dev": "electron-vite dev",
