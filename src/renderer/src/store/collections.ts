@@ -11,7 +11,9 @@ interface CollectionsState {
   toggleGroupCollapsed: (groupId: string) => Promise<void>
   toggleSourceHidden: (source: CollectionSource) => void
   setSearchQuery: (q: string) => void
-  createLocalRequest: (groupId: string) => Promise<void>
+  createGroup: (collectionId: string, name: string) => Promise<void>
+  deleteCollection: (id: string) => Promise<void>
+  renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
   markDirty: (requestId: string) => void
 }
@@ -133,6 +135,36 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   setSearchQuery: (q: string) => set({ searchQuery: q }),
+
+  createGroup: async (collectionId: string, name: string) => {
+    const api = (window as any).api
+    const { data, error } = await api.groups.create({ collectionId, name })
+    if (error) {
+      console.error('Failed to create group:', error)
+      return
+    }
+    const group = normalizeGroup(data as Record<string, unknown>)
+    set((state) => ({ groups: [...state.groups, group] }))
+  },
+
+  deleteCollection: async (id: string) => {
+    const api = (window as any).api
+    const { error } = await api.collections.delete({ id })
+    if (error) { console.error('Failed to delete collection:', error); return }
+    set((state) => ({
+      collections: state.collections.filter((c) => c.id !== id),
+      groups: state.groups.filter((g) => g.collectionId !== id),
+    }))
+  },
+
+  renameCollection: async (id: string, name: string) => {
+    const api = (window as any).api
+    const { error } = await api.collections.rename({ id, name })
+    if (error) { console.error('Failed to rename collection:', error); return }
+    set((state) => ({
+      collections: state.collections.map((c) => c.id === id ? { ...c, name } : c),
+    }))
+  },
 
   createLocalRequest: async (groupId: string) => {
     const api = (window as any).api
