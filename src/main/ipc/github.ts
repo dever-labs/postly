@@ -9,6 +9,7 @@ import {
   getFileContent,
   GitHubSettings
 } from '../services/github'
+import { startGitHubOAuth } from '../services/scm-oauth'
 
 function getGitHubSettings(): GitHubSettings {
   const row = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['github'])
@@ -70,6 +71,27 @@ export function registerGitHubHandlers(): void {
 
       const remoteContent = await getFileContent(settings.token, owner, repo, scmPath, 'main')
       return { data: { localContent, remoteContent, hasChanges: localContent !== remoteContent } }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:github:oauth', async (_, args: { baseUrl: string; clientId: string; clientSecret: string }) => {
+    try {
+      const result = await startGitHubOAuth(args)
+      const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['github'])
+      const current = existing ? JSON.parse(existing.value) : {}
+      run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+        ['github', JSON.stringify({ ...current, ...args, token: result.token, connectedUser: result.user }), Date.now()])
+      return { data: { user: result.user } }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:github:disconnect', async () => {
+    try {
+      const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['github'])
+      const current = existing ? JSON.parse(existing.value) : {}
+      run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+        ['github', JSON.stringify({ ...current, token: '', connectedUser: undefined }), Date.now()])
+      return { data: true }
     } catch (err) { return { error: String(err) } }
   })
 }

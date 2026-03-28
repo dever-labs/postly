@@ -16,6 +16,24 @@ export interface Collection {
   name: string
   source: CollectionSource
   sourceMeta?: Record<string, string>
+  integrationId?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface Integration {
+  id: string
+  type: 'github' | 'gitlab' | 'backstage'
+  name: string
+  baseUrl: string
+  clientId: string
+  clientSecret: string
+  token: string
+  connectedUser?: { login?: string; username?: string; name: string; avatarUrl: string } | null
+  repo: string
+  branch: string
+  status: 'connected' | 'disconnected' | 'error'
+  errorMessage?: string
   createdAt: number
   updatedAt: number
 }
@@ -111,13 +129,21 @@ export interface BackstageSettings {
 }
 
 export interface GitHubSettings {
+  baseUrl: string
+  clientId: string
+  clientSecret: string
   token: string
+  connectedUser?: { login: string; name: string; avatarUrl: string }
+  repo: string
   orgs: string[]
 }
 
 export interface GitLabSettings {
   baseUrl: string
+  clientId: string
   token: string
+  connectedUser?: { username: string; name: string; avatarUrl: string }
+  repo: string
   groups: string[]
 }
 

@@ -31,6 +31,12 @@ function runMigrations(): void {
   for (const sql of migrations) {
     db.run(sql)
   }
+  // Add integration_id to collections if not already present (ignore if column already exists)
+  try {
+    db.run('ALTER TABLE collections ADD COLUMN integration_id TEXT REFERENCES integrations(id)')
+  } catch {
+    // column already exists, ignore
+  }
 }
 
 /** Flush the in-memory DB to disk. Call after every write. */

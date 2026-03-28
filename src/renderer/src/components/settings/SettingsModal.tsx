@@ -1,27 +1,18 @@
 import { X } from 'lucide-react'
 import React, { useState } from 'react'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
-import { BackstageSettings } from '@/components/settings/tabs/BackstageSettings'
-import { GitHubSettings } from '@/components/settings/tabs/GitHubSettings'
-import { GitLabSettings } from '@/components/settings/tabs/GitLabSettings'
 import { EnvironmentsSettings } from '@/components/settings/tabs/EnvironmentsSettings'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
 const TABS = [
   { id: 'general', label: 'General' },
-  { id: 'backstage', label: 'Backstage' },
-  { id: 'github', label: 'GitHub' },
-  { id: 'gitlab', label: 'GitLab' },
   { id: 'environments', label: 'Environments' },
 ]
 
 function TabContent({ tab }: { tab: string }) {
   switch (tab) {
     case 'general': return <GeneralSettings />
-    case 'backstage': return <BackstageSettings />
-    case 'github': return <GitHubSettings />
-    case 'gitlab': return <GitLabSettings />
     case 'environments': return <EnvironmentsSettings />
     default: return null
   }

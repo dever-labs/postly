@@ -6,7 +6,10 @@ import { parseOpenApiToRequests } from './openapi-parser'
 
 export interface GitLabSettings {
   baseUrl: string
+  clientId: string
   token: string
+  connectedUser?: { username: string; name: string; avatarUrl: string }
+  repo: string
   groups: string[]
 }
 

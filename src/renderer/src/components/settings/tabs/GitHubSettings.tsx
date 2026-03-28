@@ -6,13 +6,21 @@ import { Input } from '@/components/ui/Input'
 import { useSettingsStore } from '@/store/settings'
 import { useUIStore } from '@/store/ui'
 
-const DEFAULTS: GitHubSettings = { token: '', orgs: [] }
+const DEFAULTS: GitHubSettings = {
+  baseUrl: 'https://github.com',
+  clientId: '',
+  clientSecret: '',
+  token: '',
+  repo: '',
+  orgs: [],
+}
 
 export function GitHubSettings() {
   const addToast = useUIStore((s) => s.addToast)
   const loadSettings = useSettingsStore((s) => s.load)
   const [settings, setSettings] = useState<GitHubSettings>(DEFAULTS)
   const [newOrg, setNewOrg] = useState('')
+  const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
@@ -21,14 +29,40 @@ export function GitHubSettings() {
     })
   }, [])
 
-  const save = async () => {
-    const { error } = await (window as any).api.settings.set({ key: 'github', value: settings })
+  const isConnected = !!settings.connectedUser
+
+  const connect = async () => {
+    setConnecting(true)
+    const { data, error } = await (window as any).api.github.oauth({
+      baseUrl: settings.baseUrl,
+      clientId: settings.clientId,
+      clientSecret: settings.clientSecret,
+    })
+    setConnecting(false)
     if (error) {
-      addToast('Failed to save GitHub settings', 'error')
+      addToast(`Connection failed: ${error}`, 'error')
     } else {
-      addToast('GitHub settings saved', 'success')
+      addToast('Connected to GitHub!', 'success')
+      setSettings((prev) => ({ ...prev, connectedUser: data.user }))
       loadSettings()
     }
+  }
+
+  const disconnect = async () => {
+    const { error } = await (window as any).api.github.disconnect()
+    if (error) {
+      addToast(`Failed to disconnect: ${error}`, 'error')
+    } else {
+      addToast('Disconnected from GitHub', 'success')
+      setSettings((prev) => ({ ...prev, token: '', connectedUser: undefined }))
+      loadSettings()
+    }
+  }
+
+  const saveConfig = async () => {
+    const { error } = await (window as any).api.settings.set({ key: 'github', value: settings })
+    if (error) addToast('Failed to save settings', 'error')
+    else { addToast('GitHub settings saved', 'success'); loadSettings() }
   }
 
   const addOrg = () => {
@@ -52,53 +86,121 @@ export function GitHubSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-sm font-semibold text-neutral-200">GitHub</h3>
+      <h3 className="text-sm font-semibold text-neutral-200">GitHub Integration</h3>
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Personal Access Token</label>
+          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Base URL</label>
           <Input
-            type="password"
-            placeholder="ghp_..."
-            value={settings.token}
-            onChange={(e) => setSettings({ ...settings, token: e.target.value })}
+            placeholder="https://github.com"
+            value={settings.baseUrl}
+            onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
+            disabled={isConnected}
           />
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Organizations</label>
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {settings.orgs.map((org) => (
-              <span
-                key={org}
-                className="flex items-center gap-1 rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300"
-              >
-                {org}
-                <button onClick={() => removeOrg(org)} className="text-neutral-500 hover:text-neutral-300">
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add organization..."
-              value={newOrg}
-              onChange={(e) => setNewOrg(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addOrg()}
-            />
-            <Button variant="outline" size="sm" onClick={addOrg}>
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Client ID</label>
+          <Input
+            placeholder="Oauth App Client ID"
+            value={settings.clientId}
+            onChange={(e) => setSettings({ ...settings, clientId: e.target.value })}
+            disabled={isConnected}
+          />
+          <p className="mt-1 text-xs text-neutral-500">
+            <a
+              href="https://github.com/settings/applications/new"
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-400 hover:underline"
+            >
+              Register an OAuth App on GitHub
+            </a>
+            {' '}— set redirect URI to{' '}
+            <span className="font-mono text-neutral-400">http://localhost/callback</span>
+          </p>
         </div>
-      </div>
 
-      <div className="flex gap-2">
-        <Button size="sm" onClick={save}>Save</Button>
-        <Button variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
-          {syncing ? 'Syncing...' : 'Sync Now'}
-        </Button>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Client Secret</label>
+          <Input
+            type="password"
+            placeholder="Client secret"
+            value={settings.clientSecret}
+            onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
+            disabled={isConnected}
+          />
+        </div>
+
+        {!isConnected ? (
+          <Button size="sm" onClick={connect} disabled={connecting || !settings.clientId}>
+            {connecting ? 'Connecting...' : 'Connect with GitHub'}
+          </Button>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3 rounded-md border border-neutral-700 bg-neutral-800/50 px-3 py-2">
+              <img
+                src={settings.connectedUser!.avatarUrl}
+                alt={settings.connectedUser!.login}
+                className="h-8 w-8 rounded-full"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-neutral-200">{settings.connectedUser!.name}</div>
+                <div className="text-xs text-neutral-400">@{settings.connectedUser!.login}</div>
+              </div>
+              <span className="mr-2 text-xs text-green-400">✓ Connected</span>
+              <Button variant="outline" size="sm" onClick={disconnect}>
+                Disconnect
+              </Button>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+                Repository (owner/repo)
+              </label>
+              <Input
+                placeholder="owner/repo"
+                value={settings.repo}
+                onChange={(e) => setSettings({ ...settings, repo: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-neutral-400">Organizations</label>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {settings.orgs.map((org) => (
+                  <span
+                    key={org}
+                    className="flex items-center gap-1 rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300"
+                  >
+                    {org}
+                    <button onClick={() => removeOrg(org)} className="text-neutral-500 hover:text-neutral-300">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add organization..."
+                  value={newOrg}
+                  onChange={(e) => setNewOrg(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addOrg()}
+                />
+                <Button variant="outline" size="sm" onClick={addOrg}>
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveConfig}>Save</Button>
+              <Button variant="outline" size="sm" onClick={syncNow} disabled={syncing}>
+                {syncing ? 'Syncing...' : 'Sync Now'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

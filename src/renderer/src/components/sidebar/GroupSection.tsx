@@ -1,10 +1,12 @@
 import * as Collapsible from '@radix-ui/react-collapsible'
-import { Check, ChevronDown, ChevronRight, Database, Eye, EyeOff, FolderOpen, GitBranch, GitFork, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, ChevronRight, Database, Eye, EyeOff, FolderOpen, GitBranch, GitFork, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
 import React, { useRef, useState } from 'react'
-import type { Collection, CollectionSource, Group, Request } from '@/types'
+import type { Collection, CollectionSource, Group, Integration, Request } from '@/types'
+import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { RequestTreeItem } from '@/components/sidebar/RequestTreeItem'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
+import { useIntegrationsStore } from '@/store/integrations'
 import { useRequestsStore } from '@/store/requests'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +23,7 @@ function capitalize(s: string) {
 
 interface GroupSectionProps {
   source: CollectionSource
+  integration?: Integration | null
   collections: Collection[]
   groups: Group[]
   requests: Request[]
@@ -135,11 +138,12 @@ function CollectionRow({ collection, open, onToggle, onAddRequest, onAddGroup, o
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GroupSection({ source, collections, groups, requests, searchQuery }: GroupSectionProps) {
+export function GroupSection({ source, integration, collections, groups, requests, searchQuery }: GroupSectionProps) {
   const [sourceOpen, setSourceOpen] = useState(true)
   const [openCollections, setOpenCollections] = useState<Set<string>>(new Set())
   const [addingGroupTo, setAddingGroupTo] = useState<string | null>(null)
   const [renamingCollection, setRenamingCollection] = useState<string | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const {
     toggleGroupCollapsed,
@@ -152,9 +156,12 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
     renameCollection,
     createLocalRequest,
   } = useCollectionsStore()
+  const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest } = useRequestsStore()
 
-  const sourceCollections = collections.filter((c) => c.source === source)
+  const sourceCollections = integration
+    ? collections.filter((c) => c.integrationId === integration.id)
+    : collections.filter((c) => c.source === source && !c.integrationId)
   const isSourceHidden = hiddenSources.has(source)
 
   const totalRequests = requests.filter((r) => {
@@ -191,22 +198,45 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
   return (
     <Collapsible.Root open={sourceOpen} onOpenChange={setSourceOpen} className="mb-1">
       {/* Source header */}
-      <div className="flex items-center gap-1 px-2 py-1">
+      <div className="group/header flex items-center gap-1 px-2 py-1">
         <Collapsible.Trigger asChild>
           <button className="flex flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-sm font-medium text-neutral-400 hover:text-neutral-200 focus:outline-none">
             {sourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            {SOURCE_ICONS[source]}
-            <span>{capitalize(source)}</span>
+            {integration ? SOURCE_ICONS[integration.type] : SOURCE_ICONS[source]}
+            <span>{integration ? integration.name : capitalize(source)}</span>
             <Badge variant="grey" className="ml-1">{totalRequests.length}</Badge>
           </button>
         </Collapsible.Trigger>
-        <button
-          onClick={() => toggleSourceHidden(source)}
-          className="rounded p-0.5 text-neutral-600 hover:text-neutral-400 focus:outline-none"
-          title={isSourceHidden ? 'Show source' : 'Hide source'}
-        >
-          {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        </button>
+
+        {integration ? (
+          <div className="flex items-center gap-0.5">
+            {(integration.status === 'error' || integration.status === 'disconnected') && (
+              <button
+                onClick={() => integrationsStore.connect(integration.id)}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-400 hover:bg-neutral-800 hover:text-amber-300 focus:outline-none"
+                title="Reconnect"
+              >
+                <AlertCircle className="h-3 w-3" />
+                <span className="hidden group-hover/header:inline">Reconnect</span>
+              </button>
+            )}
+            <button
+              onClick={() => setEditDialogOpen(true)}
+              className="rounded p-0.5 text-neutral-600 opacity-0 hover:text-neutral-400 focus:outline-none group-hover/header:opacity-100"
+              title="Edit integration"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => toggleSourceHidden(source)}
+            className="rounded p-0.5 text-neutral-600 hover:text-neutral-400 focus:outline-none"
+            title={isSourceHidden ? 'Show source' : 'Hide source'}
+          >
+            {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+        )}
       </div>
 
       <Collapsible.Content>
@@ -311,6 +341,14 @@ export function GroupSection({ source, collections, groups, requests, searchQuer
           })}
         </div>
       </Collapsible.Content>
+
+      {integration && (
+        <ConnectIntegrationDialog
+          open={editDialogOpen}
+          onClose={() => setEditDialogOpen(false)}
+          editIntegration={integration}
+        />
+      )}
     </Collapsible.Root>
   )
 }

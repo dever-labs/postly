@@ -1,26 +1,27 @@
 import { Check, Plus, X } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
+import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Button } from '@/components/ui/Button'
 import { useCollectionsStore } from '@/store/collections'
-import { useSettingsStore } from '@/store/settings'
+import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 
 export function CollectionsSidebar() {
   const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
-  const { configuredSources, load: loadSettings } = useSettingsStore()
+  const { integrations, load: loadIntegrations } = useIntegrationsStore()
   const addToast = useUIStore((s) => s.addToast)
-  const openSettings = useUIStore((s) => s.openSettings)
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    loadSettings()
     load()
-  }, [load, loadSettings])
+    loadIntegrations()
+  }, [load, loadIntegrations])
 
   useEffect(() => {
     if (creating) inputRef.current?.focus()
@@ -64,10 +65,22 @@ export function CollectionsSidebar() {
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto py-1">
-        {configuredSources.map((source) => (
+        {/* Always show local */}
+        <GroupSection
+          source="local"
+          integration={null}
+          collections={collections}
+          groups={groups}
+          requests={requests}
+          searchQuery={searchQuery}
+        />
+
+        {/* One section per integration */}
+        {integrations.map((integration) => (
           <GroupSection
-            key={source}
-            source={source}
+            key={integration.id}
+            source={integration.type}
+            integration={integration}
             collections={collections}
             groups={groups}
             requests={requests}
@@ -95,15 +108,12 @@ export function CollectionsSidebar() {
           </div>
         )}
 
-        {/* Prompt to configure integrations if only local is present */}
-        {configuredSources.length === 1 && (
-          <button
-            onClick={() => openSettings('backstage')}
-            className="mx-2 mt-3 w-[calc(100%-1rem)] rounded-md border border-dashed border-neutral-700 px-3 py-2.5 text-left text-xs text-neutral-500 transition-colors hover:border-neutral-600 hover:text-neutral-400"
-          >
-            + Connect Backstage, GitHub, or GitLab →
-          </button>
-        )}
+        <button
+          onClick={() => setConnectDialogOpen(true)}
+          className="mx-2 mt-3 w-[calc(100%-1rem)] rounded-md border border-dashed border-neutral-700 px-3 py-2.5 text-left text-xs text-neutral-500 transition-colors hover:border-neutral-600 hover:text-neutral-400"
+        >
+          + Add integration (GitHub, GitLab, Backstage) →
+        </button>
       </div>
 
       {/* Bottom bar */}
@@ -113,6 +123,11 @@ export function CollectionsSidebar() {
           New Collection
         </Button>
       </div>
+
+      <ConnectIntegrationDialog
+        open={connectDialogOpen}
+        onClose={() => setConnectDialogOpen(false)}
+      />
     </div>
   )
 }

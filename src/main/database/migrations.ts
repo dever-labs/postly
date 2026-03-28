@@ -85,5 +85,23 @@ export const migrations: string[] = [
     expires_at INTEGER,
     scope TEXT,
     created_at INTEGER NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS integrations (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    client_id TEXT DEFAULT '',
+    client_secret TEXT DEFAULT '',
+    token TEXT DEFAULT '',
+    refresh_token TEXT DEFAULT '',
+    connected_user TEXT DEFAULT '',
+    repo TEXT DEFAULT '',
+    branch TEXT DEFAULT 'main',
+    status TEXT DEFAULT 'disconnected',
+    error_message TEXT DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
   )`
 ]

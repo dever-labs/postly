@@ -88,6 +88,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       name: c.name as string,
       source: (c.source ?? 'local') as CollectionSource,
       sourceMeta: parseJsonField<Record<string, string>>(c.source_meta, undefined as any),
+      integrationId: (c.integration_id ?? undefined) as string | undefined,
       createdAt: (c.created_at ?? 0) as number,
       updatedAt: (c.updated_at ?? 0) as number,
     }))

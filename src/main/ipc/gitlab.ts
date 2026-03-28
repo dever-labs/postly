@@ -9,6 +9,7 @@ import {
   getFileContent,
   GitLabSettings
 } from '../services/gitlab'
+import { startGitLabOAuth } from '../services/scm-oauth'
 
 function getGitLabSettings(): GitLabSettings {
   const row = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['gitlab'])
@@ -69,6 +70,27 @@ export function registerGitLabHandlers(): void {
 
       const remoteContent = await getFileContent(settings.token, settings.baseUrl, projectId, scmPath, 'main')
       return { data: { localContent, remoteContent, hasChanges: localContent !== remoteContent } }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:gitlab:oauth', async (_, args: { baseUrl: string; clientId: string }) => {
+    try {
+      const result = await startGitLabOAuth(args)
+      const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['gitlab'])
+      const current = existing ? JSON.parse(existing.value) : {}
+      run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+        ['gitlab', JSON.stringify({ ...current, ...args, token: result.token, connectedUser: result.user }), Date.now()])
+      return { data: { user: result.user } }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:gitlab:disconnect', async () => {
+    try {
+      const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['gitlab'])
+      const current = existing ? JSON.parse(existing.value) : {}
+      run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+        ['gitlab', JSON.stringify({ ...current, token: '', connectedUser: undefined }), Date.now()])
+      return { data: true }
     } catch (err) { return { error: String(err) } }
   })
 }

@@ -53,6 +53,8 @@ const api = {
     createBranch: (data: { owner: string; repo: string; newBranch: string; fromBranch: string }) => ipcRenderer.invoke('postly:github:branch:create', data),
     commit: (data: unknown) => ipcRenderer.invoke('postly:github:commit', data),
     diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:github:diff', data),
+    oauth: (data: { baseUrl: string; clientId: string; clientSecret: string }) => ipcRenderer.invoke('postly:github:oauth', data),
+    disconnect: () => ipcRenderer.invoke('postly:github:disconnect'),
   },
   gitlab: {
     sync: () => ipcRenderer.invoke('postly:gitlab:sync'),
@@ -60,11 +62,21 @@ const api = {
     createBranch: (data: { projectId: string; newBranch: string; fromBranch: string }) => ipcRenderer.invoke('postly:gitlab:branch:create', data),
     commit: (data: unknown) => ipcRenderer.invoke('postly:gitlab:commit', data),
     diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:gitlab:diff', data),
+    oauth: (data: { baseUrl: string; clientId: string }) => ipcRenderer.invoke('postly:gitlab:oauth', data),
+    disconnect: () => ipcRenderer.invoke('postly:gitlab:disconnect'),
   },
   settings: {
     get: (data: { key: string }) => ipcRenderer.invoke('postly:settings:get', data),
     set: (data: { key: string; value: unknown }) => ipcRenderer.invoke('postly:settings:set', data),
     getAll: () => ipcRenderer.invoke('postly:settings:get-all'),
+  },
+  integrations: {
+    list: () => ipcRenderer.invoke('postly:integrations:list'),
+    create: (data: { type: string; name: string; baseUrl: string; clientId?: string; clientSecret?: string; repo?: string; branch?: string }) => ipcRenderer.invoke('postly:integrations:create', data),
+    update: (data: { id: string; [key: string]: unknown }) => ipcRenderer.invoke('postly:integrations:update', data),
+    delete: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:delete', data),
+    connect: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:connect', data),
+    disconnect: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:disconnect', data),
   },
 }
 

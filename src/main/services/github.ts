@@ -5,7 +5,12 @@ import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 
 export interface GitHubSettings {
+  baseUrl: string
+  clientId: string
+  clientSecret: string
   token: string
+  connectedUser?: { login: string; name: string; avatarUrl: string }
+  repo: string
   orgs: string[]
 }
 

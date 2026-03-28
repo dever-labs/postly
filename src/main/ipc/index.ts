@@ -7,6 +7,7 @@ import { registerBackstageHandlers } from './backstage'
 import { registerGitHubHandlers } from './github'
 import { registerGitLabHandlers } from './gitlab'
 import { registerSettingsHandlers } from './settings'
+import { registerIntegrationHandlers } from './integrations'
 
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
@@ -18,4 +19,5 @@ export function registerAllIpcHandlers(): void {
   registerGitHubHandlers()
   registerGitLabHandlers()
   registerSettingsHandlers()
+  registerIntegrationHandlers()
 }
