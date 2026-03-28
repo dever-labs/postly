@@ -1,0 +1,67 @@
+{
+  "name": "postly",
+  "version": "0.1.0",
+  "description": "Cross-platform API client with Backstage and source control integration",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "lint": "eslint src electron --ext .ts,.tsx"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dever-labs/postly.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dever-labs/postly/issues"
+  },
+  "homepage": "https://github.com/dever-labs/postly#readme",
+  "private": "true",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/rebuild": "^4.0.3",
+    "@types/node": "^20.19.37",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.27",
+    "electron": "^29.4.6",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vitest": "^1.6.1"
+  },
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^10.1.1",
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "axios": "^1.14.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron-store": "^8.2.0",
+    "lucide-react": "^1.7.0",
+    "openapi-types": "^12.1.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.1",
+    "tailwind-merge": "^3.5.0",
+    "zustand": "^4.5.7"
+  }
+}

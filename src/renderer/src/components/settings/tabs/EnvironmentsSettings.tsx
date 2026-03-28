@@ -1,0 +1,148 @@
+import { Eye, EyeOff, Plus, Trash2 } from 'lucide-react'
+import React, { useEffect } from 'react'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { useEnvironmentsStore } from '@/store/environments'
+
+export function EnvironmentsSettings() {
+  const {
+    environments,
+    activeEnv,
+    vars,
+    load,
+    createEnvironment,
+    deleteEnvironment,
+    setActive,
+    upsertVar,
+    deleteVar,
+  } = useEnvironmentsStore()
+
+  const [newEnvName, setNewEnvName] = React.useState('')
+  const [selectedEnvId, setSelectedEnvId] = React.useState<string | null>(null)
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  useEffect(() => {
+    if (!selectedEnvId && environments.length > 0) {
+      setSelectedEnvId(environments[0].id)
+    }
+  }, [environments, selectedEnvId])
+
+  const selectedEnv = environments.find((e) => e.id === selectedEnvId)
+  const envVars = vars.filter((v) => v.envId === selectedEnvId)
+
+  const handleCreateEnv = async () => {
+    const name = newEnvName.trim()
+    if (!name) return
+    await createEnvironment(name)
+    setNewEnvName('')
+  }
+
+  const handleAddVar = () => {
+    if (!selectedEnvId) return
+    upsertVar(selectedEnvId, '', '', false, crypto.randomUUID())
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <h3 className="text-sm font-semibold text-neutral-200">Environments</h3>
+
+      {/* Environment list */}
+      <div className="flex flex-col gap-2">
+        {environments.map((env) => (
+          <div
+            key={env.id}
+            className="flex items-center gap-2 rounded border border-neutral-800 px-3 py-2"
+          >
+            <input
+              type="radio"
+              checked={env.isActive}
+              onChange={() => setActive(env.id)}
+              className="accent-blue-500"
+            />
+            <button
+              onClick={() => setSelectedEnvId(env.id)}
+              className={`flex-1 text-left text-sm ${selectedEnvId === env.id ? 'text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
+            >
+              {env.name}
+              {env.isActive && <span className="ml-2 text-xs text-emerald-400">active</span>}
+            </button>
+            <button
+              onClick={() => deleteEnvironment(env.id)}
+              className="text-neutral-600 hover:text-rose-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+
+        <div className="flex gap-2">
+          <Input
+            placeholder="New environment name..."
+            value={newEnvName}
+            onChange={(e) => setNewEnvName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateEnv()}
+          />
+          <Button size="sm" variant="outline" onClick={handleCreateEnv}>
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Variables for selected env */}
+      {selectedEnv && (
+        <div>
+          <div className="mb-2 text-xs font-medium text-neutral-400">
+            Variables — {selectedEnv.name}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {envVars.length > 0 && (
+              <div className="mb-1 grid grid-cols-[1fr_1fr_32px_28px] gap-1 px-1 text-xs text-neutral-600">
+                <span>Key</span>
+                <span>Value</span>
+                <span>Secret</span>
+                <span />
+              </div>
+            )}
+
+            {envVars.map((v) => (
+              <div key={v.id} className="grid grid-cols-[1fr_1fr_32px_28px] items-center gap-1">
+                <Input
+                  value={v.key}
+                  onChange={(e) => upsertVar(v.envId, e.target.value, v.value, v.isSecret, v.id)}
+                  placeholder="KEY"
+                />
+                <Input
+                  type={v.isSecret ? 'password' : 'text'}
+                  value={v.value}
+                  onChange={(e) => upsertVar(v.envId, v.key, e.target.value, v.isSecret, v.id)}
+                  placeholder="value"
+                />
+                <button
+                  onClick={() => upsertVar(v.envId, v.key, v.value, !v.isSecret, v.id)}
+                  className={`flex h-8 w-8 items-center justify-center rounded hover:bg-neutral-800 focus:outline-none ${v.isSecret ? 'text-amber-400' : 'text-neutral-600'}`}
+                  title={v.isSecret ? 'Secret (click to reveal)' : 'Not secret'}
+                >
+                  {v.isSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  onClick={() => deleteVar(v.id)}
+                  className="flex h-8 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-rose-400 focus:outline-none"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+
+            <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-neutral-400" onClick={handleAddVar}>
+              <Plus className="h-3.5 w-3.5" /> Add variable
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
