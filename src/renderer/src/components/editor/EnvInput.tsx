@@ -95,7 +95,7 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
-  const baseColorRef = useRef<string>('')   // captured before we set color:transparent
+  const colorProbeRef = useRef<HTMLSpanElement>(null)
   const ac = useEnvAutocomplete()
   const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
   const vars = useEnvironmentsStore((s) => s.vars)
@@ -108,17 +108,15 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const hasVars = /\{\{[^}]+\}\}/.test(value)
   const segments = hasVars ? parseSegments(value, activeVars) : null
 
-  // Capture the real text color once on mount, before we ever set color:transparent
-  useLayoutEffect(() => {
-    if (inputRef.current) {
-      baseColorRef.current = getComputedStyle(inputRef.current).color
-    }
-  }, [])
-
-  // Sync overlay font/padding from the input after mount and on value change
+  // Sync overlay font/padding from the input after mount and on value change.
+  // Read text color from the probe element — it shares the className but never
+  // gets color:transparent, so getComputedStyle always returns the real color.
   useLayoutEffect(() => {
     if (!inputRef.current || !hasVars) return
-    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft, baseColorRef.current))
+    const color = colorProbeRef.current
+      ? getComputedStyle(colorProbeRef.current).color
+      : ''
+    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft, color))
   }, [hasVars, value])
 
   // Recompute hover hit zones whenever value changes
@@ -182,6 +180,14 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
 
   return (
     <div ref={wrapperRef} className={cn('relative', wrapperClassName)} onMouseLeave={() => setHovered(null)}>
+      {/* Hidden probe — same className as input, never gets color:transparent.
+          Used to reliably read the real text color for the overlay. */}
+      <span
+        ref={colorProbeRef}
+        aria-hidden
+        className={className}
+        style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden', padding: 0, border: 0 }}
+      />
       {/* Highlight overlay — mirrors the input text with styled token spans */}
       {segments && (
         <div
