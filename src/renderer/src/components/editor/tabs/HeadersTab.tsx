@@ -2,6 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import React from 'react'
 import type { KeyValuePair } from '@/types'
 import { Button } from '@/components/ui/Button'
+import { EnvInput } from '@/components/editor/EnvInput'
 import { cn } from '@/lib/utils'
 
 const COMMON_HEADERS = [
@@ -73,9 +74,9 @@ export function HeadersTab({ params, onChange }: HeadersTabProps) {
             placeholder="Header name"
             className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
           />
-          <input
+          <EnvInput
             value={param.value}
-            onChange={(e) => updateRow(param.id, 'value', e.target.value)}
+            onChange={(v) => updateRow(param.id, 'value', v)}
             placeholder="Value"
             className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
           />

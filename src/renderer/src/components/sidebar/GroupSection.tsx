@@ -170,10 +170,15 @@ export function GroupSection({ source, integration, collections, groups, request
     deleteCollection,
     renameCollection,
     createLocalRequest,
+    deleteGroup,
+    renameGroup,
   } = useCollectionsStore()
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
+
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null)
+  const [groupMenuOpen, setGroupMenuOpen] = useState<string | null>(null)
 
   const sourceCollections = integration
     ? collections.filter((c) => c.integrationId === integration.id)
@@ -300,8 +305,16 @@ export function GroupSection({ source, integration, collections, groups, request
                           open={!group.collapsed || !!searchQuery}
                           onOpenChange={() => toggleGroupCollapsed(group.id)}
                         >
+                          {renamingGroup === group.id ? (
+                            <InlineInput
+                              placeholder={group.name}
+                              onConfirm={(name) => { renameGroup(group.id, name); setRenamingGroup(null) }}
+                              onCancel={() => setRenamingGroup(null)}
+                              indent="pl-2"
+                            />
+                          ) : (
                           <div className={cn(
-                            'group/grp flex items-center gap-1 rounded pr-1 text-th-text-muted hover:text-th-text-primary',
+                            'group/grp relative flex items-center gap-1 rounded pr-1 text-th-text-muted hover:text-th-text-primary',
                             selectedItem?.type === 'group' && selectedItem.id === group.id
                               ? 'bg-th-surface-hover text-th-text-primary'
                               : 'hover:bg-th-surface-raised/60'
@@ -330,14 +343,46 @@ export function GroupSection({ source, integration, collections, groups, request
                               <span className="truncate">{group.name}</span>
                               {group.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
                             </button>
-                            <button
-                              title="Add request"
-                              onClick={() => createLocalRequest(group.id)}
-                              className="shrink-0 rounded p-0.5 opacity-0 hover:bg-th-surface-hover focus:outline-none group-hover/grp:opacity-100"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
+
+                            {/* Hover actions */}
+                            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/grp:opacity-100">
+                              <button
+                                title="Add request"
+                                onClick={() => createLocalRequest(group.id)}
+                                className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                title="More"
+                                onClick={(e) => { e.stopPropagation(); setGroupMenuOpen(groupMenuOpen === group.id ? null : group.id) }}
+                                className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            {groupMenuOpen === group.id && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setGroupMenuOpen(null)} />
+                                <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
+                                    onClick={(e) => { e.stopPropagation(); setGroupMenuOpen(null); setRenamingGroup(group.id) }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" /> Rename
+                                  </button>
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-th-surface-hover"
+                                    onClick={(e) => { e.stopPropagation(); setGroupMenuOpen(null); deleteGroup(group.id) }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
+                          )}
 
                           <Collapsible.Content>
                             <div className="pl-1">

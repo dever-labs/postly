@@ -1,9 +1,11 @@
-import Editor from '@monaco-editor/react'
+import Editor, { useMonaco } from '@monaco-editor/react'
 import { Plus, Trash2, Upload } from 'lucide-react'
-import React, { useRef } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import type { BodyType, KeyValuePair } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { EnvInput } from '@/components/editor/EnvInput'
+import { useEnvironmentsStore } from '@/store/environments'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
@@ -71,8 +73,8 @@ function KVEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: (pairs
             onChange={(e) => update(pair.id, 'enabled', e.target.checked)}
             className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
-          <Input value={pair.key} onChange={(e) => update(pair.id, 'key', e.target.value)} placeholder="Key" />
-          <Input value={pair.value} onChange={(e) => update(pair.id, 'value', e.target.value)} placeholder="Value" />
+          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
+          <EnvInput value={pair.value} onChange={(v) => update(pair.id, 'value', v)} placeholder="Value" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
           <button
             onClick={() => remove(pair.id)}
             className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
@@ -110,7 +112,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
             onChange={(e) => update(pair.id, 'enabled', e.target.checked)}
             className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
-          <Input value={pair.key} onChange={(e) => update(pair.id, 'key', e.target.value)} placeholder="Key" />
+          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
 
           <div className="flex min-w-0 items-center gap-1">
             <div className="flex shrink-0 overflow-hidden rounded border border-th-border text-xs">
@@ -178,6 +180,76 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
 export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }: BodyTabProps) {
   const theme = useUIStore((s) => s.theme)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const monaco = useMonaco()
+  const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
+  const vars = useEnvironmentsStore((s) => s.vars)
+  const activeVarsRef = useRef(vars.filter((v) => v.envId === activeEnv?.id))
+  activeVarsRef.current = vars.filter((v) => v.envId === activeEnv?.id)
+
+  // Register completion provider once per Monaco instance
+  useEffect(() => {
+    if (!monaco) return
+    const LANGS = ['plaintext', 'javascript', 'json', 'html', 'xml', 'graphql']
+    const disposables = LANGS.map((lang) =>
+      monaco.languages.registerCompletionItemProvider(lang, {
+        // No triggerCharacters — we manually trigger via onDidChangeModelContent instead.
+        // This avoids the issue where Monaco won't re-trigger on a second consecutive `{`.
+        provideCompletionItems: (model, position) => {
+          const lineUntil = model.getValueInRange({
+            startLineNumber: position.lineNumber, startColumn: 1,
+            endLineNumber: position.lineNumber, endColumn: position.column,
+          })
+          const match = lineUntil.match(/\{\{(\w*)$/)
+          if (!match) return { suggestions: [] }
+          const startCol = position.column - match[0].length
+          return {
+            suggestions: activeVarsRef.current.map((v) => ({
+              label: v.key,
+              kind: monaco.languages.CompletionItemKind.Variable,
+              detail: v.isSecret ? '••••••' : v.value,
+              documentation: `Environment variable · {{${v.key}}}`,
+              insertText: `{{${v.key}}}`,
+              filterText: `{{${v.key}`,
+              range: {
+                startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+                startColumn: startCol, endColumn: position.column,
+              },
+            })),
+          }
+        },
+      })
+    )
+    return () => disposables.forEach((d) => d.dispose())
+  }, [monaco])
+
+  // Attach to a Monaco editor instance: auto-trigger suggestions when `{{` is typed
+  const attachEnvSuggest = useCallback((editor: any) => {
+    editor.onDidChangeModelContent(() => {
+      const pos = editor.getPosition()
+      if (!pos) return
+      const model = editor.getModel()
+      if (!model) return
+      const lineUntil = model.getValueInRange({
+        startLineNumber: pos.lineNumber, startColumn: 1,
+        endLineNumber: pos.lineNumber, endColumn: pos.column,
+      })
+      if (/\{\{(\w*)$/.test(lineUntil)) {
+        editor.trigger('postly', 'editor.action.triggerSuggest', {})
+      }
+    })
+  }, [])
+
+  const monacoOptions = {
+    minimap: { enabled: false },
+    fontSize: 12,
+    lineNumbers: 'off' as const,
+    scrollBeyondLastLine: false,
+    wordWrap: 'on' as const,
+    padding: { top: 8 },
+    // Allow suggestions everywhere including inside strings
+    quickSuggestions: { other: true, comments: true, strings: true },
+    suggestOnTriggerCharacters: true,
+  }
 
   const topTab = toTopTab(bodyType)
   const rawSubtype = toRawSubtype(bodyType)
@@ -265,18 +337,12 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
             value={bodyContent}
             onChange={(v) => onContentChange(v ?? '')}
             onMount={(editor) => {
+              attachEnvSuggest(editor)
               if (rawSubtype === 'raw-json') {
                 editor.getAction('editor.action.formatDocument')?.run()
               }
             }}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 12,
-              lineNumbers: 'off',
-              scrollBeyondLastLine: false,
-              wordWrap: 'on',
-              padding: { top: 8 },
-            }}
+            options={monacoOptions}
           />
         )}
 
@@ -308,14 +374,8 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
               theme={theme === 'light' ? 'vs' : 'vs-dark'}
               value={parsedGql().query}
               onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), query: v ?? '' }))}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                lineNumbers: 'off',
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                padding: { top: 8 },
-              }}
+              onMount={attachEnvSuggest}
+              options={monacoOptions}
             />
             <div className="border-b border-t border-th-border px-3 py-1 text-xs text-th-text-faint">Variables</div>
             <Editor
@@ -324,14 +384,8 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
               theme={theme === 'light' ? 'vs' : 'vs-dark'}
               value={parsedGql().variables}
               onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), variables: v ?? '' }))}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                lineNumbers: 'off',
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                padding: { top: 8 },
-              }}
+              onMount={attachEnvSuggest}
+              options={monacoOptions}
             />
           </div>
         )}

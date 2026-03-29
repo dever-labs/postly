@@ -1,4 +1,4 @@
-import { Check, Eye, EyeOff, Plus, Save, Trash2 } from 'lucide-react'
+import { Check, Eye, EyeOff, Plus, Save, Search, Trash2 } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useUIStore } from '@/store/ui'
@@ -68,6 +68,7 @@ export function EnvironmentEditor() {
   const [name, setName] = useState(env?.name ?? '')
   const [localVars, setLocalVars] = useState<EnvVar[]>([])
   const [saved, setSaved] = useState(false)
+  const [varSearch, setVarSearch] = useState('')
 
   useEffect(() => { setName(env?.name ?? '') }, [env?.id])
   useEffect(() => { setLocalVars(envVars) }, [env?.id, vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -165,9 +166,17 @@ export function EnvironmentEditor() {
 
       {/* Variables */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-th-text-muted">Variables</h3>
-          <span className="text-xs text-th-text-faint">{localVars.length} variable{localVars.length !== 1 ? 's' : ''}</span>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-th-text-faint" />
+            <input
+              value={varSearch}
+              onChange={(e) => setVarSearch(e.target.value)}
+              placeholder="Search variables…"
+              className="w-full rounded border border-th-border-strong bg-th-surface py-1.5 pl-8 pr-3 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
+            />
+          </div>
+          <span className="shrink-0 text-xs text-th-text-faint">{localVars.length} variable{localVars.length !== 1 ? 's' : ''}</span>
         </div>
 
         {localVars.length > 0 && (
@@ -180,16 +189,21 @@ export function EnvironmentEditor() {
         )}
 
         <div className="flex flex-col gap-2">
-          {localVars.map((v) => (
-            <VarRow
-              key={v.id}
-              varItem={v}
-              onChange={(updated) => setLocalVars((prev) => prev.map((x) => x.id === updated.id ? updated : x))}
-              onDelete={() => handleDeleteVar(v.id)}
-            />
-          ))}
+          {localVars
+            .filter((v) => !varSearch || v.key.toLowerCase().includes(varSearch.toLowerCase()) || v.value.toLowerCase().includes(varSearch.toLowerCase()))
+            .map((v) => (
+              <VarRow
+                key={v.id}
+                varItem={v}
+                onChange={(updated) => setLocalVars((prev) => prev.map((x) => x.id === updated.id ? updated : x))}
+                onDelete={() => handleDeleteVar(v.id)}
+              />
+            ))}
           {localVars.length === 0 && (
             <p className="py-4 text-sm italic text-th-text-faint">No variables yet — add one below</p>
+          )}
+          {localVars.length > 0 && varSearch && localVars.filter((v) => v.key.toLowerCase().includes(varSearch.toLowerCase()) || v.value.toLowerCase().includes(varSearch.toLowerCase())).length === 0 && (
+            <p className="py-4 text-sm italic text-th-text-faint">No variables match "{varSearch}"</p>
           )}
         </div>
 

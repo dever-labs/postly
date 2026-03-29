@@ -20,6 +20,8 @@ interface CollectionsState {
   syncRequest: (request: Request) => void
   updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
+  deleteGroup: (id: string) => Promise<void>
+  renameGroup: (id: string, name: string) => Promise<void>
 }
 
 function parseJsonField<T>(value: unknown, fallback: T): T {
@@ -251,6 +253,25 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       groups: state.groups.map((g) =>
         g.id === id ? { ...g, ...updates } : g
       ),
+    }))
+  },
+
+  deleteGroup: async (id: string) => {
+    const api = (window as any).api
+    const { error } = await api.groups.delete({ id })
+    if (error) { console.error('Failed to delete group:', error); return }
+    set((state) => ({
+      groups: state.groups.filter((g) => g.id !== id),
+      requests: state.requests.filter((r) => r.groupId !== id),
+    }))
+  },
+
+  renameGroup: async (id: string, name: string) => {
+    const api = (window as any).api
+    const { error } = await api.groups.update({ id, name })
+    if (error) { console.error('Failed to rename group:', error); return }
+    set((state) => ({
+      groups: state.groups.map((g) => g.id === id ? { ...g, name } : g),
     }))
   },
 }))
