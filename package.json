@@ -109,7 +109,8 @@
     "publish": {
       "provider": "github",
       "owner": "dever-labs",
-      "repo": "postly"
+      "repo": "postly",
+      "releaseType": "release"
     }
   },
   "repository": {
