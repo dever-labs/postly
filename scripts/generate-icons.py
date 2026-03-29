@@ -26,18 +26,18 @@ def make_icon(size: int) -> Image.Image:
     draw.rounded_rectangle([pad, pad, size - pad, size - pad],
                             radius=r, fill=(3, 7, 18, 255))
 
-    # Subtle blue inner border
-    border = size * 0.012
-    draw.rounded_rectangle(
-        [pad + border, pad + border, size - pad - border, size - pad - border],
-        radius=r - border, outline=(59, 130, 246, 120), width=max(1, int(size * 0.012)))
+    # Only draw the blue border at larger sizes (looks bad when tiny)
+    if size >= 48:
+        border = size * 0.012
+        draw.rounded_rectangle(
+            [pad + border, pad + border, size - pad - border, size - pad - border],
+            radius=r - border, outline=(59, 130, 246, 120), width=max(1, int(size * 0.012)))
 
-    # White "P" lettermark — centred
+    # White "P" lettermark
     font_size = int(size * 0.56)
     font = None
-    # Try a few system fonts that render "P" well at large size
     candidates = [
-        'C:/Windows/Fonts/seguisb.ttf',   # Segoe UI Semibold
+        'C:/Windows/Fonts/seguisb.ttf',
         'C:/Windows/Fonts/segoeui.ttf',
         'C:/Windows/Fonts/arialbd.ttf',
         'C:/Windows/Fonts/arial.ttf',
@@ -55,21 +55,17 @@ def make_icon(size: int) -> Image.Image:
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
         tx = (size - tw) / 2 - bbox[0]
-        ty = (size - th) / 2 - bbox[1] - size * 0.02   # slight optical lift
+        ty = (size - th) / 2 - bbox[1] - size * 0.02
         draw.text((tx, ty), text, font=font, fill=(255, 255, 255, 255))
     else:
-        # Fallback: draw a simple bold "P" shape with rectangles
         lw = int(size * 0.10)
         cx = int(size * 0.34)
         top = int(size * 0.22)
         bot = int(size * 0.78)
-        # Vertical stroke
         draw.rectangle([cx, top, cx + lw, bot], fill=(255, 255, 255, 255))
-        # Bowl top half
         bowl_r = int(size * 0.16)
         draw.ellipse([cx + lw, top, cx + lw + bowl_r * 2, top + bowl_r * 2],
                      fill=(255, 255, 255, 255))
-        # Inner cutout for bowl
         margin = int(lw * 0.7)
         draw.ellipse([cx + lw + margin, top + margin,
                       cx + lw + bowl_r * 2 - margin, top + bowl_r * 2 - margin],

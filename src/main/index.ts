@@ -1,11 +1,13 @@
 import { app, BrowserWindow, shell, Menu, nativeImage } from 'electron'
 import { join } from 'path'
+import { platform } from 'process'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers } from './ipc'
 
 function createWindow(): void {
-  const iconPath = join(__dirname, '../../resources/icon.png')
-  const icon = nativeImage.createFromPath(iconPath)
+  // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
+  const iconFile = platform === 'win32' ? 'icon.ico' : 'icon.png'
+  const icon = nativeImage.createFromPath(join(__dirname, '../../resources', iconFile))
 
   const win = new BrowserWindow({
     width: 1280,
@@ -13,7 +15,8 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#030712',
-    titleBarStyle: 'hiddenInset',
+    // 'hiddenInset' is macOS-only; use 'hidden' on Windows/Linux
+    titleBarStyle: platform === 'darwin' ? 'hiddenInset' : 'hidden',
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
