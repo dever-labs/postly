@@ -33,3 +33,6 @@ dist-electron/
 
 # Windows
 Thumbs.db
+
+playwright-report/
+test-results/
