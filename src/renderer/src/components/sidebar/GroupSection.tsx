@@ -117,7 +117,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
         onClick={onSelect}
         className={cn(
           'flex flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold focus:outline-none',
-          isActive ? 'text-th-text-primary' : 'text-th-text-secondary hover:text-th-text-primary'
+          isActive ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary'
         )}
       >
         <span className="truncate">{collection.name}</span>
