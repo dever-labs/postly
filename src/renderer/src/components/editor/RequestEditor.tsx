@@ -85,7 +85,7 @@ export function RequestEditor() {
   if (!editingRequest) {
     return (
       <div className="flex h-full flex-col bg-th-bg">
-        <div className="drag-region shrink-0 border-b border-th-border px-4 pt-8 pb-4" />
+        <div className="drag-region shrink-0 px-4 pt-8 pb-4" />
         <div className="flex flex-1 items-center justify-center text-sm text-th-text-faint">
           Select or create a request
         </div>

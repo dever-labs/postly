@@ -109,7 +109,7 @@ export function EnvironmentEditor() {
   if (!env) {
     return (
       <div className="flex h-full flex-1 flex-col bg-th-bg">
-        <div className="drag-region shrink-0 border-b border-th-border px-6 pt-8 pb-4" />
+        <div className="drag-region shrink-0 px-6 pt-8 pb-4" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
           <div className="rounded-full border border-th-border p-6">
             <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
