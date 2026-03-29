@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box, Pencil } from 'lucide-react'
+import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
@@ -113,7 +113,7 @@ export function CollectionEditor({ collectionId }: Props) {
           {editingTitle ? (
             <input
               ref={titleInputRef}
-              className="w-full border-b border-th-border-strong bg-transparent text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+              className="-mx-2 w-full rounded-md border border-th-border-strong bg-th-surface px-2 py-1 text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
               placeholder="Collection name"
               value={name}
               onChange={(e) => { setName(e.target.value); mark() }}
@@ -122,24 +122,21 @@ export function CollectionEditor({ collectionId }: Props) {
               autoFocus
             />
           ) : (
-            <div className="group flex items-center gap-2">
-              <span className="text-2xl font-semibold text-th-text-primary">
-                {name || <span className="text-th-text-faint">Collection name</span>}
-              </span>
-              <button
+            <div className="flex items-center gap-2">
+              <div
                 onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
-                title="Rename collection"
+                className="-mx-2 cursor-text rounded-md px-2 py-1 text-2xl font-semibold text-th-text-primary hover:bg-th-surface-hover transition-colors"
+                title="Click to rename"
               >
-                <Pencil className="h-4 w-4" />
-              </button>
+                {name || <span className="text-th-text-faint">Collection name</span>}
+              </div>
               <button
                 onClick={async () => {
                   const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
                   if (error) addToast(`Export failed: ${error}`, 'error')
                   else if (data) addToast(`Exported "${name}"`, 'success')
                 }}
-                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
+                className="opacity-0 hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
                 title="Export this collection"
               >
                 <Download className="h-4 w-4" />

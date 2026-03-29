@@ -1,4 +1,4 @@
-import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder, Pencil } from 'lucide-react'
+import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
 import React, { useMemo, useRef, useState } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
@@ -137,7 +137,7 @@ export function RequestEditor() {
         {editingTitle ? (
           <input
             ref={titleInputRef}
-            className="no-drag w-full border-b border-th-border-strong bg-transparent text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+            className="no-drag -mx-1.5 rounded-md border border-th-border-strong bg-th-surface px-1.5 py-0.5 text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
             placeholder="Request name"
             value={editingRequest.name}
             onChange={(e) => updateField('name', e.target.value)}
@@ -146,17 +146,12 @@ export function RequestEditor() {
             autoFocus
           />
         ) : (
-          <div className="group flex items-center gap-1.5">
-            <span className="text-sm font-medium text-th-text-primary">
-              {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
-            </span>
-            <button
-              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-              className="no-drag opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
-              title="Rename request"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+          <div
+            onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
+            className="no-drag -mx-1.5 cursor-text rounded-md px-1.5 py-0.5 text-sm font-medium text-th-text-primary hover:bg-th-surface-hover transition-colors"
+            title="Click to rename"
+          >
+            {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
           </div>
         )}
       </div>

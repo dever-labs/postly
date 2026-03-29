@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box, Pencil } from 'lucide-react'
+import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
@@ -134,7 +134,7 @@ export function GroupEditor({ groupId }: Props) {
           {editingTitle ? (
             <input
               ref={titleInputRef}
-              className="w-full border-b border-th-border-strong bg-transparent text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+              className="-mx-2 w-full rounded-md border border-th-border-strong bg-th-surface px-2 py-1 text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
               placeholder="Group name"
               value={name}
               onChange={(e) => { setName(e.target.value); mark() }}
@@ -143,17 +143,12 @@ export function GroupEditor({ groupId }: Props) {
               autoFocus
             />
           ) : (
-            <div className="group flex items-center gap-2">
-              <span className="text-2xl font-semibold text-th-text-primary">
-                {name || <span className="text-th-text-faint">Group name</span>}
-              </span>
-              <button
-                onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
-                title="Rename group"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
+            <div
+              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
+              className="-mx-2 cursor-text rounded-md px-2 py-1 text-2xl font-semibold text-th-text-primary hover:bg-th-surface-hover transition-colors"
+              title="Click to rename"
+            >
+              {name || <span className="text-th-text-faint">Group name</span>}
             </div>
           )}
           <p className="mt-1 text-xs text-th-text-faint">Group</p>
