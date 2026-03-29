@@ -42,7 +42,7 @@ interface UIState {
   closeCommitPanel: () => void
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
-  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request', id: string) => void
+  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration', id: string) => void
   clearSelectedItem: () => void
 }
 
@@ -92,6 +92,6 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
   },
 
-  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request', id: string) => set({ selectedItem: { type, id } }),
+  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration', id: string) => set({ selectedItem: { type, id } }),
   clearSelectedItem: () => set({ selectedItem: null }),
 }))

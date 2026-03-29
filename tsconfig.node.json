@@ -3,11 +3,10 @@
   "include": ["electron.vite.config.*", "src/main/**/*", "src/preload/**/*"],
   "compilerOptions": {
     "composite": true,
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "types": ["electron-vite/node"],
-    "baseUrl": ".",
     "paths": {
-      "@main/*": ["src/main/*"]
+      "@main/*": ["./src/main/*"]
     }
   }
 }

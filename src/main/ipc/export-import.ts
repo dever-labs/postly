@@ -169,14 +169,23 @@ export function registerExportImportHandlers(): void {
         ? `${data.collections[0].name.replace(/[^a-z0-9_-]/gi, '_')}.postly.json`
         : `postly-export.json`
 
-      const result = await dialog.showSaveDialog(win ?? undefined, {
-        title: 'Export Collections',
-        defaultPath: defaultName,
-        filters: [
-          { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-      })
+      const result = await (win
+        ? dialog.showSaveDialog(win, {
+          title: 'Export Collections',
+          defaultPath: defaultName,
+          filters: [
+            { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        })
+        : dialog.showSaveDialog({
+          title: 'Export Collections',
+          defaultPath: defaultName,
+          filters: [
+            { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        }))
       if (result.canceled || !result.filePath) return { data: null }
 
       fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
@@ -190,14 +199,23 @@ export function registerExportImportHandlers(): void {
   ipcMain.handle('postly:import', async (event) => {
     try {
       const win = winFromEvent(event)
-      const result = await dialog.showOpenDialog(win ?? undefined, {
-        title: 'Import Collections',
-        filters: [
-          { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] },
-        ],
-        properties: ['openFile'],
-      })
+      const result = await (win
+        ? dialog.showOpenDialog(win, {
+          title: 'Import Collections',
+          filters: [
+            { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+          properties: ['openFile'],
+        })
+        : dialog.showOpenDialog({
+          title: 'Import Collections',
+          filters: [
+            { name: 'Postly Collection (*.postly.json)', extensions: ['json'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+          properties: ['openFile'],
+        }))
       if (result.canceled || result.filePaths.length === 0) return { data: null }
 
       const raw = fs.readFileSync(result.filePaths[0], 'utf-8')
