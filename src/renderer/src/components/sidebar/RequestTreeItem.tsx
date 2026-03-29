@@ -54,7 +54,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }:
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group relative flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded',
+        'group relative flex items-center gap-1 px-2 py-0.5 text-sm cursor-pointer rounded',
         isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
       )}
       onClick={() => !renaming && onClick()}
@@ -89,7 +89,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }:
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="flex-1 truncate">{request.name}</span>
+        <span className="flex-1 truncate py-1">{request.name}</span>
       )}
 
       {request.isDirty && (

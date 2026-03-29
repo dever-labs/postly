@@ -228,7 +228,7 @@ function SortableGroupRow({
           />
         ) : (
           <div className={cn(
-            'group/grp relative flex items-center gap-1 rounded pr-1 text-th-text-muted hover:text-th-text-primary',
+            'group/grp relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
             selectedItem?.type === 'group' && selectedItem.id === group.id
               ? 'bg-th-surface-hover text-th-text-primary'
               : 'hover:bg-th-surface-raised/60'
