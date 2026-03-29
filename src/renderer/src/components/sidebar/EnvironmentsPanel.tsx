@@ -60,6 +60,8 @@ export function EnvironmentsPanel() {
                 isSelected ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/50 hover:text-th-text-primary'
               )}
               onClick={() => setSelectedEnvId(env.id)}
+              onDoubleClick={() => setActive(env.id)}
+              title={isActive ? 'Active environment' : 'Click to select · Double-click to activate'}
             >
               {/* Active dot */}
               <button
