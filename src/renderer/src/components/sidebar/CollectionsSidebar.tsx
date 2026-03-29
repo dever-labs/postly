@@ -1,4 +1,4 @@
-import { Check, Globe, Layers, Plus, Settings, X, Link } from 'lucide-react'
+import { Check, Globe, Layers, Plus, Settings, X, Link, Download, Upload } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
@@ -155,6 +155,28 @@ export function CollectionsSidebar() {
                 <Plus className="h-3.5 w-3.5" />
                 New Collection
               </Button>
+              <button
+                onClick={async () => {
+                  const { data, error } = await window.api.exportImport.export()
+                  if (error) { addToast({ type: 'error', message: `Export failed: ${error}` }); return }
+                  if (data) addToast({ type: 'success', message: `Exported ${data.count} collection${data.count !== 1 ? 's' : ''}` })
+                }}
+                className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                title="Export collections to file"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={async () => {
+                  const { data, error } = await window.api.exportImport.import()
+                  if (error) { addToast({ type: 'error', message: `Import failed: ${error}` }); return }
+                  if (data) { await load(); addToast({ type: 'success', message: `Imported ${data.count} collection${data.count !== 1 ? 's' : ''}` }) }
+                }}
+                className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                title="Import collections from file"
+              >
+                <Upload className="h-4 w-4" />
+              </button>
               <button
                 onClick={() => openSettings()}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"

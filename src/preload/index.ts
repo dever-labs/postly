@@ -152,6 +152,10 @@ const api = {
       return () => ipcRenderer.removeListener('postly:ai:chunk', handler)
     },
   },
+  exportImport: {
+    export: (data?: { collectionIds?: string[] }) => ipcRenderer.invoke('postly:export', data ?? {}),
+    import: () => ipcRenderer.invoke('postly:import'),
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
