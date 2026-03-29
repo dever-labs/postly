@@ -84,39 +84,40 @@ export function AppShell() {
         />
       </div>
 
-      {/* Right pane */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Right pane — drag-region on the wrapper so there's always some
+          drag area; individual views add more via their own headers */}
+      <div className="drag-region flex flex-1 flex-col overflow-hidden">
 
         {sidebarTab === 'environments' ? (
-          <div className="flex flex-1 overflow-hidden">
+          <div className="no-drag flex flex-1 overflow-hidden">
             <EnvironmentEditor />
           </div>
         ) : selectedItem?.type === 'add-integration' ? (
-          <div className="flex flex-1 overflow-hidden">
+          <div className="no-drag flex flex-1 overflow-hidden">
             <IntegrationSetupPage />
           </div>
         ) : selectedItem?.type === 'collection' ? (
-          <div className="flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 overflow-y-auto">
             <CollectionEditor collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'group' ? (
-          <div className="flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 overflow-y-auto">
             <GroupEditor groupId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-collection' ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <AiCollectionPage collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-group' ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <AiGroupPage groupId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-request' ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <AiRequestPage requestId={selectedItem.id} />
           </div>
         ) : (
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <div style={{ height: typeof editorHeight === 'number' ? editorHeight : 300 }} className="overflow-hidden">
               <RequestEditor />
             </div>

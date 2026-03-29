@@ -103,9 +103,9 @@ export function RequestEditor() {
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
-      {/* Breadcrumb + request name — header is the drag region;
-          padding/gaps are drag targets, interactive elements opt out */}
-      <div className="drag-region border-b border-th-border px-4 pt-4 pb-4">
+      {/* Breadcrumb + request name — drag-region; pt-8 gives 32px drag
+          target above content. Only interactive buttons are no-drag. */}
+      <div className="drag-region border-b border-th-border px-4 pt-8 pb-4">
         {breadcrumb && (
           <div className="mb-3 inline-flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
@@ -134,7 +134,7 @@ export function RequestEditor() {
         {editingTitle ? (
           <input
             ref={titleInputRef}
-            className="w-full border-b border-th-border-strong bg-transparent text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+            className="no-drag w-full border-b border-th-border-strong bg-transparent text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
             placeholder="Request name"
             value={editingRequest.name}
             onChange={(e) => updateField('name', e.target.value)}
@@ -143,13 +143,13 @@ export function RequestEditor() {
             autoFocus
           />
         ) : (
-          <div className="no-drag group flex items-center gap-1.5">
+          <div className="group flex items-center gap-1.5">
             <span className="text-sm font-medium text-th-text-primary">
               {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
             </span>
             <button
               onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-              className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
+              className="no-drag opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
               title="Rename request"
             >
               <Pencil className="h-3.5 w-3.5" />
