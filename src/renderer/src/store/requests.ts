@@ -116,13 +116,14 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const { editingRequest } = get()
     if (!editingRequest) return
 
-    const payload = serializeRequest(editingRequest)
+    // Clear dirty flag before serializing so the DB is written with is_dirty = 0
+    const saved = { ...editingRequest, isDirty: false }
+    const payload = serializeRequest(saved)
     const { error } = await window.api.requests.update({ id: editingRequest.id, ...payload })
     if (error) {
       console.error('Failed to save request:', error)
       return
     }
-    const saved = { ...editingRequest, isDirty: false }
     set({ editingRequest: saved })
     useCollectionsStore.getState().syncRequest(saved)
   },

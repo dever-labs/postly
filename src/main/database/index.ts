@@ -24,6 +24,8 @@ export async function initDatabase(): Promise<void> {
 
   db.run('PRAGMA foreign_keys = ON')
   runMigrations()
+  // is_dirty is an in-session flag only — reset stale flags from previous sessions
+  db.run('UPDATE requests SET is_dirty = 0')
   persistDb()
 }
 
