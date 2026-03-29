@@ -1,5 +1,5 @@
-import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { useMemo } from 'react'
+import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder, Pencil } from 'lucide-react'
+import React, { useMemo, useRef, useState } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
@@ -58,6 +58,9 @@ export function RequestEditor() {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const selectItem = useUIStore((s) => s.selectItem)
 
+  const [editingTitle, setEditingTitle] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
   const breadcrumb = useMemo(() => {
     if (!editingRequest) return null
     const group = groups.find((g) => g.id === editingRequest.groupId)
@@ -111,7 +114,7 @@ export function RequestEditor() {
                 <BreadcrumbItem
                   icon={<FolderOpen className="h-3 w-3" />}
                   label={breadcrumb.collection.name}
-                  onClick={() => selectItem('collection', breadcrumb.collection!.id)}
+                  onClick={() => selectItem('collection', breadcrumb.collection?.id ?? '')}
                 />
               </>
             )}
@@ -121,18 +124,37 @@ export function RequestEditor() {
                 <BreadcrumbItem
                   icon={<Folder className="h-3 w-3" />}
                   label={breadcrumb.group.name}
-                  onClick={() => selectItem('group', breadcrumb.group!.id)}
+                  onClick={() => selectItem('group', breadcrumb.group?.id ?? '')}
                 />
               </>
             )}
           </div>
         )}
-        <input
-          className="w-full bg-transparent text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
-          placeholder="Request name"
-          value={editingRequest.name}
-          onChange={(e) => updateField('name', e.target.value)}
-        />
+        {editingTitle ? (
+          <input
+            ref={titleInputRef}
+            className="w-full border-b border-th-border-strong bg-transparent text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+            placeholder="Request name"
+            value={editingRequest.name}
+            onChange={(e) => updateField('name', e.target.value)}
+            onBlur={() => setEditingTitle(false)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.currentTarget.blur() } }}
+            autoFocus
+          />
+        ) : (
+          <div className="group flex items-center gap-1.5">
+            <span className="text-sm font-medium text-th-text-primary">
+              {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
+            </span>
+            <button
+              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
+              className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
+              title="Rename request"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Protocol selector + URL bar */}

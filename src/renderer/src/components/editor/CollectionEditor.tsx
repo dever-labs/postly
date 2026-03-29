@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { ChevronRight, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { ChevronRight, FolderOpen, HardDrive, GitFork, GitBranch, Box, Pencil } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
@@ -51,6 +51,8 @@ export function CollectionEditor({ collectionId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (collection) {
@@ -61,7 +63,7 @@ export function CollectionEditor({ collectionId }: Props) {
       setSslVerification(collection.sslVerification ?? 'inherit')
       setIsDirty(false)
     }
-  }, [collectionId, collection?.id])
+  }, [collectionId, collection])
 
   if (!collection) {
     return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Collection not found</div>
@@ -105,12 +107,31 @@ export function CollectionEditor({ collectionId }: Props) {
             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-th-text-subtle" />
             <span className="font-medium text-th-text-primary">{name || 'Collection'}</span>
           </div>
-          <input
-            className="w-full bg-transparent text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
-            placeholder="Collection name"
-            value={name}
-            onChange={(e) => { setName(e.target.value); mark() }}
-          />
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              className="w-full border-b border-th-border-strong bg-transparent text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
+              placeholder="Collection name"
+              value={name}
+              onChange={(e) => { setName(e.target.value); mark() }}
+              onBlur={() => setEditingTitle(false)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.currentTarget.blur() } }}
+              autoFocus
+            />
+          ) : (
+            <div className="group flex items-center gap-2">
+              <span className="text-2xl font-semibold text-th-text-primary">
+                {name || <span className="text-th-text-faint">Collection name</span>}
+              </span>
+              <button
+                onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
+                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
+                title="Rename collection"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <p className="mt-1 text-xs text-th-text-faint">Collection</p>
           <AiActionButton
             className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
