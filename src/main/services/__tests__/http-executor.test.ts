@@ -246,7 +246,7 @@ describe('executeRequest — response handling', () => {
 
   it('joins array header values with ", "', async () => {
     mockAxios.mockResolvedValue(makeAxiosResponse({
-      headers: { 'set-cookie': ['a=1', 'b=2'] }
+      headers: { 'set-cookie': ['a=1', 'b=2'] as unknown as string }
     }))
     const res = await executeRequest(makeReq())
     expect(res.headers['set-cookie']).toBe('a=1, b=2')

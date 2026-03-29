@@ -17,7 +17,7 @@ export default function App(): React.ReactElement {
 
   return (
     <TooltipProvider delayDuration={400}>
-      <div className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
+      <div data-testid="app-root" className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
         <AppShell />
         <SettingsModal />
         <Toaster />

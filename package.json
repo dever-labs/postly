@@ -5,6 +5,9 @@
   "main": "out/main/index.js",
   "scripts": {
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -131,6 +134,7 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

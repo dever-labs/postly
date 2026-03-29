@@ -127,11 +127,12 @@ export function CollectionsSidebar() {
   }, [load, loadIntegrations, loadEnvironments])
 
   return (
-    <div className="flex h-full flex-col bg-th-bg">
+    <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
 
       {/* Tab switcher */}
       <div className="flex shrink-0 border-b border-th-border">
         <button
+          data-testid="tab-apis"
           onClick={() => setSidebarTab('apis')}
           className={cn(
             'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
@@ -144,6 +145,7 @@ export function CollectionsSidebar() {
           APIs
         </button>
         <button
+          data-testid="tab-environments"
           onClick={() => setSidebarTab('environments')}
           className={cn(
             'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
@@ -218,8 +220,9 @@ export function CollectionsSidebar() {
 
           {/* APIs footer — always visible */}
           <div className="shrink-0 border-t border-th-border">
-            <div className="flex items-center gap-1 px-2 py-2">
+            <div data-testid="sidebar-footer" className="flex items-center gap-1 px-2 py-2">
               <button
+                data-testid="btn-export"
                 onClick={() => selectItem('export-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Export collections"
@@ -227,6 +230,7 @@ export function CollectionsSidebar() {
                 <Download className="h-4 w-4" />
               </button>
               <button
+                data-testid="btn-import"
                 onClick={() => selectItem('import-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Import collections"
@@ -234,6 +238,7 @@ export function CollectionsSidebar() {
                 <Upload className="h-4 w-4" />
               </button>
               <button
+                data-testid="btn-settings"
                 onClick={() => openSettings()}
                 className="ml-auto rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Settings"

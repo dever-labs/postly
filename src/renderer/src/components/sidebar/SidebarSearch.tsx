@@ -24,6 +24,7 @@ export function SidebarSearch() {
     <div className="relative flex items-center">
       <Search className="absolute left-2.5 h-3.5 w-3.5 text-th-text-subtle" />
       <input
+        data-testid="sidebar-search"
         type="text"
         value={value}
         onChange={handleChange}
