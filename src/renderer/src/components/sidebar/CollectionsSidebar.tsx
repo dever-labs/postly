@@ -235,7 +235,7 @@ export function CollectionsSidebar() {
               </button>
               <button
                 onClick={() => openSettings()}
-                className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                className="ml-auto rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Settings"
               >
                 <Settings className="h-4 w-4" />
