@@ -4,19 +4,13 @@ import { initDatabase } from './database'
 import { registerAllIpcHandlers } from './ipc'
 
 function createWindow(): void {
-  const isMac = process.platform === 'darwin'
-  const isWindows = process.platform === 'win32'
-
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#030712',
     titleBarStyle: 'hiddenInset',
-    ...(isMac ? { vibrancy: 'under-window' as const } : {}),
-    ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

@@ -101,9 +101,9 @@ export function RequestEditor() {
   return (
     <div className="flex h-full flex-col bg-th-bg">
       {/* Breadcrumb + request name */}
-      <div className="border-b border-th-border px-4 py-2">
+      <div className="border-b border-th-border px-4 pt-4 pb-4">
         {breadcrumb && (
-          <div className="mb-1 flex items-center gap-1.5 text-xs flex-wrap">
+          <div className="mb-3 flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
             {breadcrumb.collection && (
               <>

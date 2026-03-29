@@ -4,13 +4,13 @@
 
 :root {
   color-scheme: dark;
-  --color-background:     rgba(3,   7,  18, 0.72);
-  --color-surface:        rgba(14,  20,  38, 0.68);
-  --color-surface-raised: rgba(24,  32,  52, 0.75);
-  --color-surface-hover:  rgba(38,  50,  72, 0.82);
-  --color-surface-active: rgba(55,  68,  92, 0.88);
-  --color-border:         rgba(31,  41,  55, 0.70);
-  --color-border-strong:  rgba(55,  65,  81, 0.80);
+  --color-background:     #030712;
+  --color-surface:        #111827;
+  --color-surface-raised: #1f2937;
+  --color-surface-hover:  #374151;
+  --color-surface-active: #4b5563;
+  --color-border:         #1f2937;
+  --color-border-strong:  #374151;
   --color-text-primary:   #f9fafb;
   --color-text-secondary: #d1d5db;
   --color-text-muted:     #9ca3af;
@@ -20,13 +20,13 @@
 
 html.light {
   color-scheme: light;
-  --color-background:     rgba(249, 250, 251, 0.78);
-  --color-surface:        rgba(255, 255, 255, 0.72);
-  --color-surface-raised: rgba(243, 244, 246, 0.78);
-  --color-surface-hover:  rgba(229, 231, 235, 0.84);
-  --color-surface-active: rgba(209, 213, 219, 0.90);
-  --color-border:         rgba(229, 231, 235, 0.72);
-  --color-border-strong:  rgba(209, 213, 219, 0.82);
+  --color-background:     #f9fafb;
+  --color-surface:        #ffffff;
+  --color-surface-raised: #f3f4f6;
+  --color-surface-hover:  #e5e7eb;
+  --color-surface-active: #d1d5db;
+  --color-border:         #e5e7eb;
+  --color-border-strong:  #d1d5db;
   --color-text-primary:   #111827;
   --color-text-secondary: #374151;
   --color-text-muted:     #6b7280;
@@ -36,17 +36,14 @@ html.light {
 
 html, body {
   margin: 0;
-  background: transparent;
+  background: var(--color-background);
   font-size: 14px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--color-text-primary);
 }
 
-/* Main app shell — glass layer on top of system blur */
+/* Subtle inner blur for depth on panels */
 #root {
-  background: var(--color-background);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
   min-height: 100vh;
 }
 
