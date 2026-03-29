@@ -105,6 +105,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "dever-labs",
+      "repo": "postly"
     }
   },
   "repository": {
@@ -127,7 +132,8 @@
   "homepage": "https://github.com/dever-labs/postly#readme",
   "private": true,
   "overrides": {
-    "underscore": "^1.13.8"
+    "underscore": "^1.13.8",
+    "dompurify": "^3.3.3"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -176,6 +182,7 @@
     "electron-store": "^11.0.2",
     "httpntlm": "^1.8.13",
     "lucide-react": "^1.7.0",
+    "monaco-editor": "^0.55.1",
     "mqtt": "^5.15.1",
     "openapi-types": "^12.1.3",
     "react": "^19.2.4",
