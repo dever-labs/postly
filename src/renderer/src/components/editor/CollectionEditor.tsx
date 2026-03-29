@@ -95,10 +95,11 @@ export function CollectionEditor({ collectionId }: Props) {
 
   return (
     <div className="bg-th-bg w-full">
-      <div className="px-8 py-8 flex flex-col gap-8 pb-4">
+      {/* drag-region: the py-8 padding above content is the invisible drag handle */}
+      <div className="drag-region px-8 py-8 flex flex-col gap-8 pb-4">
 
         {/* Title */}
-        <div>
+        <div className="no-drag">
           <div className="mb-3 flex items-center gap-1.5 text-xs">
             <SourceCrumb
               source={collection.source}
