@@ -409,15 +409,24 @@ export function GroupSection({ source, integration, collections, groups, request
   return (
     <Collapsible.Root open={sourceOpen} onOpenChange={setSourceOpen} className="mb-1">
       {/* Source header */}
-      <div className="group/header flex items-center gap-1 px-2 py-1">
+      <div className="group/header flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
         <Collapsible.Trigger asChild>
-          <button className="flex flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-sm font-medium text-th-text-muted hover:text-th-text-primary focus:outline-none">
+          <button className="shrink-0 rounded p-0.5 focus:outline-none">
             {sourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            {integration ? SOURCE_ICONS[integration.type] : SOURCE_ICONS[source]}
-            <span>{integration ? integration.name : capitalize(source)}</span>
-            <Badge variant="grey" className="ml-1">{totalRequests.length}</Badge>
           </button>
         </Collapsible.Trigger>
+
+        <span className="shrink-0 p-0.5">
+          {integration ? SOURCE_ICONS[integration.type] : SOURCE_ICONS[source]}
+        </span>
+
+        <button
+          onClick={() => setSourceOpen((o) => !o)}
+          className="flex flex-1 items-center gap-1 truncate rounded py-1 text-left text-sm font-semibold focus:outline-none"
+        >
+          <span className="truncate">{integration ? integration.name : capitalize(source)}</span>
+          <Badge variant="grey" className="ml-0.5">{totalRequests.length}</Badge>
+        </button>
 
         {integration ? (
           <div className="flex items-center gap-0.5">
