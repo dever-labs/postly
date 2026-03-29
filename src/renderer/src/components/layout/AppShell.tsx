@@ -85,11 +85,10 @@ export function AppShell() {
       </div>
 
       {/* Right pane — single wrapper so the drag strip is always present */}
-      <div className="relative flex flex-1 flex-col overflow-hidden">
-        {/* Transparent drag strip: always covers the top of the right pane.
-            pointer-events-none means clicks pass through; -webkit-app-region
-            is collected independently by Chromium so dragging still works. */}
-        <div className="drag-region pointer-events-none absolute inset-x-0 top-0 z-50 h-8" />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Drag strip: empty row at the top — drag-region with nothing on top of it,
+            so the drag region is always clean and never fights with interactive content */}
+        <div className="drag-region shrink-0 h-6 bg-th-bg" />
 
         {sidebarTab === 'environments' ? (
           <div className="flex flex-1 overflow-hidden">
