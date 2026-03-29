@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Request } from '@/types'
 import { Badge } from '@/components/ui/Badge'
 import { useUIStore } from '@/store/ui'
@@ -28,13 +30,17 @@ interface RequestTreeItemProps {
   isActive: boolean
   onClick: () => void
   onDelete: () => void
+  dndId: string
 }
 
-export function RequestTreeItem({ request, isActive, onClick, onDelete }: RequestTreeItemProps) {
+export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }: RequestTreeItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameValue, setNameValue] = useState(request.name)
   const selectItem = useUIStore((s) => s.selectItem)
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
   const handleRename = async () => {
     if (nameValue.trim()) {
@@ -45,12 +51,23 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
 
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={cn(
         'group relative flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded',
         isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
       )}
       onClick={() => !renaming && onClick()}
     >
+      <button
+        {...listeners}
+        {...attributes}
+        className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover:opacity-100 active:cursor-grabbing"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+
       {(() => {
         const pb = request.protocol ? PROTOCOL_BADGE[request.protocol] : null
         return pb

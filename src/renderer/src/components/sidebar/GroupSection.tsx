@@ -1,9 +1,10 @@
 import * as Collapsible from '@radix-ui/react-collapsible'
-import { AlertCircle, Check, ChevronDown, ChevronRight, Database, Eye, EyeOff, FolderOpen, GitBranch, GitFork, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, ChevronRight, Database, Eye, EyeOff, FolderOpen, GitBranch, GitFork, GripVertical, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
 import React, { useRef, useState } from 'react'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Collection, CollectionSource, Group, Integration, Request } from '@/types'
 import { AiActionButton } from '@/components/ai/AiActionButton'
-import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { RequestTreeItem } from '@/components/sidebar/RequestTreeItem'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
@@ -75,16 +76,32 @@ interface CollectionRowProps {
   onAddGroup: () => void
   onRename: () => void
   onDelete: () => void
+  dndId: string
 }
 
-function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onAddGroup, onRename, onDelete, isActive, onAi }: CollectionRowProps & { isActive?: boolean; onSelect: () => void; onAi: () => void }) {
+function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onAddGroup, onRename, onDelete, isActive, onAi, dndId }: CollectionRowProps & { isActive?: boolean; onSelect: () => void; onAi: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
   return (
-    <div className={cn(
-      'group relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
-      isActive ? 'bg-th-surface-hover text-th-text-primary' : 'hover:bg-th-surface-raised/60'
-    )}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'group relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
+        isActive ? 'bg-th-surface-hover text-th-text-primary' : 'hover:bg-th-surface-raised/60'
+      )}
+    >
+      <button
+        {...listeners}
+        {...attributes}
+        className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover:opacity-100 active:cursor-grabbing"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+
       {/* Chevron — expand/collapse only */}
       <button
         onClick={(e) => { e.stopPropagation(); onToggle() }}
@@ -164,7 +181,6 @@ export function GroupSection({ source, integration, collections, groups, request
   const [openCollections, setOpenCollections] = useState<Set<string>>(new Set())
   const [addingGroupTo, setAddingGroupTo] = useState<string | null>(null)
   const [renamingCollection, setRenamingCollection] = useState<string | null>(null)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const {
     toggleGroupCollapsed,
@@ -274,6 +290,7 @@ export function GroupSection({ source, integration, collections, groups, request
               <p className="mt-0.5 text-xs text-th-text-muted">Create one with the + button above</p>
             </div>
           )}
+          <SortableContext items={sourceCollections.map((c) => `col:${c.id}`)} strategy={verticalListSortingStrategy}>
           {sourceCollections.map((collection) => {
             const collectionGroups = groups.filter((g) => g.collectionId === collection.id)
             const isOpen = openCollections.has(collection.id)
@@ -292,6 +309,7 @@ export function GroupSection({ source, integration, collections, groups, request
                   <CollectionRow
                     collection={collection}
                     open={isOpen}
+                    dndId={`col:${collection.id}`}
                     isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
                     onToggle={() => toggleCollection(collection.id)}
                     onSelect={() => selectItem('collection', collection.id)}
@@ -306,12 +324,18 @@ export function GroupSection({ source, integration, collections, groups, request
                 {/* Groups + requests */}
                 {(isOpen || !!searchQuery) && (
                   <div className="pl-3">
+                    <SortableContext items={collectionGroups.map((g) => `grp:${g.id}`)} strategy={verticalListSortingStrategy}>
                     {collectionGroups.map((group) => {
                       const groupRequests = filteredRequests(group.id)
                       if (searchQuery && groupRequests.length === 0) return null
+
+                      // eslint-disable-next-line react-hooks/rules-of-hooks
+                      const { attributes: grpAttrs, listeners: grpListeners, setNodeRef: grpRef, transform: grpTransform, transition: grpTransition, isDragging: grpDragging } = useSortable({ id: `grp:${group.id}` })
+                      const grpStyle = { transform: CSS.Transform.toString(grpTransform), transition: grpTransition, opacity: grpDragging ? 0.4 : 1 }
+
                       return (
+                        <div key={group.id} ref={grpRef} style={grpStyle}>
                         <Collapsible.Root
-                          key={group.id}
                           open={!group.collapsed || !!searchQuery}
                           onOpenChange={() => toggleGroupCollapsed(group.id)}
                         >
@@ -329,6 +353,15 @@ export function GroupSection({ source, integration, collections, groups, request
                               ? 'bg-th-surface-hover text-th-text-primary'
                               : 'hover:bg-th-surface-raised/60'
                           )}>
+                            <button
+                              {...grpListeners}
+                              {...grpAttrs}
+                              className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/grp:opacity-100 active:cursor-grabbing"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GripVertical className="h-3.5 w-3.5" />
+                            </button>
+
                             {/* Chevron — collapse/expand only */}
                             <Collapsible.Trigger asChild>
                               <button
@@ -407,20 +440,25 @@ export function GroupSection({ source, integration, collections, groups, request
                                   <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
                                 </div>
                               )}
+                              <SortableContext items={groupRequests.map((r) => `req:${r.id}`)} strategy={verticalListSortingStrategy}>
                               {groupRequests.map((req) => (
                                 <RequestTreeItem
                                   key={req.id}
+                                  dndId={`req:${req.id}`}
                                   request={req}
                                   isActive={req.id === activeRequestId && !selectedItem}
                                   onClick={() => { clearSelectedItem(); setActiveRequest(req) }}
                                   onDelete={() => { deleteRequest(req.id); if (activeRequestId === req.id) clearActiveRequest() }}
                                 />
                               ))}
+                              </SortableContext>
                             </div>
                           </Collapsible.Content>
                         </Collapsible.Root>
+                        </div>
                       )
                     })}
+                    </SortableContext>
 
                     {/* Inline add-group input */}
                     {!searchQuery && addingGroupTo === collection.id && (
@@ -444,16 +482,9 @@ export function GroupSection({ source, integration, collections, groups, request
               </div>
             )
           })}
+          </SortableContext>
         </div>
       </Collapsible.Content>
-
-      {integration && (
-        <ConnectIntegrationDialog
-          open={editDialogOpen}
-          onClose={() => setEditDialogOpen(false)}
-          editIntegration={integration}
-        />
-      )}
     </Collapsible.Root>
   )
 }

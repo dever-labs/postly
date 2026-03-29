@@ -8,11 +8,12 @@ const api = {
     rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:collections:rename', data),
     update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) =>
       ipcRenderer.invoke('postly:collections:update', data),
+    moveSource: (data: { id: string; source: string }) => ipcRenderer.invoke('postly:collections:move-source', data),
   },
   groups: {
     create: (data: { collectionId: string; name: string; description?: string }) => ipcRenderer.invoke('postly:groups:create', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:groups:delete', data),
-    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => ipcRenderer.invoke('postly:groups:update', data),
+    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sortOrder?: number; collectionId?: string }) => ipcRenderer.invoke('postly:groups:update', data),
   },
   requests: {
     list: (data: { groupId: string }) => ipcRenderer.invoke('postly:requests:list', data),
@@ -157,6 +158,8 @@ const api = {
     import: () => ipcRenderer.invoke('postly:import'),
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
   },
+  reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
+    ipcRenderer.invoke('postly:reorder', data),
 }
 
 contextBridge.exposeInMainWorld('api', api)

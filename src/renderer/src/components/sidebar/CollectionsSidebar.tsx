@@ -1,14 +1,96 @@
 import { Check, Globe, Layers, Plus, Settings, X, Link, Download, Upload } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
+import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
+import type { CollectionSource } from '@/types'
+
+const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
+  GET: 'green',
+  POST: 'yellow',
+  PUT: 'blue',
+  DELETE: 'red',
+  PATCH: 'orange',
+  HEAD: 'purple',
+  OPTIONS: 'grey',
+}
+
+function DragOverlayContent({ id }: { id: string }) {
+  const [type, itemId] = id.split(':')
+  const { collections, groups, requests } = useCollectionsStore()
+
+  let label = ''
+  let badge: React.ReactNode = null
+
+  if (type === 'req') {
+    const req = requests.find((r) => r.id === itemId)
+    label = req?.name ?? 'Request'
+    badge = <Badge variant={METHOD_COLORS[req?.method ?? ''] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{req?.method ?? 'GET'}</Badge>
+  } else if (type === 'grp') {
+    label = groups.find((g) => g.id === itemId)?.name ?? 'Group'
+  } else if (type === 'col') {
+    label = collections.find((c) => c.id === itemId)?.name ?? 'Collection'
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded border border-blue-500/50 bg-th-surface-raised px-3 py-1.5 text-sm text-th-text-primary shadow-lg opacity-90">
+      {badge}
+      <span className="truncate max-w-48">{label}</span>
+    </div>
+  )
+}
+
+function handleDragEnd(event: DragEndEvent) {
+  const { active, over } = event
+  if (!over || active.id === over.id) return
+
+  const activeStr = String(active.id)
+  const overStr = String(over.id)
+
+  const [activeType, activeId] = activeStr.split(':') as [string, string]
+  const [overType, overId] = overStr.split(':') as [string, string]
+
+  const { collections, groups, requests, moveRequestToGroup, moveGroupToCollection, moveCollectionToSource } = useCollectionsStore.getState()
+
+  if (activeType === 'req') {
+    const activeReq = requests.find((r) => r.id === activeId)
+    if (!activeReq) return
+
+    if (overType === 'req') {
+      const overReq = requests.find((r) => r.id === overId)
+      if (!overReq) return
+      moveRequestToGroup(activeId, overReq.groupId, overReq.id)
+    } else if (overType === 'grp') {
+      moveRequestToGroup(activeId, overId, null)
+    }
+  } else if (activeType === 'grp') {
+    const activeGrp = groups.find((g) => g.id === activeId)
+    if (!activeGrp) return
+
+    if (overType === 'grp') {
+      const overGrp = groups.find((g) => g.id === overId)
+      if (!overGrp) return
+      moveGroupToCollection(activeId, overGrp.collectionId, overGrp.id)
+    } else if (overType === 'col') {
+      moveGroupToCollection(activeId, overId, null)
+    }
+  } else if (activeType === 'col') {
+    if (overType === 'col') {
+      const overCol = collections.find((c) => c.id === overId)
+      if (!overCol) return
+      moveCollectionToSource(activeId, overCol.source as CollectionSource)
+    }
+  }
+}
 
 export function CollectionsSidebar() {
   const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
@@ -21,6 +103,9 @@ export function CollectionsSidebar() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+  const [dragActiveId, setDragActiveId] = useState<string | null>(null)
 
   useEffect(() => {
     load()
@@ -82,6 +167,13 @@ export function CollectionsSidebar() {
 
       {/* ── APIs tab ─────────────────────────────────────────────────────── */}
       {sidebarTab === 'apis' && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={({ active }) => setDragActiveId(String(active.id))}
+          onDragEnd={(event) => { setDragActiveId(null); handleDragEnd(event) }}
+          onDragCancel={() => setDragActiveId(null)}
+        >
         <>
           <div className="shrink-0 p-2">
             <SidebarSearch />
@@ -177,7 +269,12 @@ export function CollectionsSidebar() {
               </button>
             </div>
           </div>
+
+          <DragOverlay dropAnimation={null}>
+            {dragActiveId ? <DragOverlayContent id={dragActiveId} /> : null}
+          </DragOverlay>
         </>
+        </DndContext>
       )}
 
       {/* ── Environments tab ──────────────────────────────────────────────── */}

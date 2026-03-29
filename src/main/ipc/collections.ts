@@ -98,7 +98,7 @@ export function registerCollectionHandlers(): void {
 
   ipcMain.handle(
     'postly:groups:update',
-    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string }) => {
+    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; sortOrder?: number; collectionId?: string }) => {
       try {
         const fields: string[] = []
         const values: unknown[] = []
@@ -110,6 +110,8 @@ export function registerCollectionHandlers(): void {
         if (args.authType !== undefined) { fields.push('auth_type = ?'); values.push(args.authType) }
         if (args.authConfig !== undefined) { fields.push('auth_config = ?'); values.push(JSON.stringify(args.authConfig)) }
         if (args.sslVerification !== undefined) { fields.push('ssl_verification = ?'); values.push(args.sslVerification) }
+        if (args.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(args.sortOrder) }
+        if (args.collectionId !== undefined) { fields.push('collection_id = ?'); values.push(args.collectionId) }
         if (fields.length === 0) return { data: true }
 
         fields.push('updated_at = ?')
@@ -122,4 +124,38 @@ export function registerCollectionHandlers(): void {
       }
     }
   )
+
+  ipcMain.handle('postly:reorder', async (_, args: {
+    type: 'request' | 'group'
+    updates: Array<{ id: string; sortOrder: number; newParentId?: string }>
+  }) => {
+    try {
+      const now = Date.now()
+      for (const u of args.updates) {
+        if (args.type === 'request') {
+          const fields = ['sort_order = ?', 'updated_at = ?']
+          const vals: unknown[] = [u.sortOrder, now]
+          if (u.newParentId !== undefined) { fields.unshift('group_id = ?'); vals.unshift(u.newParentId) }
+          run(`UPDATE requests SET ${fields.join(', ')} WHERE id = ?`, [...vals, u.id])
+        } else {
+          const fields = ['sort_order = ?', 'updated_at = ?']
+          const vals: unknown[] = [u.sortOrder, now]
+          if (u.newParentId !== undefined) { fields.unshift('collection_id = ?'); vals.unshift(u.newParentId) }
+          run(`UPDATE groups SET ${fields.join(', ')} WHERE id = ?`, [...vals, u.id])
+        }
+      }
+      return { data: true }
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
+
+  ipcMain.handle('postly:collections:move-source', async (_, args: { id: string; source: string }) => {
+    try {
+      run('UPDATE collections SET source = ?, updated_at = ? WHERE id = ?', [args.source, Date.now(), args.id])
+      return { data: true }
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
 }

@@ -24,6 +24,9 @@ interface CollectionsState {
   deleteGroup: (id: string) => Promise<void>
   renameGroup: (id: string, name: string) => Promise<void>
   createLocalRequest: (groupId: string) => Promise<void>
+  moveRequestToGroup: (requestId: string, newGroupId: string, insertBeforeId: string | null) => Promise<void>
+  moveGroupToCollection: (groupId: string, newCollectionId: string, insertBeforeId: string | null) => Promise<void>
+  moveCollectionToSource: (collectionId: string, newSource: CollectionSource) => Promise<void>
 }
 
 export const useCollectionsStore = create<CollectionsState>((set, get) => ({
@@ -225,5 +228,80 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({
       groups: state.groups.map((g) => g.id === id ? { ...g, name } : g),
     }))
+  },
+
+  moveRequestToGroup: async (requestId: string, newGroupId: string, insertBeforeId: string | null) => {
+    const state = get()
+    const req = state.requests.find((r) => r.id === requestId)
+    if (!req) return
+    const oldGroupId = req.groupId
+
+    const targetReqs = state.requests
+      .filter((r) => r.groupId === newGroupId && r.id !== requestId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const insertIdx = insertBeforeId ? targetReqs.findIndex((r) => r.id === insertBeforeId) : targetReqs.length
+    const finalIdx = insertIdx === -1 ? targetReqs.length : insertIdx
+    targetReqs.splice(finalIdx, 0, { ...req, groupId: newGroupId })
+
+    const sourceReqs = oldGroupId !== newGroupId
+      ? state.requests.filter((r) => r.groupId === oldGroupId && r.id !== requestId).sort((a, b) => a.sortOrder - b.sortOrder)
+      : []
+
+    set((s) => ({
+      requests: s.requests.map((r) => {
+        const tIdx = targetReqs.findIndex((x) => x.id === r.id)
+        if (tIdx !== -1) return { ...r, groupId: newGroupId, sortOrder: tIdx }
+        const sIdx = sourceReqs.findIndex((x) => x.id === r.id)
+        if (sIdx !== -1) return { ...r, sortOrder: sIdx }
+        return r
+      }),
+    }))
+
+    const updates = [
+      ...targetReqs.map((r, i) => ({ id: r.id, sortOrder: i, newParentId: newGroupId })),
+      ...sourceReqs.map((r, i) => ({ id: r.id, sortOrder: i })),
+    ]
+    await window.api.reorder({ type: 'request', updates })
+  },
+
+  moveGroupToCollection: async (groupId: string, newCollectionId: string, insertBeforeId: string | null) => {
+    const state = get()
+    const grp = state.groups.find((g) => g.id === groupId)
+    if (!grp) return
+    const oldCollectionId = grp.collectionId
+
+    const targetGroups = state.groups
+      .filter((g) => g.collectionId === newCollectionId && g.id !== groupId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const insertIdx = insertBeforeId ? targetGroups.findIndex((g) => g.id === insertBeforeId) : targetGroups.length
+    const finalIdx = insertIdx === -1 ? targetGroups.length : insertIdx
+    targetGroups.splice(finalIdx, 0, { ...grp, collectionId: newCollectionId })
+
+    const sourceGroups = oldCollectionId !== newCollectionId
+      ? state.groups.filter((g) => g.collectionId === oldCollectionId && g.id !== groupId).sort((a, b) => a.sortOrder - b.sortOrder)
+      : []
+
+    set((s) => ({
+      groups: s.groups.map((g) => {
+        const tIdx = targetGroups.findIndex((x) => x.id === g.id)
+        if (tIdx !== -1) return { ...g, collectionId: newCollectionId, sortOrder: tIdx }
+        const sIdx = sourceGroups.findIndex((x) => x.id === g.id)
+        if (sIdx !== -1) return { ...g, sortOrder: sIdx }
+        return g
+      }),
+    }))
+
+    const updates = [
+      ...targetGroups.map((g, i) => ({ id: g.id, sortOrder: i, newParentId: newCollectionId })),
+      ...sourceGroups.map((g, i) => ({ id: g.id, sortOrder: i })),
+    ]
+    await window.api.reorder({ type: 'group', updates })
+  },
+
+  moveCollectionToSource: async (collectionId: string, newSource: CollectionSource) => {
+    set((s) => ({
+      collections: s.collections.map((c) => c.id === collectionId ? { ...c, source: newSource } : c),
+    }))
+    await window.api.collections.moveSource({ id: collectionId, source: newSource })
   },
 }))

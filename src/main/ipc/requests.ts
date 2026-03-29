@@ -17,6 +17,7 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   scmSha: 'scm_sha',
   isDirty: 'is_dirty',
   sortOrder: 'sort_order',
+  groupId: 'group_id',
   sslVerification: 'ssl_verification',
   protocol: 'protocol',
   protocolConfig: 'protocol_config',
