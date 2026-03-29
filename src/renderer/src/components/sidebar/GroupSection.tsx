@@ -269,7 +269,10 @@ export function GroupSection({ source, integration, collections, groups, request
       <Collapsible.Content>
         <div className={cn(isSourceHidden && 'opacity-40')}>
           {sourceCollections.length === 0 && (
-            <p className="px-4 py-2 text-xs text-th-text-faint">No collections yet</p>
+            <div className="mx-3 my-2 rounded border border-dashed border-th-border px-3 py-3 text-center">
+              <p className="text-xs text-th-text-faint">No collections yet</p>
+              <p className="mt-0.5 text-xs text-th-text-muted">Create one with the + button above</p>
+            </div>
           )}
           {sourceCollections.map((collection) => {
             const collectionGroups = groups.filter((g) => g.collectionId === collection.id)
@@ -398,6 +401,12 @@ export function GroupSection({ source, integration, collections, groups, request
 
                           <Collapsible.Content>
                             <div className="pl-1">
+                              {groupRequests.length === 0 && !searchQuery && (
+                                <div className="mx-2 my-1.5 rounded border border-dashed border-th-border px-2 py-2 text-center">
+                                  <p className="text-xs text-th-text-faint">No endpoints defined</p>
+                                  <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
+                                </div>
+                              )}
                               {groupRequests.map((req) => (
                                 <RequestTreeItem
                                   key={req.id}
@@ -425,7 +434,10 @@ export function GroupSection({ source, integration, collections, groups, request
 
                     {/* Empty state */}
                     {!searchQuery && collectionGroups.length === 0 && addingGroupTo !== collection.id && (
-                      <p className="px-2 py-1 text-xs text-th-text-faint italic">No groups — hover collection to add</p>
+                      <div className="mx-2 my-1.5 rounded border border-dashed border-th-border px-2 py-2 text-center">
+                        <p className="text-xs text-th-text-faint">No groups defined</p>
+                        <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
+                      </div>
                     )}
                   </div>
                 )}
