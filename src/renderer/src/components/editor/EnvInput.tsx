@@ -101,23 +101,26 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const vars = useEnvironmentsStore((s) => s.vars)
 
   const [hitZones, setHitZones] = useState<TokenHitZone[]>([])
-  const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({})
   const [hovered, setHovered] = useState<{ key: string; left: number } | null>(null)
 
   const activeVars = vars.filter((v) => v.envId === activeEnv?.id)
   const hasVars = /\{\{[^}]+\}\}/.test(value)
   const segments = hasVars ? parseSegments(value, activeVars) : null
 
-  // Sync overlay font/padding from the input after mount and on value change.
-  // Read text color from the probe element — it shares the className but never
-  // gets color:transparent, so getComputedStyle always returns the real color.
-  useLayoutEffect(() => {
-    if (!inputRef.current || !hasVars) return
+  // Directly mutate overlay DOM styles — avoids triggering a React state
+  // update inside useLayoutEffect which causes an infinite re-render cycle.
+  const applyOverlayStyle = useCallback((scrollLeft = 0) => {
+    if (!overlayRef.current || !inputRef.current) return
     const color = colorProbeRef.current
       ? getComputedStyle(colorProbeRef.current).color
       : ''
-    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft, color))
-  }, [hasVars, value])
+    const s = buildOverlayStyle(inputRef.current, scrollLeft, color)
+    Object.assign(overlayRef.current.style, s)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (hasVars) applyOverlayStyle(inputRef.current?.scrollLeft ?? 0)
+  }, [hasVars, value, applyOverlayStyle])
 
   // Recompute hover hit zones whenever value changes
   const recalcHitZones = useCallback(() => {
@@ -194,7 +197,6 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
           ref={overlayRef}
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre select-none"
-          style={overlayStyle}
         >
           {segments.map((seg, i) =>
             seg.type === 'text' ? (
