@@ -48,6 +48,8 @@ function normalizeRequest(raw: Record<string, unknown>): Request {
     authType: (raw.authType ?? raw.auth_type ?? 'none') as Request['authType'],
     authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
     sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Request['sslVerification'],
+    protocol: (raw.protocol ?? 'http') as Request['protocol'],
+    protocolConfig: parseJsonField<Record<string, string>>(raw.protocolConfig ?? raw.protocol_config, {}),
     description: raw.description as string | undefined,
     scmPath: (raw.scmPath ?? raw.scm_path) as string | undefined,
     scmSha: (raw.scmSha ?? raw.scm_sha) as string | undefined,

@@ -1,4 +1,5 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
+export type ProtocolType = 'http' | 'graphql' | 'websocket' | 'grpc' | 'mqtt'
 export type BodyType =
   | 'none'
   | 'form-data'
@@ -72,6 +73,7 @@ export interface Request {
   id: string
   groupId: string
   name: string
+  protocol: ProtocolType
   method: HttpMethod
   url: string
   params: KeyValuePair[]
@@ -80,6 +82,7 @@ export interface Request {
   bodyContent: string
   authType: AuthType
   authConfig: Record<string, string>
+  protocolConfig: Record<string, string>
   sslVerification: SslVerification
   description?: string
   scmPath?: string

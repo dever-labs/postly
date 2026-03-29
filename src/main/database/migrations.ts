@@ -103,5 +103,5 @@ export const migrations: string[] = [
     error_message TEXT DEFAULT '',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
-  )`
+  )`,
 ]

@@ -1,16 +1,22 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, Menu } from 'electron'
 import { join } from 'path'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers } from './ipc'
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin'
+  const isWindows = process.platform === 'win32'
+
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#0f0f0f',
+    transparent: true,
+    backgroundColor: '#00000000',
     titleBarStyle: 'hiddenInset',
+    ...(isMac ? { vibrancy: 'under-window' as const } : {}),
+    ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -32,6 +38,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null)
   await initDatabase()
   registerAllIpcHandlers()
   createWindow()

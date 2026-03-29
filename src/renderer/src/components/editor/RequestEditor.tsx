@@ -1,14 +1,19 @@
 import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
 import React, { useMemo } from 'react'
-import type { HttpMethod, BodyType, AuthType, SslVerification } from '@/types'
+import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
 import { SendButton } from '@/components/editor/SendButton'
 import { CommitPanel } from '@/components/editor/CommitPanel'
+import { ProtocolSelector } from '@/components/editor/ProtocolSelector'
+import { WebSocketView } from '@/components/editor/WebSocketView'
+import { GrpcView } from '@/components/editor/GrpcView'
+import { MqttView } from '@/components/editor/MqttView'
 import { ParamsTab } from '@/components/editor/tabs/ParamsTab'
 import { HeadersTab } from '@/components/editor/tabs/HeadersTab'
 import { BodyTab } from '@/components/editor/tabs/BodyTab'
 import { AuthTab } from '@/components/editor/tabs/AuthTab'
+import { GraphQLTab } from '@/components/editor/tabs/GraphQLTab'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
@@ -39,6 +44,11 @@ function BreadcrumbItem({
       <span>{label}</span>
     </span>
   )
+}
+
+/** Read a protocolConfig key, returning '' if missing */
+function pcGet(config: Record<string, string>, key: string): string {
+  return config[key] ?? ''
 }
 
 export function RequestEditor() {
@@ -77,16 +87,24 @@ export function RequestEditor() {
     )
   }
 
+  const protocol = (editingRequest.protocol ?? 'http') as ProtocolType
+  const pc = editingRequest.protocolConfig ?? {}
+
+  const updatePc = (key: string, value: string) => {
+    updateField('protocolConfig', { ...pc, [key]: value })
+  }
+
+  const metadataFromPc = (): KeyValuePair[] => {
+    try { return JSON.parse(pc.metadata ?? '[]') } catch { return [] }
+  }
+
   return (
     <div className="flex h-full flex-col bg-th-bg">
       {/* Breadcrumb + request name */}
       <div className="border-b border-th-border px-4 py-2">
         {breadcrumb && (
           <div className="mb-1 flex items-center gap-1.5 text-xs flex-wrap">
-            <BreadcrumbItem
-              icon={sourceIcon(breadcrumb.sourceType)}
-              label={breadcrumb.sourceLabel}
-            />
+            <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
             {breadcrumb.collection && (
               <>
                 <ChevronRight className="h-3 w-3 shrink-0 text-th-text-faint" />
@@ -117,18 +135,29 @@ export function RequestEditor() {
         />
       </div>
 
-      {/* URL bar */}
-      <div className="flex items-center gap-2 border-b border-th-border px-3 py-2">
-        <MethodSelector
-          value={editingRequest.method as HttpMethod}
-          onChange={(m) => updateField('method', m)}
+      {/* Protocol selector + URL bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-th-border px-3 py-2">
+        <ProtocolSelector
+          value={protocol}
+          onChange={(p) => {
+            updateField('protocol', p)
+            // set sensible default URL scheme prefix hint
+          }}
         />
+        {protocol === 'http' && (
+          <MethodSelector
+            value={editingRequest.method as HttpMethod}
+            onChange={(m) => updateField('method', m)}
+          />
+        )}
         <UrlBar
           value={editingRequest.url}
           onChange={(url) => updateField('url', url)}
-          onSend={sendRequest}
+          onSend={protocol === 'http' || protocol === 'graphql' ? sendRequest : undefined}
         />
-        <SendButton onClick={sendRequest} isLoading={isLoading} />
+        {(protocol === 'http' || protocol === 'graphql') && (
+          <SendButton onClick={sendRequest} isLoading={isLoading} />
+        )}
         <button
           onClick={saveRequest}
           className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
@@ -138,56 +167,113 @@ export function RequestEditor() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex-1 overflow-auto">
-        <Tabs defaultValue="params">
-          <TabsList className="px-3">
-            <TabsTrigger value="params">Params</TabsTrigger>
-            <TabsTrigger value="headers">Headers</TabsTrigger>
-            <TabsTrigger value="body">Body</TabsTrigger>
-            <TabsTrigger value="auth">Auth</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-          <TabsContent value="params">
-            <ParamsTab
-              params={editingRequest.params}
-              onChange={(p) => updateField('params', p)}
-            />
-          </TabsContent>
-          <TabsContent value="headers">
-            <HeadersTab
-              params={editingRequest.headers}
-              onChange={(h) => updateField('headers', h)}
-            />
-          </TabsContent>
-          <TabsContent value="body">
-            <BodyTab
-              bodyType={editingRequest.bodyType as BodyType}
-              bodyContent={editingRequest.bodyContent}
-              onTypeChange={(t) => updateField('bodyType', t)}
-              onContentChange={(c) => updateField('bodyContent', c)}
-            />
-          </TabsContent>
-          <TabsContent value="auth">
-            <AuthTab
-              authType={editingRequest.authType as AuthType}
-              authConfig={editingRequest.authConfig}
-              onTypeChange={(t) => updateField('authType', t)}
-              onConfigChange={(c) => updateField('authConfig', c)}
-            />
-          </TabsContent>
-          <TabsContent value="settings">
-            <div className="flex flex-col gap-4 p-3">
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">SSL Verification</p>
-                <SslEditor
-                  value={(editingRequest.sslVerification as SslVerification) ?? 'inherit'}
-                  onChange={(v) => updateField('sslVerification', v)}
+      {/* Protocol-specific content area */}
+      <div className="flex-1 overflow-hidden">
+        {protocol === 'websocket' && (
+          <WebSocketView
+            url={editingRequest.url}
+            headers={editingRequest.headers}
+            onHeadersChange={(h) => updateField('headers', h)}
+          />
+        )}
+
+        {protocol === 'grpc' && (
+          <GrpcView
+            serverUrl={editingRequest.url}
+            protoContent={pcGet(pc, 'protoContent')}
+            serviceName={pcGet(pc, 'service')}
+            methodName={pcGet(pc, 'method')}
+            requestBody={editingRequest.bodyContent}
+            metadata={metadataFromPc()}
+            useTls={pcGet(pc, 'useTls') === 'true'}
+            onProtoChange={(v) => updatePc('protoContent', v)}
+            onServiceChange={(v) => updatePc('service', v)}
+            onMethodChange={(v) => updatePc('method', v)}
+            onRequestBodyChange={(v) => updateField('bodyContent', v)}
+            onMetadataChange={(v) => updatePc('metadata', JSON.stringify(v))}
+            onUseTlsChange={(v) => updatePc('useTls', v ? 'true' : 'false')}
+          />
+        )}
+
+        {protocol === 'mqtt' && (
+          <MqttView
+            clientId={pcGet(pc, 'clientId')}
+            username={pcGet(pc, 'username')}
+            password={pcGet(pc, 'password')}
+            keepAlive={pcGet(pc, 'keepAlive')}
+            cleanSession={pcGet(pc, 'cleanSession')}
+            subscriptions={pcGet(pc, 'subscriptions')}
+            onConfigChange={(key, value) => updatePc(key, value)}
+          />
+        )}
+
+        {(protocol === 'http' || protocol === 'graphql') && (
+          <Tabs defaultValue={protocol === 'graphql' ? 'query' : 'params'}>
+            <TabsList className="px-3">
+              {protocol === 'graphql' ? (
+                <TabsTrigger value="query">Query</TabsTrigger>
+              ) : (
+                <TabsTrigger value="params">Params</TabsTrigger>
+              )}
+              <TabsTrigger value="headers">Headers</TabsTrigger>
+              {protocol === 'http' && <TabsTrigger value="body">Body</TabsTrigger>}
+              <TabsTrigger value="auth">Auth</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            </TabsList>
+
+            {protocol === 'graphql' && (
+              <TabsContent value="query">
+                <GraphQLTab
+                  query={editingRequest.bodyContent}
+                  variables={pcGet(pc, 'variables')}
+                  operationName={pcGet(pc, 'operationName')}
+                  onQueryChange={(v) => updateField('bodyContent', v)}
+                  onVariablesChange={(v) => updatePc('variables', v)}
+                  onOperationNameChange={(v) => updatePc('operationName', v)}
                 />
+              </TabsContent>
+            )}
+
+            {protocol === 'http' && (
+              <>
+                <TabsContent value="params">
+                  <ParamsTab params={editingRequest.params} onChange={(p) => updateField('params', p)} />
+                </TabsContent>
+                <TabsContent value="body">
+                  <BodyTab
+                    bodyType={editingRequest.bodyType as BodyType}
+                    bodyContent={editingRequest.bodyContent}
+                    onTypeChange={(t) => updateField('bodyType', t)}
+                    onContentChange={(c) => updateField('bodyContent', c)}
+                  />
+                </TabsContent>
+              </>
+            )}
+
+            <TabsContent value="headers">
+              <HeadersTab params={editingRequest.headers} onChange={(h) => updateField('headers', h)} />
+            </TabsContent>
+            <TabsContent value="auth">
+              <AuthTab
+                authType={editingRequest.authType as AuthType}
+                authConfig={editingRequest.authConfig}
+                onTypeChange={(t) => updateField('authType', t)}
+                onConfigChange={(c) => updateField('authConfig', c)}
+              />
+            </TabsContent>
+            <TabsContent value="settings">
+              <div className="flex flex-col gap-4 p-3">
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">SSL Verification</p>
+                  <SslEditor
+                    value={(editingRequest.sslVerification as SslVerification) ?? 'inherit'}
+                    onChange={(v) => updateField('sslVerification', v)}
+                  />
+                </div>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
 
       {/* Commit panel for SCM-backed requests */}
@@ -197,3 +283,5 @@ export function RequestEditor() {
     </div>
   )
 }
+
+

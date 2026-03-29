@@ -78,6 +78,60 @@ const api = {
     set: (data: { key: string; value: unknown }) => ipcRenderer.invoke('postly:settings:set', data),
     getAll: () => ipcRenderer.invoke('postly:settings:get-all'),
   },
+  ws: {
+    connect: (data: { connectionId: string; url: string; headers?: Record<string, string> }) =>
+      ipcRenderer.invoke('postly:ws:connect', data),
+    send: (data: { connectionId: string; message: string }) =>
+      ipcRenderer.invoke('postly:ws:send', data),
+    disconnect: (data: { connectionId: string }) =>
+      ipcRenderer.invoke('postly:ws:disconnect', data),
+    status: (data: { connectionId: string }) =>
+      ipcRenderer.invoke('postly:ws:status', data),
+    onEvent: (cb: (data: unknown) => void) => {
+      const handler = (_: unknown, data: unknown) => cb(data)
+      ipcRenderer.on('postly:ws:event', handler)
+      return () => ipcRenderer.removeListener('postly:ws:event', handler)
+    },
+  },
+  grpc: {
+    loadProto: (data: { protoContent: string }) =>
+      ipcRenderer.invoke('postly:grpc:load-proto', data),
+    invoke: (data: {
+      serverUrl: string
+      protoContent: string
+      serviceName: string
+      methodName: string
+      metadata?: Record<string, string>
+      requestBody: string
+      useTls?: boolean
+    }) => ipcRenderer.invoke('postly:grpc:invoke', data),
+  },
+  mqtt: {
+    connect: (data: {
+      connectionId: string
+      brokerUrl: string
+      clientId?: string
+      username?: string
+      password?: string
+      keepAlive?: number
+      cleanSession?: boolean
+    }) => ipcRenderer.invoke('postly:mqtt:connect', data),
+    subscribe: (data: { connectionId: string; topic: string; qos?: 0 | 1 | 2 }) =>
+      ipcRenderer.invoke('postly:mqtt:subscribe', data),
+    unsubscribe: (data: { connectionId: string; topic: string }) =>
+      ipcRenderer.invoke('postly:mqtt:unsubscribe', data),
+    publish: (data: { connectionId: string; topic: string; payload: string; qos?: 0 | 1 | 2; retain?: boolean }) =>
+      ipcRenderer.invoke('postly:mqtt:publish', data),
+    disconnect: (data: { connectionId: string }) =>
+      ipcRenderer.invoke('postly:mqtt:disconnect', data),
+    status: (data: { connectionId: string }) =>
+      ipcRenderer.invoke('postly:mqtt:status', data),
+    onEvent: (cb: (data: unknown) => void) => {
+      const handler = (_: unknown, data: unknown) => cb(data)
+      ipcRenderer.on('postly:mqtt:event', handler)
+      return () => ipcRenderer.removeListener('postly:mqtt:event', handler)
+    },
+  },
   integrations: {
     list: () => ipcRenderer.invoke('postly:integrations:list'),
     create: (data: { type: string; name: string; baseUrl: string; clientId?: string; clientSecret?: string; repo?: string; branch?: string }) => ipcRenderer.invoke('postly:integrations:create', data),

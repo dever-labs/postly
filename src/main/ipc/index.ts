@@ -8,6 +8,9 @@ import { registerGitHubHandlers } from './github'
 import { registerGitLabHandlers } from './gitlab'
 import { registerSettingsHandlers } from './settings'
 import { registerIntegrationHandlers } from './integrations'
+import { registerWsHandlers } from './ws'
+import { registerGrpcHandlers } from './grpc'
+import { registerMqttHandlers } from './mqtt'
 
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
@@ -20,4 +23,7 @@ export function registerAllIpcHandlers(): void {
   registerGitLabHandlers()
   registerSettingsHandlers()
   registerIntegrationHandlers()
+  registerWsHandlers()
+  registerGrpcHandlers()
+  registerMqttHandlers()
 }

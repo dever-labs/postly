@@ -18,6 +18,8 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   isDirty: 'is_dirty',
   sortOrder: 'sort_order',
   sslVerification: 'ssl_verification',
+  protocol: 'protocol',
+  protocolConfig: 'protocol_config',
 }
 
 export function registerRequestHandlers(): void {

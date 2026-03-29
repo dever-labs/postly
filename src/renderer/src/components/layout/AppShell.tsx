@@ -45,8 +45,11 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
-      {/* Sidebar — border-r is the visual divider; overlay handles resize */}
-      <div style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }} className="relative shrink-0 overflow-hidden border-r border-th-border">
+      {/* Sidebar */}
+      <div
+        style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }}
+        className="relative shrink-0 overflow-hidden border-r border-th-border backdrop-blur-md"
+      >
         <CollectionsSidebar />
         <div
           onMouseDown={sidebarDrag}

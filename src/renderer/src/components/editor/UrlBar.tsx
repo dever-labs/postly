@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 interface UrlBarProps {
   value: string
   onChange: (url: string) => void
-  onSend: () => void
+  onSend?: () => void
 }
 
 export function UrlBar({ value, onChange, onSend }: UrlBarProps) {
@@ -15,7 +15,7 @@ export function UrlBar({ value, onChange, onSend }: UrlBarProps) {
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => e.key === 'Enter' && onSend()}
+      onKeyDown={(e) => e.key === 'Enter' && onSend?.()}
       placeholder="https://api.example.com/endpoint"
       spellCheck={false}
       className={cn(

@@ -25,25 +25,48 @@
     },
     "files": [
       "out/**/*",
-      "!**/node_modules/**"
+      "node_modules/**/*",
+      "!node_modules/.bin/**",
+      "!node_modules/**/*.{ts,map}",
+      "!node_modules/**/test{,s}/**",
+      "!node_modules/**/{README,CHANGELOG,CONTRIBUTING}.md"
     ],
-    "extraResources": [
-      {
-        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
-        "to": "sql-wasm.wasm"
-      }
-    ],
+    "extraResources": [],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64", "ia32", "arm64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "resources/icon.ico"
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] },
-        { "target": "zip", "arch": ["x64", "arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "icon": "resources/icon.icns",
       "category": "public.app-category.developer-tools",
@@ -52,9 +75,26 @@
     },
     "linux": {
       "target": [
-        { "target": "AppImage", "arch": ["x64", "arm64"] },
-        { "target": "deb", "arch": ["x64", "arm64"] },
-        { "target": "rpm", "arch": ["x64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "resources/icon.png",
       "category": "Development"
@@ -68,7 +108,13 @@
     "type": "git",
     "url": "git+https://github.com/dever-labs/postly.git"
   },
-  "keywords": ["api-client", "rest", "electron", "backstage", "postman"],
+  "keywords": [
+    "api-client",
+    "rest",
+    "electron",
+    "backstage",
+    "postman"
+  ],
   "author": "Dever Labs",
   "license": "MIT",
   "type": "commonjs",
@@ -98,6 +144,8 @@
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^10.1.1",
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -113,11 +161,13 @@
     "electron-store": "^8.2.0",
     "httpntlm": "^1.8.13",
     "lucide-react": "^1.7.0",
+    "mqtt": "^5.15.1",
     "openapi-types": "^12.1.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sql.js": "^1.14.1",
     "tailwind-merge": "^3.5.0",
+    "ws": "^8.20.0",
     "zustand": "^4.5.7"
   }
 }

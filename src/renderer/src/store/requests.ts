@@ -16,7 +16,8 @@ interface RequestsState {
 
 const DIRTY_FIELDS = new Set<keyof Request>([
   'name', 'method', 'url', 'params', 'headers',
-  'bodyType', 'bodyContent', 'authType', 'authConfig', 'description', 'sslVerification',
+  'bodyType', 'bodyContent', 'authType', 'authConfig', 'description',
+  'sslVerification', 'protocol', 'protocolConfig',
 ])
 
 function kvpToRecord(pairs: KeyValuePair[]): Record<string, string> {
@@ -34,6 +35,7 @@ function serializeRequest(req: Request): Record<string, unknown> {
     params: JSON.stringify(req.params),
     headers: JSON.stringify(req.headers),
     authConfig: JSON.stringify(req.authConfig),
+    protocolConfig: JSON.stringify(req.protocolConfig),
   }
 }
 
@@ -72,20 +74,32 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
     set({ isLoading: true, response: null })
 
+    const pc = editingRequest.protocolConfig ?? {}
+    let bodyContent = editingRequest.bodyContent
+    let bodyType = editingRequest.bodyType
+
+    // For GraphQL, build the standard GQL request body
+    if (editingRequest.protocol === 'graphql') {
+      const gqlBody: Record<string, unknown> = { query: editingRequest.bodyContent }
+      if (pc.variables) {
+        try { gqlBody.variables = JSON.parse(pc.variables) } catch { gqlBody.variables = {} }
+      }
+      if (pc.operationName) gqlBody.operationName = pc.operationName
+      bodyContent = JSON.stringify(gqlBody)
+      bodyType = 'raw-json'
+    }
+
     const httpRequest: HttpRequest = {
-      method: editingRequest.method,
+      method: editingRequest.protocol === 'graphql' ? 'POST' : editingRequest.method,
       url: editingRequest.url,
       headers: kvpToRecord(editingRequest.headers),
-      body: editingRequest.bodyType !== 'none' ? editingRequest.bodyContent : undefined,
-      bodyType: editingRequest.bodyType,
+      body: bodyType !== 'none' ? bodyContent : undefined,
+      bodyType,
       authType: editingRequest.authType,
       authConfig: editingRequest.authConfig,
       sslVerification: editingRequest.sslVerification,
       groupId: editingRequest.groupId,
     }
-
-    // Merge enabled params into URL is handled by main process; pass them via headers record workaround
-    // or attach to request object for the main process to handle
     ;(httpRequest as any).params = kvpToRecord(editingRequest.params)
 
     try {

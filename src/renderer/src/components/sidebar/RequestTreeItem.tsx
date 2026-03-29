@@ -14,6 +14,13 @@ const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orang
   OPTIONS: 'grey',
 }
 
+const PROTOCOL_BADGE: Record<string, { label: string; variant: 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey' }> = {
+  websocket: { label: 'WS',   variant: 'blue' },
+  grpc:      { label: 'gRPC', variant: 'purple' },
+  mqtt:      { label: 'MQTT', variant: 'orange' },
+  graphql:   { label: 'GQL',  variant: 'grey' },
+}
+
 interface RequestTreeItemProps {
   request: Request
   isActive: boolean
@@ -41,9 +48,12 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
       )}
       onClick={() => !renaming && onClick()}
     >
-      <Badge variant={METHOD_COLORS[request.method] ?? 'grey'} className="shrink-0 font-mono text-[10px]">
-        {request.method}
-      </Badge>
+      {(() => {
+        const pb = request.protocol ? PROTOCOL_BADGE[request.protocol] : null
+        return pb
+          ? <Badge variant={pb.variant} className="shrink-0 font-mono text-[10px]">{pb.label}</Badge>
+          : <Badge variant={METHOD_COLORS[request.method] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{request.method}</Badge>
+      })()}
 
       {renaming ? (
         <input
