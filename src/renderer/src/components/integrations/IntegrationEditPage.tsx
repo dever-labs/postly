@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, GitFork, Loader2, Trash2 } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Loader2 } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -55,6 +55,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
   const [connectedUser, setConnectedUser] = useState<Integration['connectedUser']>(integration?.connectedUser ?? null)
   const [deviceCode, setDeviceCode] = useState<{ userCode: string; verificationUri: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   if (!integration) return null
 
@@ -142,15 +143,6 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
           <h1 className="text-sm font-semibold text-th-text-primary">Edit Integration</h1>
           <p className="text-xs text-th-text-subtle">{stepLabel}</p>
         </div>
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="no-drag flex items-center gap-1.5 rounded px-2 py-1.5 text-xs text-th-text-subtle hover:bg-rose-900/30 hover:text-rose-400 disabled:opacity-50"
-          title="Delete integration"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Delete
-        </button>
       </div>
 
       <div className="flex flex-1 items-start justify-center px-6 py-12">
@@ -221,6 +213,39 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                 <Button size="sm" onClick={handleSaveAndReconnect}>
                   {type === 'backstage' ? 'Save & Connect' : 'Save & Reconnect'}
                 </Button>
+              </div>
+
+              <div className="mt-6 border-t border-th-border pt-6">
+                {!confirmDelete ? (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="text-xs text-th-text-subtle hover:text-rose-400 transition-colors focus:outline-none"
+                  >
+                    Remove this integration…
+                  </button>
+                ) : (
+                  <div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-4 flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-th-text-primary">Remove {integration.name}?</p>
+                      <p className="mt-1 text-xs text-th-text-subtle">
+                        This will disconnect the integration and remove all collections synced from it. This cannot be undone.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="ml-auto bg-rose-600 hover:bg-rose-500 text-white border-transparent"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                      >
+                        {deleting ? 'Removing…' : 'Yes, remove'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
