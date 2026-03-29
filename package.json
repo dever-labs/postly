@@ -16,7 +16,8 @@
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:linux": "electron-vite build && electron-builder --linux"
+    "dist:linux": "electron-vite build && electron-builder --linux",
+    "generate-icons": "node scripts/generate-icons.mjs"
   },
   "build": {
     "appId": "com.deverlabs.postly",
@@ -158,7 +159,9 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "png2icons": "^2.0.1",
     "postcss": "^8.5.8",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",

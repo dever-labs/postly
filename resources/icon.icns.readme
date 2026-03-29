@@ -1,3 +1,0 @@
-Generate icon.icns on macOS:
-  npm install -g electron-icon-builder
-  electron-icon-builder --input=resources/icon.png --output=resources/ --flatten
