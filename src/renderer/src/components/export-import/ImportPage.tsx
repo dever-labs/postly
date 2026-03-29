@@ -114,7 +114,7 @@ export function ImportPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 py-4">
+      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
             <FileJson className="h-3.5 w-3.5" />

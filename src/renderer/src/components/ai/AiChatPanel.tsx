@@ -158,7 +158,7 @@ export function AiChatPanel({ context, groupId }: Props) {
   return (
     <div className="flex h-full w-full flex-col bg-th-bg">
       {/* Header */}
-      <div className="drag-region flex shrink-0 items-center border-b border-th-border px-6 py-4">
+      <div className="drag-region flex shrink-0 items-center border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag">
           <div className="flex items-center gap-2 mb-0.5">
             <Sparkles className="h-4 w-4 text-blue-400" />
