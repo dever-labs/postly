@@ -33,13 +33,13 @@ function BreadcrumbItem({
   return onClick ? (
     <button
       onClick={onClick}
-      className="flex items-center gap-1 text-th-text-faint hover:text-th-text-secondary hover:underline focus:outline-none"
+      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-th-text-faint hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-none"
     >
       {icon}
       <span>{label}</span>
     </button>
   ) : (
-    <span className="flex items-center gap-1 text-th-text-subtle">
+    <span className="flex items-center gap-1 px-1.5 py-0.5 text-th-text-subtle">
       {icon}
       <span>{label}</span>
     </span>

@@ -15,7 +15,7 @@ function SourceCrumb({ source, name }: { source: string; name: string }) {
     source === 'backstage' ? <Box className="h-3 w-3" /> :
     <HardDrive className="h-3 w-3" />
   return (
-    <span className="flex items-center gap-1 text-th-text-faint">
+    <span className="flex items-center gap-1 px-1.5 py-0.5 text-th-text-faint">
       {icon}
       <span>{name}</span>
     </span>
@@ -105,8 +105,10 @@ export function CollectionEditor({ collectionId }: Props) {
               name={integration ? integration.name : 'Local'}
             />
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-th-text-subtle" />
-            <span className="font-medium text-th-text-primary">{name || 'Collection'}</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 font-medium text-th-text-primary">
+              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+              {name || 'Collection'}
+            </span>
           </div>
           {editingTitle ? (
             <input

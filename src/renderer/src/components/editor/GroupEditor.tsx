@@ -15,7 +15,7 @@ function SourceCrumb({ source, name }: { source: string; name: string }) {
     source === 'backstage' ? <Box className="h-3 w-3" /> :
     <HardDrive className="h-3 w-3" />
   return (
-    <span className="flex items-center gap-1 text-th-text-faint">
+    <span className="flex items-center gap-1 px-1.5 py-0.5 text-th-text-faint">
       {icon}
       <span>{name}</span>
     </span>
@@ -116,18 +116,20 @@ export function GroupEditor({ groupId }: Props) {
             {collection && (
               <>
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
-                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-th-text-subtle" />
                 <button
                   onClick={() => selectItem('collection', collection.id)}
-                  className="font-medium text-th-text-subtle hover:text-th-text-primary hover:underline focus:outline-none"
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-none"
                 >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
                   {collection.name}
                 </button>
               </>
             )}
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
-            <Folder className="h-3.5 w-3.5 shrink-0 text-th-text-subtle" />
-            <span className="font-medium text-th-text-primary">{name || 'Group'}</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 font-medium text-th-text-primary">
+              <Folder className="h-3.5 w-3.5 shrink-0" />
+              {name || 'Group'}
+            </span>
           </div>
           {editingTitle ? (
             <input
