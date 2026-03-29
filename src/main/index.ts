@@ -1,9 +1,12 @@
-import { app, BrowserWindow, shell, Menu } from 'electron'
+import { app, BrowserWindow, shell, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers } from './ipc'
 
 function createWindow(): void {
+  const iconPath = join(__dirname, '../../resources/icon.png')
+  const icon = nativeImage.createFromPath(iconPath)
+
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -11,6 +14,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#030712',
     titleBarStyle: 'hiddenInset',
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

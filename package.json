@@ -5,6 +5,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "test": "vitest run",
+    "generate:icons": "python scripts/generate-icons.py",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -68,7 +69,7 @@
           ]
         }
       ],
-      "icon": "resources/icon.icns",
+      "icon": "resources/icon.png",
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
