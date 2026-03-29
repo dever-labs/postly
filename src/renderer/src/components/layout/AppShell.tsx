@@ -71,7 +71,14 @@ export function AppShell() {
   }, [setSidebarWidth]))
 
   return (
-    <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
+    <div className="flex h-screen flex-col overflow-hidden bg-th-bg text-th-text-primary">
+      {/* ── Title bar — full-width drag region, native controls overlay top-right ── */}
+      <div className="drag-region flex h-[44px] shrink-0 items-center border-b border-th-border px-4">
+        <span className="text-sm font-semibold text-th-text-muted select-none">Postly</span>
+      </div>
+
+      {/* ── Main area ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
       <div
         style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }}
@@ -130,6 +137,7 @@ export function AppShell() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

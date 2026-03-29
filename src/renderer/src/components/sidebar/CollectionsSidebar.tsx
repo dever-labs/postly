@@ -52,12 +52,12 @@ export function CollectionsSidebar() {
   return (
     <div className="flex h-full flex-col bg-th-bg">
 
-      {/* Tab switcher — also serves as the window drag region */}
-      <div className="drag-region flex shrink-0 border-b border-th-border">
+      {/* Tab switcher */}
+      <div className="flex shrink-0 border-b border-th-border">
         <button
           onClick={() => setSidebarTab('apis')}
           className={cn(
-            'no-drag flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
             sidebarTab === 'apis'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -69,7 +69,7 @@ export function CollectionsSidebar() {
         <button
           onClick={() => setSidebarTab('environments')}
           className={cn(
-            'no-drag flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
             sidebarTab === 'environments'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
