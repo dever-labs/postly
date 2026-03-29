@@ -1,7 +1,8 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useEnvAutocomplete } from '@/hooks/useEnvAutocomplete'
 import { EnvSuggestions } from './EnvSuggestions'
+import { VarTooltip } from './VarTooltip'
 
 interface EnvInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value: string
@@ -13,6 +14,8 @@ interface EnvInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
 export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, className, ...props }: EnvInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const ac = useEnvAutocomplete()
+  const [showVarTooltip, setShowVarTooltip] = useState(false)
+  const hasVars = /\{\{[^}]+\}\}/.test(value)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
@@ -56,7 +59,11 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   }
 
   return (
-    <div className={cn('relative', wrapperClassName)}>
+    <div
+      className={cn('relative', wrapperClassName)}
+      onMouseEnter={() => hasVars && setShowVarTooltip(true)}
+      onMouseLeave={() => setShowVarTooltip(false)}
+    >
       <input
         ref={inputRef}
         value={value}
@@ -73,6 +80,9 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
           onSelect={doComplete}
           onHover={ac.setSelectedIndex}
         />
+      )}
+      {showVarTooltip && !ac.show && (
+        <VarTooltip value={value} />
       )}
     </div>
   )
