@@ -52,12 +52,13 @@ export function CollectionsSidebar() {
   return (
     <div className="flex h-full flex-col bg-th-bg">
 
-      {/* Tab switcher */}
-      <div className="flex shrink-0 border-b border-th-border">
+      {/* Tab switcher — tabs are natural width; the flex-1 spacer at the end
+          is marked drag-region so the empty top area drags the window */}
+      <div className="drag-region flex shrink-0 items-center border-b border-th-border">
         <button
           onClick={() => setSidebarTab('apis')}
           className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'no-drag flex items-center gap-1.5 px-4 py-3.5 text-xs font-medium transition-colors focus:outline-none',
             sidebarTab === 'apis'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -69,7 +70,7 @@ export function CollectionsSidebar() {
         <button
           onClick={() => setSidebarTab('environments')}
           className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'no-drag flex items-center gap-1.5 px-4 py-3.5 text-xs font-medium transition-colors focus:outline-none',
             sidebarTab === 'environments'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -78,6 +79,8 @@ export function CollectionsSidebar() {
           <Globe className="h-3.5 w-3.5" />
           Environments
         </button>
+        {/* Fills remaining width — this empty space is the drag handle */}
+        <div className="flex-1 self-stretch" />
       </div>
 
       {/* ── APIs tab ─────────────────────────────────────────────────────── */}
