@@ -108,15 +108,15 @@ export function EnvironmentEditor() {
   // ── Empty state ────────────────────────────────────────────────────────────
   if (!env) {
     return (
-      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
-        <div className="rounded-full border border-th-border p-6">
+      <div className="drag-region flex h-full flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
+        <div className="no-drag rounded-full border border-th-border p-6">
           <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2}
               d="M3.75 9h16.5m-16.5 6.75h16.5M3 4.5h18M3 19.5h18" />
           </svg>
         </div>
-        <p className="text-sm">Select an environment to edit</p>
-        <p className="text-xs text-th-text-faint">or create one from the sidebar</p>
+        <p className="no-drag text-sm">Select an environment to edit</p>
+        <p className="no-drag text-xs text-th-text-faint">or create one from the sidebar</p>
       </div>
     )
   }
@@ -124,45 +124,35 @@ export function EnvironmentEditor() {
   // ── Editor ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-th-border px-6 py-4">
+      {/* Header — drag-region; py-4 padding + name area are the drag target */}
+      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 py-4">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={handleNameBlur}
           onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          className="bg-transparent text-lg font-semibold text-th-text-primary outline-none placeholder-th-text-faint focus:border-b focus:border-blue-500"
+          className="no-drag bg-transparent text-lg font-semibold text-th-text-primary outline-none placeholder-th-text-faint focus:border-b focus:border-blue-500"
         />
+        <button
+          onClick={handleDelete}
+          className="no-drag rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-none"
+        >
+          Delete
+        </button>
+      </div>
 
-        <div className="flex items-center gap-2">
-          {!env.isActive && (
-            <button
-              onClick={() => setActive(env.id)}
-              className="rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-none"
-            >
-              Set as active
-            </button>
-          )}
+      {/* "Set as active" — below header so it's never behind window controls */}
+      {!env.isActive && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-th-border px-6 py-2.5">
+          <span className="text-xs text-th-text-faint">This environment is not active</span>
           <button
-            onClick={handleSave}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors focus:outline-none',
-              saved
-                ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
-                : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
-            )}
+            onClick={() => setActive(env.id)}
+            className="rounded-md border border-th-border-strong px-3 py-1 text-xs text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-none"
           >
-            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-            {saved ? 'Saved' : 'Save'}
-          </button>
-          <button
-            onClick={handleDelete}
-            className="rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-none"
-          >
-            Delete
+            Set as active
           </button>
         </div>
-      </div>
+      )}
 
       {/* Variables */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -212,6 +202,19 @@ export function EnvironmentEditor() {
           className="mt-4 flex items-center gap-2 rounded-md border border-dashed border-th-border-strong px-4 py-2.5 text-sm text-th-text-subtle transition-colors hover:border-th-text-muted hover:text-th-text-secondary focus:outline-none"
         >
           <Plus className="h-4 w-4" /> Add variable
+        </button>
+
+        <button
+          onClick={handleSave}
+          className={cn(
+            'mt-2 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-none',
+            saved
+              ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
+              : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
+          )}
+        >
+          {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+          {saved ? 'Saved' : 'Save'}
         </button>
       </div>
     </div>
