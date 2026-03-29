@@ -23,6 +23,7 @@ interface CollectionsState {
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
   renameGroup: (id: string, name: string) => Promise<void>
+  createLocalRequest: (groupId: string) => Promise<void>
 }
 
 export const useCollectionsStore = create<CollectionsState>((set, get) => ({

@@ -1,5 +1,6 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
 export type ProtocolType = 'http' | 'graphql' | 'websocket' | 'grpc' | 'mqtt'
+export type GrantType = 'authorization_code' | 'client_credentials' | 'implicit' | 'password'
 export type BodyType =
   | 'none'
   | 'form-data'

@@ -17,11 +17,16 @@ export function AiActionButton({ onClick, label = 'Build with AI', className, va
   const apiKey = useSettingsStore((s) => s.ai?.apiKey)
   const configured = Boolean(apiKey?.trim())
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onClick()
+  }
+
   const button =
     variant === 'menu-item' ? (
       <button
         disabled={!configured}
-        onClick={onClick}
+        onClick={handleClick}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
           configured
@@ -36,7 +41,7 @@ export function AiActionButton({ onClick, label = 'Build with AI', className, va
     ) : (
       <button
         disabled={!configured}
-        onClick={onClick}
+        onClick={handleClick}
         className={cn(
           'flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors',
           configured

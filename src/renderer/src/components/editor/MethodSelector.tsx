@@ -1,7 +1,7 @@
 import React from 'react'
 import type { HttpMethod } from '@/types'
 import { Badge } from '@/components/ui/Badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/Select'
 
 const METHODS: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 

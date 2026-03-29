@@ -43,8 +43,6 @@ export function CollectionEditor({ collectionId }: Props) {
   const updateCollection = useCollectionsStore((s) => s.updateCollection)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { addToast, selectItem: selectUIItem } = useUIStore((s) => ({ addToast: s.addToast, selectItem: s.selectItem }))
-  const groups = useCollectionsStore((s) => s.groups)
-  const allRequests = useCollectionsStore((s) => s.requests)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')

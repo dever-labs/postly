@@ -46,7 +46,7 @@ export function registerCollectionHandlers(): void {
 
   ipcMain.handle(
     'postly:collections:update',
-    async (_, args: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => {
+    async (_, args: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string }) => {
       try {
         const fields: string[] = []
         const values: unknown[] = []
@@ -98,7 +98,7 @@ export function registerCollectionHandlers(): void {
 
   ipcMain.handle(
     'postly:groups:update',
-    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => {
+    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string }) => {
       try {
         const fields: string[] = []
         const values: unknown[] = []

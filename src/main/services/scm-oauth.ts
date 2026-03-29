@@ -45,7 +45,7 @@ export const BUNDLED_CLIENT_IDS: Record<string, string> = {
   'https://gitlab.com': process.env.POSTLY_GITLAB_CLIENT_ID ?? 'YOUR_GITLAB_CLIENT_ID',
 }
 
-export function resolveClientId(type: string, baseUrl: string, storedClientId: string): string {
+export function resolveClientId(_type: string, baseUrl: string, storedClientId: string): string {
   const normalized = baseUrl.replace(/\/$/, '').toLowerCase()
   return BUNDLED_CLIENT_IDS[normalized] ?? storedClientId
 }

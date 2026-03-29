@@ -31,7 +31,7 @@ function normalize(raw: Record<string, unknown>): Integration {
   }
 }
 
-export const useIntegrationsStore = create<IntegrationsState>((set, get) => ({
+export const useIntegrationsStore = create<IntegrationsState>((set) => ({
   integrations: [],
 
   load: async () => {

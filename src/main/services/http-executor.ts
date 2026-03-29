@@ -9,6 +9,7 @@ export interface HttpRequest {
   authType: string
   authConfig: Record<string, string>
   groupId?: string
+  sslVerification?: string
 }
 
 export interface HttpResponse {

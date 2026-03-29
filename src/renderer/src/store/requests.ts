@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { HttpRequest, HttpResponse, KeyValuePair, Request } from '../types'
+import type { HttpRequest, HttpResponse, Request } from '../types'
 import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { useCollectionsStore } from './collections'
 

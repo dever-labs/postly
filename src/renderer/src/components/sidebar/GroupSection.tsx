@@ -135,7 +135,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
           <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
             <AiActionButton
               variant="menu-item"
-              onClick={(e) => { (e as any).stopPropagation?.(); setMenuOpen(false); onAi() }}
+              onClick={() => { setMenuOpen(false); onAi() }}
             />
             <div className="border-t border-th-border mx-2" />
             <button
@@ -375,7 +375,7 @@ export function GroupSection({ source, integration, collections, groups, request
                                 <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
                                   <AiActionButton
                                     variant="menu-item"
-                                    onClick={(e) => { (e as any).stopPropagation?.(); setGroupMenuOpen(null); selectItem('ai-group', group.id) }}
+                                  onClick={() => { setGroupMenuOpen(null); selectItem('ai-group', group.id) }}
                                   />
                                   <div className="border-t border-th-border mx-2" />
                                   <button

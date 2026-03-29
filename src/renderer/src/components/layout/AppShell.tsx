@@ -69,11 +69,6 @@ export function AppShell() {
     setSidebarWidth(Math.max(180, Math.min(600, w + d)))
   }, [setSidebarWidth]))
 
-  const editorDrag = useDrag('vertical', useCallback((d: number) => {
-    const h = useUIStore.getState().editorHeight
-    setEditorHeight(Math.max(150, Math.min(800, h + d)))
-  }, [setEditorHeight]))
-
   return (
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
       {/* Sidebar */}

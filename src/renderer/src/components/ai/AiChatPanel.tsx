@@ -131,7 +131,6 @@ export function AiChatPanel({ context, groupId }: Props) {
   const addEndpoint = async (msgIdx: number, epIdx: number, ep: EndpointDraft) => {
     let targetGroupId = groupId
     if (!targetGroupId) {
-      const colId = context.collectionId ?? (context.type === 'group' ? context.groupId : undefined)
       const colGroups = context.collectionId ? groups.filter((g) => g.collectionId === context.collectionId) : []
       targetGroupId = colGroups[0]?.id
     }

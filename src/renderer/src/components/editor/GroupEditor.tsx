@@ -45,7 +45,6 @@ export function GroupEditor({ groupId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
-  const allRequests = useCollectionsStore((s) => s.requests)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')

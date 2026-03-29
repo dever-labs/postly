@@ -7,7 +7,6 @@ import { useEnvironmentsStore } from '@/store/environments'
 export function EnvironmentsSettings() {
   const {
     environments,
-    activeEnv,
     vars,
     load,
     createEnvironment,

@@ -25,8 +25,8 @@ const DEFAULT_GENERAL: GeneralSettings = {
   sslVerification: true,
 }
 const DEFAULT_BACKSTAGE: BackstageSettings = { baseUrl: '', token: '', autoSync: false }
-const DEFAULT_GITHUB: GitHubSettings = { token: '', orgs: [] }
-const DEFAULT_GITLAB: GitLabSettings = { baseUrl: 'https://gitlab.com', token: '', groups: [] }
+const DEFAULT_GITHUB: GitHubSettings = { baseUrl: 'https://github.com', clientId: '', clientSecret: '', token: '', repo: '', orgs: [] }
+const DEFAULT_GITLAB: GitLabSettings = { baseUrl: 'https://gitlab.com', clientId: '', token: '', repo: '', groups: [] }
 const DEFAULT_AI: AiSettings = { provider: 'openai', apiKey: '', model: '' }
 
 export const useSettingsStore = create<SettingsState>((set) => ({

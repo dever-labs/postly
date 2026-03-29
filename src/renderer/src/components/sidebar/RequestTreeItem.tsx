@@ -93,7 +93,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
             <AiActionButton
               variant="menu-item"
               label="Review with AI"
-              onClick={(e) => { (e as any).stopPropagation?.(); setMenuOpen(false); selectItem('ai-request', request.id) }}
+              onClick={() => { setMenuOpen(false); selectItem('ai-request', request.id) }}
             />
             <div className="border-t border-th-border mx-2" />
             <button
