@@ -237,4 +237,15 @@ export function registerExportImportHandlers(): void {
       return { error: String(err) }
     }
   })
+
+  /** Import pre-parsed collections sent from the renderer (no file dialog). */
+  ipcMain.handle('postly:import:collections', async (_event, args: { collections: ExportCollection[] }) => {
+    try {
+      if (!Array.isArray(args?.collections)) return { error: 'Invalid collections data.' }
+      const count = importData({ $schema: SCHEMA, exportedAt: new Date().toISOString(), collections: args.collections })
+      return { data: { count } }
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
 }

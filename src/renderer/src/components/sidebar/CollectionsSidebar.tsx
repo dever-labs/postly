@@ -155,24 +155,16 @@ export function CollectionsSidebar() {
                 New Collection
               </Button>
               <button
-                onClick={async () => {
-                  const { data, error } = await window.api.exportImport.export()
-                  if (error) { addToast(`Export failed: ${error}`, 'error'); return }
-                  if (data) addToast(`Exported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
-                }}
+                onClick={() => selectItem('export-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
-                title="Export collections to file"
+                title="Export collections"
               >
                 <Download className="h-4 w-4" />
               </button>
               <button
-                onClick={async () => {
-                  const { data, error } = await window.api.exportImport.import()
-                  if (error) { addToast(`Import failed: ${error}`, 'error'); return }
-                  if (data) { await load(); addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success') }
-                }}
+                onClick={() => selectItem('import-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
-                title="Import collections from file"
+                title="Import collections"
               >
                 <Upload className="h-4 w-4" />
               </button>
