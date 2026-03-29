@@ -218,7 +218,7 @@ export function CollectionsSidebar() {
 
           {/* APIs footer — always visible */}
           <div className="shrink-0 border-t border-th-border">
-            <div className="flex items-center justify-end gap-1 px-2 py-2">
+            <div className="flex items-center gap-1 px-2 py-2">
               <button
                 onClick={() => selectItem('export-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
