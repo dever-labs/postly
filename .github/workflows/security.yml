@@ -30,8 +30,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
       - name: npm audit (all deps, informational)
-        run: npm audit
-        continue-on-error: true
+        run: npm audit || true
 
   electron-security-lint:
     name: Electron Security Check
