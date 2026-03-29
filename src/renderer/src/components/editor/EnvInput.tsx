@@ -1,20 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useEnvAutocomplete } from '@/hooks/useEnvAutocomplete'
 import { useEnvironmentsStore } from '@/store/environments'
 import { EnvSuggestions } from './EnvSuggestions'
 import { VarTooltip } from './VarTooltip'
 import type { EnvVar } from '@/types'
-
-// ─── Text measurement ────────────────────────────────────────────────────────
-
-const _canvas = document.createElement('canvas')
-function measureWidth(text: string, font: string): number {
-  const ctx = _canvas.getContext('2d')
-  if (!ctx) return 0
-  ctx.font = font
-  return ctx.measureText(text).width
-}
 
 // ─── Token parsing ───────────────────────────────────────────────────────────
 
@@ -28,30 +18,68 @@ function parseTokens(value: string): VarToken[] {
   }))
 }
 
-// ─── Token highlight (pixel positions) ──────────────────────────────────────
+type Segment =
+  | { type: 'text'; text: string }
+  | { type: 'var'; key: string; raw: string; isDefined: boolean }
 
-interface TokenHighlight extends VarToken {
-  left: number
-  width: number
-  isDefined: boolean
+function parseSegments(value: string, activeVars: EnvVar[]): Segment[] {
+  const segs: Segment[] = []
+  let last = 0
+  for (const tok of parseTokens(value)) {
+    if (tok.start > last) segs.push({ type: 'text', text: value.slice(last, tok.start) })
+    segs.push({
+      type: 'var',
+      key: tok.key,
+      raw: value.slice(tok.start, tok.end),
+      isDefined: activeVars.some((v) => v.key === tok.key),
+    })
+    last = tok.end
+  }
+  if (last < value.length) segs.push({ type: 'text', text: value.slice(last) })
+  return segs
 }
 
-function computeHighlights(
-  value: string,
-  input: HTMLInputElement,
-  activeVars: EnvVar[],
-): TokenHighlight[] {
+// ─── Text measurement (for hover detection) ──────────────────────────────────
+
+const _canvas = document.createElement('canvas')
+function measureWidth(text: string, font: string): number {
+  const ctx = _canvas.getContext('2d')
+  if (!ctx) return 0
+  ctx.font = font
+  return ctx.measureText(text).width
+}
+
+interface TokenHitZone extends VarToken { left: number; width: number }
+
+function computeHitZones(value: string, input: HTMLInputElement): TokenHitZone[] {
   const style = getComputedStyle(input)
   const font = style.font
-  const paddingLeft = parseFloat(style.paddingLeft)
+  const paddingLeft = parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth)
   const scrollLeft = input.scrollLeft
+  return parseTokens(value).map((tok) => ({
+    ...tok,
+    left: measureWidth(value.slice(0, tok.start), font) + paddingLeft - scrollLeft,
+    width: measureWidth(value.slice(tok.start, tok.end), font),
+  }))
+}
 
-  return parseTokens(value).map((tok) => {
-    const left = measureWidth(value.slice(0, tok.start), font) + paddingLeft - scrollLeft
-    const width = measureWidth(value.slice(tok.start, tok.end), font)
-    const isDefined = activeVars.some((v) => v.key === tok.key)
-    return { ...tok, left, width, isDefined }
-  })
+// ─── Overlay style sync ───────────────────────────────────────────────────────
+
+function buildOverlayStyle(input: HTMLInputElement, scrollLeft: number): React.CSSProperties {
+  const s = getComputedStyle(input)
+  return {
+    fontFamily: s.fontFamily,
+    fontSize: s.fontSize,
+    fontWeight: s.fontWeight,
+    letterSpacing: s.letterSpacing,
+    lineHeight: s.lineHeight,
+    // account for border so text aligns with input text
+    paddingLeft: `calc(${s.paddingLeft} + ${s.borderLeftWidth})`,
+    paddingRight: `calc(${s.paddingRight} + ${s.borderRightWidth})`,
+    paddingTop: `calc(${s.paddingTop} + ${s.borderTopWidth})`,
+    paddingBottom: `calc(${s.paddingBottom} + ${s.borderBottomWidth})`,
+    transform: `translateX(-${scrollLeft}px)`,
+  }
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -62,32 +90,48 @@ interface EnvInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
   wrapperClassName?: string
 }
 
-/** Drop-in replacement for <input> that adds {{ env var autocomplete and per-token highlighting. */
+/** Drop-in <input> replacement with {{ env var autocomplete and per-token highlighting. */
 export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, className, ...props }: EnvInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   const ac = useEnvAutocomplete()
   const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
   const vars = useEnvironmentsStore((s) => s.vars)
 
-  const [highlights, setHighlights] = useState<TokenHighlight[]>([])
+  const [hitZones, setHitZones] = useState<TokenHitZone[]>([])
+  const [overlayStyle, setOverlayStyle] = useState<React.CSSProperties>({})
   const [hovered, setHovered] = useState<{ key: string; left: number } | null>(null)
 
   const activeVars = vars.filter((v) => v.envId === activeEnv?.id)
   const hasVars = /\{\{[^}]+\}\}/.test(value)
+  const segments = hasVars ? parseSegments(value, activeVars) : null
 
-  const recalc = useCallback(() => {
+  // Sync overlay font/padding from the input after mount and on value change
+  useLayoutEffect(() => {
+    if (!inputRef.current || !hasVars) return
+    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft))
+  }, [hasVars, value])
+
+  // Recompute hover hit zones whenever value changes
+  const recalcHitZones = useCallback(() => {
     if (inputRef.current && hasVars) {
-      setHighlights(computeHighlights(value, inputRef.current, activeVars))
+      setHitZones(computeHitZones(value, inputRef.current))
     } else {
-      setHighlights([])
+      setHitZones([])
     }
-  }, [value, activeVars, hasVars])
+  }, [value, hasVars])
 
-  // Recalculate whenever value or active vars change
-  useEffect(() => { recalc() }, [recalc])
+  useEffect(() => { recalcHitZones() }, [recalcHitZones])
 
-  // ─── Input handlers ────────────────────────────────────────────────────────
+  const syncScroll = () => {
+    if (!inputRef.current) return
+    const sl = inputRef.current.scrollLeft
+    if (overlayRef.current) overlayRef.current.style.transform = `translateX(-${sl}px)`
+    recalcHitZones()
+  }
+
+  // ─── Input handlers ─────────────────────────────────────────────────────────
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
@@ -118,49 +162,61 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
     })
   }
 
-  // ─── Hover detection via mousemove on the input ────────────────────────────
-  // We use onMouseMove on the input (not overlay divs) so click/focus still work.
+  // ─── Hover detection ─────────────────────────────────────────────────────────
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
-    if (!hasVars || highlights.length === 0 || !wrapperRef.current) { setHovered(null); return }
-    const wrapperLeft = wrapperRef.current.getBoundingClientRect().left
-    const relX = e.clientX - wrapperLeft
-    const hit = highlights.find((h) => relX >= h.left && relX < h.left + h.width) ?? null
+    if (!hasVars || hitZones.length === 0 || !wrapperRef.current) { setHovered(null); return }
+    const relX = e.clientX - wrapperRef.current.getBoundingClientRect().left
+    const hit = hitZones.find((h) => relX >= h.left && relX < h.left + h.width) ?? null
     setHovered(hit ? { key: hit.key, left: hit.left } : null)
-  }, [hasVars, highlights])
-
-  const handleMouseLeave = () => setHovered(null)
+  }, [hasVars, hitZones])
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div ref={wrapperRef} className={cn('relative', wrapperClassName)} onMouseLeave={handleMouseLeave}>
+    <div ref={wrapperRef} className={cn('relative', wrapperClassName)} onMouseLeave={() => setHovered(null)}>
+      {/* Highlight overlay — mirrors the input text with styled token spans */}
+      {segments && (
+        <div
+          ref={overlayRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre select-none"
+          style={overlayStyle}
+        >
+          {segments.map((seg, i) =>
+            seg.type === 'text' ? (
+              <span key={i} className="text-transparent">{seg.text}</span>
+            ) : (
+              <span
+                key={i}
+                className={cn(
+                  'rounded-sm',
+                  seg.isDefined
+                    ? 'bg-amber-400/20 text-amber-300'
+                    : 'bg-red-500/20 text-red-400',
+                )}
+              >
+                {seg.raw}
+              </span>
+            )
+          )}
+        </div>
+      )}
+
       <input
         ref={inputRef}
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onBlur={() => { setTimeout(() => ac.close(), 150); setHovered(null) }}
-        onScroll={recalc}
+        onScroll={syncScroll}
         onMouseMove={handleMouseMove}
         className={className}
+        // Make input text transparent so the overlay shows through; keep caret visible
+        style={hasVars ? { color: 'transparent', caretColor: 'var(--color-th-text-primary)' } : undefined}
         {...props}
       />
 
-      {/* Per-token underlines (pointer-events: none so they don't steal clicks) */}
-      {highlights.map((h) => (
-        <div
-          key={`${h.key}-${h.start}`}
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute bottom-[3px] h-[2px] rounded-full transition-colors',
-            h.isDefined ? 'bg-amber-400/70' : 'bg-red-500/80',
-          )}
-          style={{ left: h.left, width: h.width }}
-        />
-      ))}
-
-      {/* Autocomplete suggestions */}
       {ac.show && (
         <EnvSuggestions
           filtered={ac.filtered}
@@ -170,7 +226,6 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
         />
       )}
 
-      {/* Per-token hover tooltip */}
       {hovered && !ac.show && (
         <VarTooltip varKey={hovered.key} x={hovered.left} />
       )}
