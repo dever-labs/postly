@@ -73,7 +73,7 @@ function buildOverlayStyle(input: HTMLInputElement, scrollLeft: number): React.C
     fontWeight: s.fontWeight,
     letterSpacing: s.letterSpacing,
     lineHeight: s.lineHeight,
-    // account for border so text aligns with input text
+    color: s.color,                  // inherit the input's text color for plain segments
     paddingLeft: `calc(${s.paddingLeft} + ${s.borderLeftWidth})`,
     paddingRight: `calc(${s.paddingRight} + ${s.borderRightWidth})`,
     paddingTop: `calc(${s.paddingTop} + ${s.borderTopWidth})`,
@@ -185,7 +185,7 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
         >
           {segments.map((seg, i) =>
             seg.type === 'text' ? (
-              <span key={i} className="text-transparent">{seg.text}</span>
+              <span key={i}>{seg.text}</span>
             ) : (
               <span
                 key={i}
