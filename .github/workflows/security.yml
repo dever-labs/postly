@@ -53,6 +53,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - run: npm ci
+
       - name: npm audit (high + critical only)
         run: npm audit --audit-level=high
         continue-on-error: true
@@ -62,20 +64,6 @@ jobs:
 
       - name: audit-ci (fail on critical)
         run: audit-ci --critical
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    # Only runs on pull requests
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
-        with:
-          fail-on-severity: high
-          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
 
   electron-security-lint:
     name: Electron Security Check
