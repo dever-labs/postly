@@ -39,11 +39,11 @@ export function BackstageSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-sm font-semibold text-neutral-200">Backstage</h3>
+      <h3 className="text-sm font-semibold text-th-text-primary">Backstage</h3>
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Base URL</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
           <Input
             placeholder="https://backstage.example.com"
             value={settings.baseUrl}
@@ -52,7 +52,7 @@ export function BackstageSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Auth Token</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Auth Token</label>
           <Input
             type="password"
             placeholder="Token..."
@@ -68,7 +68,7 @@ export function BackstageSettings() {
             onChange={(e) => setSettings({ ...settings, autoSync: e.target.checked })}
             className="h-4 w-4 accent-blue-500"
           />
-          <span className="text-sm text-neutral-300">Auto-sync on startup</span>
+          <span className="text-sm text-th-text-secondary">Auto-sync on startup</span>
         </label>
       </div>
 

@@ -86,11 +86,11 @@ export function GitHubSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-sm font-semibold text-neutral-200">GitHub Integration</h3>
+      <h3 className="text-sm font-semibold text-th-text-primary">GitHub Integration</h3>
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Base URL</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
           <Input
             placeholder="https://github.com"
             value={settings.baseUrl}
@@ -100,14 +100,14 @@ export function GitHubSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Client ID</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Client ID</label>
           <Input
             placeholder="Oauth App Client ID"
             value={settings.clientId}
             onChange={(e) => setSettings({ ...settings, clientId: e.target.value })}
             disabled={isConnected}
           />
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-th-text-subtle">
             <a
               href="https://github.com/settings/applications/new"
               target="_blank"
@@ -117,12 +117,12 @@ export function GitHubSettings() {
               Register an OAuth App on GitHub
             </a>
             {' '}— set redirect URI to{' '}
-            <span className="font-mono text-neutral-400">http://localhost/callback</span>
+            <span className="font-mono text-th-text-muted">http://localhost/callback</span>
           </p>
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Client Secret</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Client Secret</label>
           <Input
             type="password"
             placeholder="Client secret"
@@ -138,15 +138,15 @@ export function GitHubSettings() {
           </Button>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 rounded-md border border-neutral-700 bg-neutral-800/50 px-3 py-2">
+            <div className="flex items-center gap-3 rounded-md border border-th-border-strong bg-th-surface-raised/50 px-3 py-2">
               <img
                 src={settings.connectedUser!.avatarUrl}
                 alt={settings.connectedUser!.login}
                 className="h-8 w-8 rounded-full"
               />
               <div className="flex-1">
-                <div className="text-sm font-medium text-neutral-200">{settings.connectedUser!.name}</div>
-                <div className="text-xs text-neutral-400">@{settings.connectedUser!.login}</div>
+                <div className="text-sm font-medium text-th-text-primary">{settings.connectedUser!.name}</div>
+                <div className="text-xs text-th-text-muted">@{settings.connectedUser!.login}</div>
               </div>
               <span className="mr-2 text-xs text-green-400">✓ Connected</span>
               <Button variant="outline" size="sm" onClick={disconnect}>
@@ -155,7 +155,7 @@ export function GitHubSettings() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-neutral-400">
+              <label className="mb-1.5 block text-xs font-medium text-th-text-muted">
                 Repository (owner/repo)
               </label>
               <Input
@@ -166,15 +166,15 @@ export function GitHubSettings() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-neutral-400">Organizations</label>
+              <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Organizations</label>
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {settings.orgs.map((org) => (
                   <span
                     key={org}
-                    className="flex items-center gap-1 rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300"
+                    className="flex items-center gap-1 rounded bg-th-surface-raised px-2 py-0.5 text-xs text-th-text-secondary"
                   >
                     {org}
-                    <button onClick={() => removeOrg(org)} className="text-neutral-500 hover:text-neutral-300">
+                    <button onClick={() => removeOrg(org)} className="text-th-text-subtle hover:text-th-text-secondary">
                       <X className="h-3 w-3" />
                     </button>
                   </span>

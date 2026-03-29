@@ -1,9 +1,18 @@
 import { ipcMain } from 'electron'
 import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest } from '../services/http-executor'
+import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 
 function interpolateEnvVars(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => vars[key.trim()] ?? `{{${key}}}`)
+}
+
+function safeParseJSON<T>(value: unknown, fallback: T): T {
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T } catch { return fallback }
+  }
+  if (value != null) return value as T
+  return fallback
 }
 
 export function registerHttpHandlers(): void {
@@ -17,8 +26,73 @@ export function registerHttpHandlers(): void {
         }
       }
 
+      // Resolve auth inheritance — treat 'inherit' and 'none' at request level as "walk up"
+      let resolvedAuthType = req.authType
+      let resolvedAuthConfig = req.authConfig
+
+      const shouldInherit = (t: string) => t === 'inherit' || !t
+
+      if (shouldInherit(resolvedAuthType) && req.groupId) {
+        const group = queryOne<any>('SELECT * FROM groups WHERE id = ?', [req.groupId])
+        if (group?.auth_type && !shouldInherit(group.auth_type)) {
+          resolvedAuthType = group.auth_type
+          resolvedAuthConfig = safeParseJSON(group.auth_config, {})
+        } else {
+          const collection = group?.collection_id
+            ? queryOne<any>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
+            : null
+          if (collection?.auth_type && !shouldInherit(collection.auth_type)) {
+            resolvedAuthType = collection.auth_type
+            resolvedAuthConfig = safeParseJSON(collection.auth_config, {})
+          } else if (collection?.integration_id) {
+            const integration = queryOne<any>('SELECT * FROM integrations WHERE id = ?', [collection.integration_id])
+            if (integration?.token) {
+              resolvedAuthType = 'bearer'
+              resolvedAuthConfig = { token: integration.token }
+            }
+          }
+        }
+      }
+
+      // Fallback: if still inherit/none after walking, send unauthenticated
+      if (shouldInherit(resolvedAuthType)) {
+        resolvedAuthType = 'none'
+        resolvedAuthConfig = {}
+      }
+
+      // OAuth 2.0 — resolve token automatically from inline config
+      if (resolvedAuthType === 'oauth2') {
+        const cfg = {
+          id: '',
+          name: 'inline',
+          grantType: resolvedAuthConfig.grantType ?? 'authorization_code',
+          clientId: resolvedAuthConfig.clientId ?? '',
+          clientSecret: resolvedAuthConfig.clientSecret || undefined,
+          authUrl: resolvedAuthConfig.authUrl || undefined,
+          tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
+          scopes: resolvedAuthConfig.scopes ?? '',
+          redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
+        }
+        if (!cfg.clientId || !cfg.tokenUrl) {
+          return { error: 'OAuth 2.0: clientId and tokenUrl are required.' }
+        }
+        let token = await getValidTokenForConfig(cfg)
+        if (!token) {
+          try { token = await authorizeInline(cfg) }
+          catch (e) { return { error: `OAuth authorization failed: ${String(e)}` } }
+        }
+        if (token) {
+          resolvedAuthType = 'bearer'
+          resolvedAuthConfig = { token: token.accessToken }
+        } else {
+          return { error: 'OAuth: no valid token. Please authorize in the Auth tab.' }
+        }
+      }
+
       const interpolatedReq: HttpRequest = {
         ...req,
+        authType: resolvedAuthType,
+        authConfig: resolvedAuthConfig,
         url: interpolateEnvVars(req.url, envVars),
         headers: Object.fromEntries(
           Object.entries(req.headers).map(([k, v]) => [k, interpolateEnvVars(v, envVars)])
@@ -35,6 +109,26 @@ export function registerHttpHandlers(): void {
           if (typeof parsed['defaultTimeout'] === 'number') timeout = parsed['defaultTimeout']
         } catch { /* use defaults */ }
       }
+
+      // Resolve SSL verification inheritance — walk request → group → collection, then fall back to global setting
+      const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
+      let resolvedSsl: string | undefined = req.sslVerification
+      if (shouldInheritSsl(resolvedSsl) && req.groupId) {
+        const group = queryOne<any>('SELECT * FROM groups WHERE id = ?', [req.groupId])
+        if (group?.ssl_verification && !shouldInheritSsl(group.ssl_verification)) {
+          resolvedSsl = group.ssl_verification
+        } else {
+          const collection = group?.collection_id
+            ? queryOne<any>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
+            : null
+          if (collection?.ssl_verification && !shouldInheritSsl(collection.ssl_verification)) {
+            resolvedSsl = collection.ssl_verification
+          }
+        }
+      }
+      // If resolved to an explicit value, override the global setting
+      if (resolvedSsl === 'enabled') sslVerification = true
+      else if (resolvedSsl === 'disabled') sslVerification = false
 
       return { data: await executeRequest(interpolatedReq, { sslVerification, followRedirects, timeout }) }
     } catch (err) {

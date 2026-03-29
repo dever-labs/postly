@@ -26,7 +26,7 @@ export function ParamsTab({ params, onChange }: ParamsTabProps) {
   return (
     <div className="flex flex-col gap-1 p-3">
       {params.length > 0 && (
-        <div className="mb-1 grid grid-cols-[24px_1fr_1fr_28px] gap-1 px-1 text-xs text-neutral-500">
+        <div className="mb-1 grid grid-cols-[24px_1fr_1fr_28px] gap-1 px-1 text-xs text-th-text-subtle">
           <span />
           <span>Key</span>
           <span>Value</span>
@@ -43,7 +43,7 @@ export function ParamsTab({ params, onChange }: ParamsTabProps) {
             type="checkbox"
             checked={param.enabled}
             onChange={(e) => updateRow(param.id, 'enabled', e.target.checked)}
-            className="h-4 w-4 cursor-pointer accent-neutral-500"
+            className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
           <Input
             value={param.key}
@@ -57,14 +57,14 @@ export function ParamsTab({ params, onChange }: ParamsTabProps) {
           />
           <button
             onClick={() => deleteRow(param.id)}
-            className="flex h-8 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-rose-400 focus:outline-none"
+            className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
 
-      <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-neutral-400" onClick={addRow}>
+      <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-th-text-muted" onClick={addRow}>
         <Plus className="h-3.5 w-3.5" /> Add row
       </Button>
     </div>

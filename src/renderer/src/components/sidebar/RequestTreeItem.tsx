@@ -37,7 +37,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
     <div
       className={cn(
         'group relative flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded',
-        isActive ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
+        isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
       )}
       onClick={() => !renaming && onClick()}
     >
@@ -48,7 +48,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
       {renaming ? (
         <input
           autoFocus
-          className="flex-1 rounded bg-neutral-700 px-1.5 py-0.5 text-sm text-neutral-100 focus:outline-none"
+          className="flex-1 rounded bg-th-surface-hover px-1.5 py-0.5 text-sm text-th-text-primary focus:outline-none"
           value={nameValue}
           onChange={(e) => setNameValue(e.target.value)}
           onBlur={handleRename}
@@ -67,7 +67,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
       )}
 
       <button
-        className="shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-neutral-700 focus:outline-none"
+        className="shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-th-surface-hover focus:outline-none"
         onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
@@ -76,15 +76,15 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-neutral-700 bg-neutral-800 shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true) }}
             >
               <Pencil className="h-3.5 w-3.5" /> Rename
             </button>
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-neutral-700"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}
             >
               <Trash2 className="h-3.5 w-3.5" /> Delete

@@ -6,11 +6,13 @@ const api = {
     create: (data: { name: string; source?: string }) => ipcRenderer.invoke('postly:collections:create', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:collections:delete', data),
     rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:collections:rename', data),
+    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) =>
+      ipcRenderer.invoke('postly:collections:update', data),
   },
   groups: {
     create: (data: { collectionId: string; name: string; description?: string }) => ipcRenderer.invoke('postly:groups:create', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:groups:delete', data),
-    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string }) => ipcRenderer.invoke('postly:groups:update', data),
+    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => ipcRenderer.invoke('postly:groups:update', data),
   },
   requests: {
     list: (data: { groupId: string }) => ipcRenderer.invoke('postly:requests:list', data),
@@ -32,6 +34,11 @@ const api = {
     authorize: (data: { configId: string }) => ipcRenderer.invoke('postly:oauth:authorize', data),
     getToken: (data: { configId: string }) => ipcRenderer.invoke('postly:oauth:token:get', data),
     clearToken: (data: { configId: string }) => ipcRenderer.invoke('postly:oauth:token:clear', data),
+    inline: {
+      authorize: (config: unknown) => ipcRenderer.invoke('postly:oauth:inline:authorize', config),
+      getToken: (config: unknown) => ipcRenderer.invoke('postly:oauth:inline:token:get', config),
+      clearToken: (config: unknown) => ipcRenderer.invoke('postly:oauth:inline:token:clear', config),
+    },
   },
   environments: {
     list: () => ipcRenderer.invoke('postly:environments:list'),
@@ -78,6 +85,8 @@ const api = {
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:delete', data),
     connect: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:connect', data),
     disconnect: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:disconnect', data),
+    deviceInit: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-init', data),
+    devicePoll: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-poll', data),
   },
 }
 

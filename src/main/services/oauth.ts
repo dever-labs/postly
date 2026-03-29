@@ -221,3 +221,58 @@ function rowToOAuthConfig(row: OAuthConfigRow): OAuthConfig {
   }
 }
 
+/** Derives a stable token-cache key from inline OAuth config fields. */
+export function configHashKey(config: Pick<OAuthConfig, 'clientId' | 'tokenUrl' | 'scopes'>): string {
+  return crypto.createHash('sha256')
+    .update([config.clientId, config.tokenUrl, config.scopes].join('|'))
+    .digest('hex')
+    .slice(0, 32)
+}
+
+/**
+ * Like getValidToken but works with an inline config (no oauth_configs table row needed).
+ * Looks up the token by a hash key and refreshes using the provided config if needed.
+ */
+export async function getValidTokenForConfig(config: OAuthConfig): Promise<Token | null> {
+  const key = configHashKey(config)
+  type TokenRow = { id: string; oauth_config_id: string; access_token: string; refresh_token: string | null; token_type: string; expires_at: number | null; scope: string | null; created_at: number }
+  const row = queryOne<TokenRow>(
+    'SELECT * FROM tokens WHERE oauth_config_id = ? ORDER BY created_at DESC LIMIT 1',
+    [key]
+  )
+  if (!row) return null
+
+  const token: Token = {
+    id: row.id,
+    oauthConfigId: row.oauth_config_id,
+    accessToken: row.access_token,
+    refreshToken: row.refresh_token ?? undefined,
+    tokenType: row.token_type ?? 'Bearer',
+    expiresAt: row.expires_at ?? undefined,
+    scope: row.scope ?? undefined,
+    createdAt: row.created_at
+  }
+
+  if (token.expiresAt && token.expiresAt < Date.now() + 60_000) {
+    if (token.refreshToken) {
+      try {
+        // Temporarily assign key as id for saveToken to use correct bucket
+        return await refreshTokenGrant(token, { ...config, id: key })
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
+  return token
+}
+
+/** Authorize using inline config and cache token by config hash. */
+export async function authorizeInline(config: OAuthConfig): Promise<Token> {
+  const key = configHashKey(config)
+  const cfg = { ...config, id: key }
+  return config.grantType === 'client_credentials'
+    ? await clientCredentials(cfg)
+    : await authorizeAuthCode(cfg)
+}

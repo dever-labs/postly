@@ -22,14 +22,14 @@ function ToastItem({ id, message, type }: { id: string; message: string; type: '
   return (
     <div
       className={cn(
-        'flex items-start gap-3 rounded border border-neutral-800 bg-neutral-900 px-4 py-3 shadow-lg border-l-4',
+        'flex items-start gap-3 rounded border border-th-border bg-th-surface px-4 py-3 shadow-lg border-l-4',
         borderColor
       )}
     >
-      <p className="flex-1 text-sm text-neutral-200">{message}</p>
+      <p className="flex-1 text-sm text-th-text-primary">{message}</p>
       <button
         onClick={() => removeToast(id)}
-        className="shrink-0 text-neutral-500 hover:text-neutral-300 focus:outline-none"
+        className="shrink-0 text-th-text-subtle hover:text-th-text-secondary focus:outline-none"
       >
         <X className="h-3.5 w-3.5" />
       </button>

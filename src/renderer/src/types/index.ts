@@ -1,22 +1,39 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
-export type BodyType = 'none' | 'json' | 'form-data' | 'raw' | 'binary'
-export type AuthType = 'none' | 'bearer' | 'oauth2'
+export type BodyType =
+  | 'none'
+  | 'form-data'
+  | 'x-www-form-urlencoded'
+  | 'raw-text'
+  | 'raw-javascript'
+  | 'raw-json'
+  | 'raw-html'
+  | 'raw-xml'
+  | 'binary'
+  | 'graphql'
+  | 'json'  // legacy alias
+  | 'raw'   // legacy alias
+export type AuthType = 'none' | 'inherit' | 'bearer' | 'basic' | 'jwt' | 'oauth2' | 'ntlm'
 export type CollectionSource = 'local' | 'backstage' | 'github' | 'gitlab'
-export type GrantType = 'authorization_code' | 'client_credentials'
+export type SslVerification = 'inherit' | 'enabled' | 'disabled'
 
 export interface KeyValuePair {
   id: string
   key: string
   value: string
   enabled: boolean
+  fieldType?: 'text' | 'file'
 }
 
 export interface Collection {
   id: string
   name: string
+  description?: string
   source: CollectionSource
   sourceMeta?: Record<string, string>
   integrationId?: string
+  authType: AuthType
+  authConfig: Record<string, string>
+  sslVerification: SslVerification
   createdAt: number
   updatedAt: number
 }
@@ -46,6 +63,9 @@ export interface Group {
   collapsed: boolean
   hidden: boolean
   sortOrder: number
+  authType: AuthType
+  authConfig: Record<string, string>
+  sslVerification: SslVerification
 }
 
 export interface Request {
@@ -60,6 +80,7 @@ export interface Request {
   bodyContent: string
   authType: AuthType
   authConfig: Record<string, string>
+  sslVerification: SslVerification
   description?: string
   scmPath?: string
   scmSha?: string
@@ -111,6 +132,8 @@ export interface HttpRequest {
   bodyType: BodyType
   authType: AuthType
   authConfig: Record<string, string>
+  sslVerification?: SslVerification
+  groupId?: string
 }
 
 export interface HttpResponse {

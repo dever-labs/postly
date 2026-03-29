@@ -1,5 +1,6 @@
 import Editor from '@monaco-editor/react'
 import React, { useMemo } from 'react'
+import { useUIStore } from '@/store/ui'
 
 function getLanguage(contentType: string): string {
   if (contentType.includes('application/json')) return 'json'
@@ -23,12 +24,13 @@ interface PrettyTabProps {
 export function PrettyTab({ body, contentType }: PrettyTabProps) {
   const language = getLanguage(contentType)
   const value = useMemo(() => prettyBody(body, language), [body, language])
+  const theme = useUIStore((s) => s.theme)
 
   return (
     <Editor
       height="100%"
       language={language}
-      theme="vs-dark"
+      theme={theme === 'light' ? 'vs' : 'vs-dark'}
       value={value}
       options={{
         readOnly: true,

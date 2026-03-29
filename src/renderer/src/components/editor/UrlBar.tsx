@@ -19,9 +19,9 @@ export function UrlBar({ value, onChange, onSend }: UrlBarProps) {
       placeholder="https://api.example.com/endpoint"
       spellCheck={false}
       className={cn(
-        'flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500',
-        hasTemplateVars ? 'text-amber-300' : 'text-neutral-100',
-        'placeholder:text-neutral-500'
+        'flex-1 rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong',
+        hasTemplateVars ? 'text-amber-300' : 'text-th-text-primary',
+        'placeholder:text-th-text-subtle'
       )}
     />
   )

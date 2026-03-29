@@ -15,7 +15,7 @@ export default function App(): React.ReactElement {
   }, [])
 
   return (
-    <div className="h-screen w-screen bg-neutral-950 text-neutral-100 flex flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
       <AppShell />
       <SettingsModal />
       <Toaster />

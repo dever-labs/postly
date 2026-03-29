@@ -14,6 +14,7 @@ interface CommitPanelProps {
 
 export function CommitPanel({ requestId, source }: CommitPanelProps) {
   const addToast = useUIStore((s) => s.addToast)
+  const theme = useUIStore((s) => s.theme)
   const [commitMessage, setCommitMessage] = useState('')
   const [branches, setBranches] = useState<string[]>([])
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -65,8 +66,8 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
   }
 
   return (
-    <div className="border-t border-neutral-800 bg-neutral-900 p-3">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-neutral-400">
+    <div className="border-t border-th-border bg-th-surface p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-th-text-muted">
         <GitCommit className="h-3.5 w-3.5" />
         Commit changes
       </div>
@@ -129,11 +130,11 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
         </div>
 
         {showDiff && diff && (
-          <div className="rounded border border-neutral-800 overflow-hidden">
+          <div className="rounded border border-th-border overflow-hidden">
             <DiffEditor
               height="200px"
               language="json"
-              theme="vs-dark"
+              theme={theme === 'light' ? 'vs' : 'vs-dark'}
               original={diff.remoteContent}
               modified={diff.localContent}
               options={{ readOnly: true, minimap: { enabled: false }, fontSize: 11 }}

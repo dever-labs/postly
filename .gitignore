@@ -1,4 +1,35 @@
 node_modules/
 out/
+dist/
 dist-electron/
 *.tsbuildinfo
+
+# Packaged app builds
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+
+# Database (user data — not committed)
+*.db
+*.db-shm
+*.db-wal
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

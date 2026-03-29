@@ -5,6 +5,9 @@ import {
   authorizeAuthCode,
   clientCredentials,
   getValidToken,
+  getValidTokenForConfig,
+  authorizeInline,
+  configHashKey,
   OAuthConfig
 } from '../services/oauth'
 
@@ -66,6 +69,27 @@ export function registerOAuthHandlers(): void {
 
   ipcMain.handle('postly:oauth:token:clear', async (_, args: { configId: string }) => {
     try { run('DELETE FROM tokens WHERE oauth_config_id = ?', [args.configId]); return { data: true } }
+    catch (err) { return { error: String(err) } }
+  })
+
+  // ── Inline config handlers (config stored directly on entity, no oauth_configs row) ──
+
+  ipcMain.handle('postly:oauth:inline:authorize', async (_, config: OAuthConfig) => {
+    try { return { data: await authorizeInline(config) } }
+    catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:oauth:inline:token:get', async (_, config: OAuthConfig) => {
+    try { return { data: await getValidTokenForConfig(config) } }
+    catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:oauth:inline:token:clear', async (_, config: OAuthConfig) => {
+    try {
+      const key = configHashKey(config)
+      run('DELETE FROM tokens WHERE oauth_config_id = ?', [key])
+      return { data: true }
+    }
     catch (err) { return { error: String(err) } }
   })
 }

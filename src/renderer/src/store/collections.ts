@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Collection, CollectionSource, Group, Request } from '../types'
+import type { AuthType, Collection, CollectionSource, Group, Request, SslVerification } from '../types'
 
 interface CollectionsState {
   collections: Collection[]
@@ -17,6 +17,9 @@ interface CollectionsState {
   renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
   markDirty: (requestId: string) => void
+  syncRequest: (request: Request) => void
+  updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
+  updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
 }
 
 function parseJsonField<T>(value: unknown, fallback: T): T {
@@ -44,6 +47,7 @@ function normalizeRequest(raw: Record<string, unknown>): Request {
     bodyContent: (raw.bodyContent ?? raw.body_content ?? '') as string,
     authType: (raw.authType ?? raw.auth_type ?? 'none') as Request['authType'],
     authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
+    sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Request['sslVerification'],
     description: raw.description as string | undefined,
     scmPath: (raw.scmPath ?? raw.scm_path) as string | undefined,
     scmSha: (raw.scmSha ?? raw.scm_sha) as string | undefined,
@@ -61,6 +65,9 @@ function normalizeGroup(raw: Record<string, unknown>): Group {
     collapsed: Boolean(raw.collapsed ?? false),
     hidden: Boolean(raw.hidden ?? false),
     sortOrder: (raw.sortOrder ?? raw.sort_order ?? 0) as number,
+    authType: (raw.authType ?? raw.auth_type ?? 'none') as Group['authType'],
+    authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
+    sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Group['sslVerification'],
   }
 }
 
@@ -86,9 +93,13 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     const collections: Collection[] = rawCollections.map((c) => ({
       id: c.id as string,
       name: c.name as string,
+      description: (c.description ?? '') as string,
       source: (c.source ?? 'local') as CollectionSource,
       sourceMeta: parseJsonField<Record<string, string>>(c.source_meta, undefined as any),
       integrationId: (c.integration_id ?? undefined) as string | undefined,
+      authType: (c.auth_type ?? 'none') as AuthType,
+      authConfig: parseJsonField<Record<string, string>>(c.auth_config, {}),
+      sslVerification: (c.ssl_verification ?? 'inherit') as SslVerification,
       createdAt: (c.created_at ?? 0) as number,
       updatedAt: (c.updated_at ?? 0) as number,
     }))
@@ -210,6 +221,34 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     api.requests.markDirty({ id: requestId, isDirty: true })
     set((state) => ({
       requests: state.requests.map((r) => (r.id === requestId ? { ...r, isDirty: true } : r)),
+    }))
+  },
+
+  syncRequest: (request: Request) => {
+    set((state) => ({
+      requests: state.requests.map((r) => (r.id === request.id ? { ...r, ...request } : r)),
+    }))
+  },
+
+  updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
+    const api = (window as any).api
+    const { error } = await api.collections.update({ id, ...updates })
+    if (error) { console.error('Failed to update collection:', error); return }
+    set((state) => ({
+      collections: state.collections.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    }))
+  },
+
+  updateGroup: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
+    const api = (window as any).api
+    const { error } = await api.groups.update({ id, ...updates })
+    if (error) { console.error('Failed to update group:', error); return }
+    set((state) => ({
+      groups: state.groups.map((g) =>
+        g.id === id ? { ...g, ...updates } : g
+      ),
     }))
   },
 }))

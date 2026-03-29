@@ -45,6 +45,31 @@ export function registerCollectionHandlers(): void {
   })
 
   ipcMain.handle(
+    'postly:collections:update',
+    async (_, args: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => {
+      try {
+        const fields: string[] = []
+        const values: unknown[] = []
+
+        if (args.name !== undefined) { fields.push('name = ?'); values.push(args.name) }
+        if (args.description !== undefined) { fields.push('description = ?'); values.push(args.description) }
+        if (args.authType !== undefined) { fields.push('auth_type = ?'); values.push(args.authType) }
+        if (args.authConfig !== undefined) { fields.push('auth_config = ?'); values.push(JSON.stringify(args.authConfig)) }
+        if (args.sslVerification !== undefined) { fields.push('ssl_verification = ?'); values.push(args.sslVerification) }
+        if (fields.length === 0) return { data: true }
+
+        fields.push('updated_at = ?')
+        values.push(Date.now(), args.id)
+
+        run(`UPDATE collections SET ${fields.join(', ')} WHERE id = ?`, values)
+        return { data: true }
+      } catch (err) {
+        return { error: String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
     'postly:groups:create',
     async (_, args: { collectionId: string; name: string; description?: string }) => {
       try {
@@ -73,7 +98,7 @@ export function registerCollectionHandlers(): void {
 
   ipcMain.handle(
     'postly:groups:update',
-    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string }) => {
+    async (_, args: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) => {
       try {
         const fields: string[] = []
         const values: unknown[] = []
@@ -81,6 +106,10 @@ export function registerCollectionHandlers(): void {
         if (args.name !== undefined) { fields.push('name = ?'); values.push(args.name) }
         if (args.collapsed !== undefined) { fields.push('collapsed = ?'); values.push(args.collapsed ? 1 : 0) }
         if (args.hidden !== undefined) { fields.push('hidden = ?'); values.push(args.hidden ? 1 : 0) }
+        if (args.description !== undefined) { fields.push('description = ?'); values.push(args.description) }
+        if (args.authType !== undefined) { fields.push('auth_type = ?'); values.push(args.authType) }
+        if (args.authConfig !== undefined) { fields.push('auth_config = ?'); values.push(JSON.stringify(args.authConfig)) }
+        if (args.sslVerification !== undefined) { fields.push('ssl_verification = ?'); values.push(args.sslVerification) }
         if (fields.length === 0) return { data: true }
 
         fields.push('updated_at = ?')

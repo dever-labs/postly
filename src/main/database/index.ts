@@ -37,6 +37,18 @@ function runMigrations(): void {
   } catch {
     // column already exists, ignore
   }
+  // Collections: add description, auth_type, auth_config
+  try { db.run("ALTER TABLE collections ADD COLUMN description TEXT DEFAULT ''") } catch {}
+  try { db.run("ALTER TABLE collections ADD COLUMN auth_type TEXT DEFAULT 'none'") } catch {}
+  try { db.run("ALTER TABLE collections ADD COLUMN auth_config TEXT DEFAULT '{}'") } catch {}
+  // Groups: add auth columns (description already exists)
+  try { db.run("ALTER TABLE groups ADD COLUMN auth_type TEXT DEFAULT 'none'") } catch {}
+  try { db.run("ALTER TABLE groups ADD COLUMN auth_config TEXT DEFAULT '{}'") } catch {}
+  try { db.run("ALTER TABLE groups ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
+  // Collections ssl
+  try { db.run("ALTER TABLE collections ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
+  // Requests ssl
+  try { db.run("ALTER TABLE requests ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
 }
 
 /** Flush the in-memory DB to disk. Call after every write. */

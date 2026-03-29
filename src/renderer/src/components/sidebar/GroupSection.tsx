@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useRequestsStore } from '@/store/requests'
+import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
 const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
@@ -55,10 +56,10 @@ function InlineInput({ placeholder, onConfirm, onCancel, indent = 'pl-4' }: Inli
           if (e.key === 'Escape') onCancel()
         }}
         placeholder={placeholder}
-        className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm text-neutral-200 placeholder-neutral-500 outline-none ring-1 ring-blue-500/50"
+        className="flex-1 rounded bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-none ring-1 ring-blue-500/50"
       />
       <button onClick={() => { if (val.trim()) onConfirm(val.trim()); else onCancel() }} className="text-green-400 hover:text-green-300"><Check className="h-3.5 w-3.5" /></button>
-      <button onClick={onCancel} className="text-neutral-500 hover:text-neutral-300"><X className="h-3.5 w-3.5" /></button>
+      <button onClick={onCancel} className="text-th-text-subtle hover:text-th-text-secondary"><X className="h-3.5 w-3.5" /></button>
     </div>
   )
 }
@@ -75,16 +76,30 @@ interface CollectionRowProps {
   onDelete: () => void
 }
 
-function CollectionRow({ collection, open, onToggle, onAddRequest, onAddGroup, onRename, onDelete }: CollectionRowProps) {
+function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onAddGroup, onRename, onDelete, isActive }: CollectionRowProps & { isActive?: boolean; onSelect: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className="group relative flex items-center gap-1 px-2 py-0.5">
+    <div className={cn(
+      'group relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
+      isActive ? 'bg-th-surface-hover text-th-text-primary' : 'hover:bg-th-surface-raised/60'
+    )}>
+      {/* Chevron — expand/collapse only */}
       <button
-        onClick={onToggle}
-        className="flex flex-1 items-center gap-2 rounded px-1 py-1 text-sm font-semibold text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 focus:outline-none"
+        onClick={(e) => { e.stopPropagation(); onToggle() }}
+        className="shrink-0 rounded p-0.5 focus:outline-none"
       >
-        {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-500" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-500" />}
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+      </button>
+
+      {/* Name — select only */}
+      <button
+        onClick={onSelect}
+        className={cn(
+          'flex flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold focus:outline-none',
+          isActive ? 'text-th-text-primary' : 'text-th-text-secondary hover:text-th-text-primary'
+        )}
+      >
         <span className="truncate">{collection.name}</span>
       </button>
 
@@ -93,21 +108,21 @@ function CollectionRow({ collection, open, onToggle, onAddRequest, onAddGroup, o
         <button
           title="Add request"
           onClick={(e) => { e.stopPropagation(); onAddRequest() }}
-          className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
         <button
           title="Add group"
           onClick={(e) => { e.stopPropagation(); onAddGroup() }}
-          className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
         >
           <FolderOpen className="h-3.5 w-3.5" />
         </button>
         <button
           title="More"
           onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-          className="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300 focus:outline-none"
+          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
@@ -116,15 +131,15 @@ function CollectionRow({ collection, open, onToggle, onAddRequest, onAddGroup, o
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-neutral-700 bg-neutral-800 shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename() }}
             >
               <Pencil className="h-3.5 w-3.5" /> Rename
             </button>
             <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-neutral-700"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}
             >
               <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -157,7 +172,8 @@ export function GroupSection({ source, integration, collections, groups, request
     createLocalRequest,
   } = useCollectionsStore()
   const integrationsStore = useIntegrationsStore()
-  const { activeRequestId, setActiveRequest } = useRequestsStore()
+  const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
+  const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
 
   const sourceCollections = integration
     ? collections.filter((c) => c.integrationId === integration.id)
@@ -200,7 +216,7 @@ export function GroupSection({ source, integration, collections, groups, request
       {/* Source header */}
       <div className="group/header flex items-center gap-1 px-2 py-1">
         <Collapsible.Trigger asChild>
-          <button className="flex flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-sm font-medium text-neutral-400 hover:text-neutral-200 focus:outline-none">
+          <button className="flex flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-sm font-medium text-th-text-muted hover:text-th-text-primary focus:outline-none">
             {sourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             {integration ? SOURCE_ICONS[integration.type] : SOURCE_ICONS[source]}
             <span>{integration ? integration.name : capitalize(source)}</span>
@@ -213,7 +229,7 @@ export function GroupSection({ source, integration, collections, groups, request
             {(integration.status === 'error' || integration.status === 'disconnected') && (
               <button
                 onClick={() => integrationsStore.connect(integration.id)}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-400 hover:bg-neutral-800 hover:text-amber-300 focus:outline-none"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-400 hover:bg-th-surface-raised hover:text-amber-300 focus:outline-none"
                 title="Reconnect"
               >
                 <AlertCircle className="h-3 w-3" />
@@ -222,7 +238,7 @@ export function GroupSection({ source, integration, collections, groups, request
             )}
             <button
               onClick={() => setEditDialogOpen(true)}
-              className="rounded p-0.5 text-neutral-600 opacity-0 hover:text-neutral-400 focus:outline-none group-hover/header:opacity-100"
+              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
               title="Edit integration"
             >
               <Settings className="h-3.5 w-3.5" />
@@ -231,7 +247,7 @@ export function GroupSection({ source, integration, collections, groups, request
         ) : (
           <button
             onClick={() => toggleSourceHidden(source)}
-            className="rounded p-0.5 text-neutral-600 hover:text-neutral-400 focus:outline-none"
+            className="rounded p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-none"
             title={isSourceHidden ? 'Show source' : 'Hide source'}
           >
             {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -242,7 +258,7 @@ export function GroupSection({ source, integration, collections, groups, request
       <Collapsible.Content>
         <div className={cn(isSourceHidden && 'opacity-40')}>
           {sourceCollections.length === 0 && (
-            <p className="px-4 py-2 text-xs text-neutral-600">No collections yet</p>
+            <p className="px-4 py-2 text-xs text-th-text-faint">No collections yet</p>
           )}
           {sourceCollections.map((collection) => {
             const collectionGroups = groups.filter((g) => g.collectionId === collection.id)
@@ -262,7 +278,9 @@ export function GroupSection({ source, integration, collections, groups, request
                   <CollectionRow
                     collection={collection}
                     open={isOpen}
+                    isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
                     onToggle={() => toggleCollection(collection.id)}
+                    onSelect={() => selectItem('collection', collection.id)}
                     onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
@@ -271,35 +289,53 @@ export function GroupSection({ source, integration, collections, groups, request
                 )}
 
                 {/* Groups + requests */}
-                {isOpen && (
+                {(isOpen || !!searchQuery) && (
                   <div className="pl-3">
                     {collectionGroups.map((group) => {
                       const groupRequests = filteredRequests(group.id)
+                      if (searchQuery && groupRequests.length === 0) return null
                       return (
                         <Collapsible.Root
                           key={group.id}
-                          open={!group.collapsed}
+                          open={!group.collapsed || !!searchQuery}
                           onOpenChange={() => toggleGroupCollapsed(group.id)}
                         >
-                          <div className="group/grp flex items-center gap-1 pr-1">
+                          <div className={cn(
+                            'group/grp flex items-center gap-1 rounded pr-1 text-th-text-muted hover:text-th-text-primary',
+                            selectedItem?.type === 'group' && selectedItem.id === group.id
+                              ? 'bg-th-surface-hover text-th-text-primary'
+                              : 'hover:bg-th-surface-raised/60'
+                          )}>
+                            {/* Chevron — collapse/expand only */}
                             <Collapsible.Trigger asChild>
                               <button
-                                className={cn(
-                                  'flex flex-1 items-center gap-1.5 rounded px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus:outline-none',
-                                  group.hidden && 'opacity-50'
-                                )}
+                                className="shrink-0 rounded p-0.5 focus:outline-none"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {group.collapsed ? <ChevronRight className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
-                                <span className="truncate">{group.name}</span>
-                                {group.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
+                                {group.collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                               </button>
                             </Collapsible.Trigger>
+
+                            {/* Name — select only */}
+                            <button
+                              onClick={() => selectItem('group', group.id)}
+                              className={cn(
+                                'flex flex-1 items-center gap-1.5 truncate rounded py-1 text-left text-sm font-semibold focus:outline-none',
+                                selectedItem?.type === 'group' && selectedItem.id === group.id
+                                  ? 'text-th-text-primary'
+                                  : 'text-th-text-muted hover:text-th-text-primary',
+                                group.hidden && 'opacity-50'
+                              )}
+                            >
+                              <span className="truncate">{group.name}</span>
+                              {group.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
+                            </button>
                             <button
                               title="Add request"
                               onClick={() => createLocalRequest(group.id)}
-                              className="shrink-0 rounded p-1 text-neutral-600 opacity-0 hover:bg-neutral-800 hover:text-neutral-400 focus:outline-none group-hover/grp:opacity-100"
+                              className="shrink-0 rounded p-0.5 opacity-0 hover:bg-th-surface-hover focus:outline-none group-hover/grp:opacity-100"
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-3.5 w-3.5" />
                             </button>
                           </div>
 
@@ -309,9 +345,9 @@ export function GroupSection({ source, integration, collections, groups, request
                                 <RequestTreeItem
                                   key={req.id}
                                   request={req}
-                                  isActive={req.id === activeRequestId}
-                                  onClick={() => setActiveRequest(req)}
-                                  onDelete={() => deleteRequest(req.id)}
+                                  isActive={req.id === activeRequestId && !selectedItem}
+                                  onClick={() => { clearSelectedItem(); setActiveRequest(req) }}
+                                  onDelete={() => { deleteRequest(req.id); if (activeRequestId === req.id) clearActiveRequest() }}
                                 />
                               ))}
                             </div>
@@ -321,7 +357,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     })}
 
                     {/* Inline add-group input */}
-                    {addingGroupTo === collection.id && (
+                    {!searchQuery && addingGroupTo === collection.id && (
                       <InlineInput
                         placeholder="Group name…"
                         onConfirm={(name) => { createGroup(collection.id, name); setAddingGroupTo(null) }}
@@ -330,9 +366,9 @@ export function GroupSection({ source, integration, collections, groups, request
                       />
                     )}
 
-                    {/* Empty state - only show add-group prompt, not blocking */}
-                    {collectionGroups.length === 0 && addingGroupTo !== collection.id && (
-                      <p className="px-2 py-1 text-xs text-neutral-600 italic">No groups — hover collection to add</p>
+                    {/* Empty state */}
+                    {!searchQuery && collectionGroups.length === 0 && addingGroupTo !== collection.id && (
+                      <p className="px-2 py-1 text-xs text-th-text-faint italic">No groups — hover collection to add</p>
                     )}
                   </div>
                 )}

@@ -21,8 +21,8 @@ export function ResponseViewer() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-neutral-500">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-600 border-t-neutral-300" />
+      <div className="flex h-full items-center justify-center gap-2 text-sm text-th-text-subtle">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-th-border-strong border-t-th-text-secondary" />
         Sending request...
       </div>
     )
@@ -30,7 +30,7 @@ export function ResponseViewer() {
 
   if (!response) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-neutral-600">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-th-text-faint">
         <SendHorizonal className="h-8 w-8 opacity-40" />
         <span className="text-sm">Send a request to see the response</span>
       </div>
@@ -40,9 +40,9 @@ export function ResponseViewer() {
   const contentType = response.headers['content-type'] ?? response.headers['Content-Type'] ?? ''
 
   return (
-    <div className="flex h-full flex-col bg-neutral-950">
+    <div className="flex h-full flex-col bg-th-bg">
       {/* Status bar */}
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
+      <div className="flex items-center justify-between border-b border-th-border px-4 py-2">
         <ResponseStatus response={response} />
         <button
           onClick={handleCopy}
@@ -50,7 +50,7 @@ export function ResponseViewer() {
             'flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors focus:outline-none',
             copied
               ? 'text-emerald-400'
-              : 'text-neutral-500 hover:bg-neutral-800 hover:text-neutral-300'
+              : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'
           )}
         >
           <Copy className="h-3.5 w-3.5" />
@@ -83,16 +83,16 @@ export function ResponseViewer() {
           <TabsContent value="headers" className="flex-1 overflow-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-neutral-800">
-                  <th className="px-4 py-2 text-left font-medium text-neutral-500">Name</th>
-                  <th className="px-4 py-2 text-left font-medium text-neutral-500">Value</th>
+                <tr className="border-b border-th-border">
+                  <th className="px-4 py-2 text-left font-medium text-th-text-subtle">Name</th>
+                  <th className="px-4 py-2 text-left font-medium text-th-text-subtle">Value</th>
                 </tr>
               </thead>
               <tbody>
                 {Object.entries(response.headers).map(([k, v]) => (
-                  <tr key={k} className="border-b border-neutral-900 hover:bg-neutral-900/50">
-                    <td className="px-4 py-1.5 font-mono text-neutral-400">{k}</td>
-                    <td className="px-4 py-1.5 text-neutral-300 break-all">{v}</td>
+                  <tr key={k} className="border-b border-th-surface hover:bg-th-surface/50">
+                    <td className="px-4 py-1.5 font-mono text-th-text-muted">{k}</td>
+                    <td className="px-4 py-1.5 text-th-text-secondary break-all">{v}</td>
                   </tr>
                 ))}
               </tbody>

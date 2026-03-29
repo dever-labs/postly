@@ -16,7 +16,8 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   scmPath: 'scm_path',
   scmSha: 'scm_sha',
   isDirty: 'is_dirty',
-  sortOrder: 'sort_order'
+  sortOrder: 'sort_order',
+  sslVerification: 'ssl_verification',
 }
 
 export function registerRequestHandlers(): void {

@@ -47,14 +47,14 @@ export function EnvironmentsSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-sm font-semibold text-neutral-200">Environments</h3>
+      <h3 className="text-sm font-semibold text-th-text-primary">Environments</h3>
 
       {/* Environment list */}
       <div className="flex flex-col gap-2">
         {environments.map((env) => (
           <div
             key={env.id}
-            className="flex items-center gap-2 rounded border border-neutral-800 px-3 py-2"
+            className="flex items-center gap-2 rounded border border-th-border px-3 py-2"
           >
             <input
               type="radio"
@@ -64,14 +64,14 @@ export function EnvironmentsSettings() {
             />
             <button
               onClick={() => setSelectedEnvId(env.id)}
-              className={`flex-1 text-left text-sm ${selectedEnvId === env.id ? 'text-neutral-100' : 'text-neutral-400 hover:text-neutral-200'}`}
+              className={`flex-1 text-left text-sm ${selectedEnvId === env.id ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary'}`}
             >
               {env.name}
               {env.isActive && <span className="ml-2 text-xs text-emerald-400">active</span>}
             </button>
             <button
               onClick={() => deleteEnvironment(env.id)}
-              className="text-neutral-600 hover:text-rose-400"
+              className="text-th-text-faint hover:text-rose-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -94,13 +94,13 @@ export function EnvironmentsSettings() {
       {/* Variables for selected env */}
       {selectedEnv && (
         <div>
-          <div className="mb-2 text-xs font-medium text-neutral-400">
+          <div className="mb-2 text-xs font-medium text-th-text-muted">
             Variables — {selectedEnv.name}
           </div>
 
           <div className="flex flex-col gap-1">
             {envVars.length > 0 && (
-              <div className="mb-1 grid grid-cols-[1fr_1fr_32px_28px] gap-1 px-1 text-xs text-neutral-600">
+              <div className="mb-1 grid grid-cols-[1fr_1fr_32px_28px] gap-1 px-1 text-xs text-th-text-faint">
                 <span>Key</span>
                 <span>Value</span>
                 <span>Secret</span>
@@ -123,21 +123,21 @@ export function EnvironmentsSettings() {
                 />
                 <button
                   onClick={() => upsertVar(v.envId, v.key, v.value, !v.isSecret, v.id)}
-                  className={`flex h-8 w-8 items-center justify-center rounded hover:bg-neutral-800 focus:outline-none ${v.isSecret ? 'text-amber-400' : 'text-neutral-600'}`}
+                  className={`flex h-8 w-8 items-center justify-center rounded hover:bg-th-surface-raised focus:outline-none ${v.isSecret ? 'text-amber-400' : 'text-th-text-faint'}`}
                   title={v.isSecret ? 'Secret (click to reveal)' : 'Not secret'}
                 >
                   {v.isSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
                 <button
                   onClick={() => deleteVar(v.id)}
-                  className="flex h-8 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-rose-400 focus:outline-none"
+                  className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
 
-            <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-neutral-400" onClick={handleAddVar}>
+            <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-th-text-muted" onClick={handleAddVar}>
               <Plus className="h-3.5 w-3.5" /> Add variable
             </Button>
           </div>

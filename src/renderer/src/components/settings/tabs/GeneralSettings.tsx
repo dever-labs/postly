@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import type { GeneralSettings } from '@/types'
 import { Input } from '@/components/ui/Input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 
 const DEFAULTS: GeneralSettings = {
   theme: 'dark',
@@ -27,25 +26,11 @@ export function GeneralSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h3 className="text-sm font-semibold text-neutral-200">General</h3>
+      <h3 className="text-sm font-semibold text-th-text-primary">General</h3>
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Theme</label>
-          <Select value={settings.theme} onValueChange={(v) => update('theme', v as GeneralSettings['theme'])}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dark">Dark</SelectItem>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="system">System</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-neutral-400">Default Timeout (ms)</label>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Default Timeout (ms)</label>
           <Input
             type="number"
             className="w-48"
@@ -62,7 +47,7 @@ export function GeneralSettings() {
               onChange={(e) => update('sslVerification', e.target.checked)}
               className="h-4 w-4 accent-blue-500"
             />
-            <span className="text-sm text-neutral-300">SSL Verification</span>
+            <span className="text-sm text-th-text-secondary">SSL Verification</span>
           </label>
 
           <label className="flex items-center gap-3 cursor-pointer">
@@ -72,7 +57,7 @@ export function GeneralSettings() {
               onChange={(e) => update('followRedirects', e.target.checked)}
               className="h-4 w-4 accent-blue-500"
             />
-            <span className="text-sm text-neutral-300">Follow Redirects</span>
+            <span className="text-sm text-th-text-secondary">Follow Redirects</span>
           </label>
         </div>
       </div>

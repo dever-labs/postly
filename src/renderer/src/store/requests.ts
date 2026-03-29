@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HttpRequest, HttpResponse, KeyValuePair, Request } from '../types'
+import { useCollectionsStore } from './collections'
 
 interface RequestsState {
   activeRequestId: string | null
@@ -7,6 +8,7 @@ interface RequestsState {
   response: HttpResponse | null
   isLoading: boolean
   setActiveRequest: (request: Request) => void
+  clearActiveRequest: () => void
   updateField: (field: keyof Request, value: unknown) => void
   sendRequest: () => Promise<void>
   saveRequest: () => Promise<void>
@@ -14,7 +16,7 @@ interface RequestsState {
 
 const DIRTY_FIELDS = new Set<keyof Request>([
   'name', 'method', 'url', 'params', 'headers',
-  'bodyType', 'bodyContent', 'authType', 'authConfig', 'description',
+  'bodyType', 'bodyContent', 'authType', 'authConfig', 'description', 'sslVerification',
 ])
 
 function kvpToRecord(pairs: KeyValuePair[]): Record<string, string> {
@@ -49,6 +51,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     })
   },
 
+  clearActiveRequest: () => {
+    set({ activeRequestId: null, editingRequest: null, response: null })
+  },
+
   updateField: (field: keyof Request, value: unknown) => {
     set((state) => {
       if (!state.editingRequest) return state
@@ -74,6 +80,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       bodyType: editingRequest.bodyType,
       authType: editingRequest.authType,
       authConfig: editingRequest.authConfig,
+      sslVerification: editingRequest.sslVerification,
+      groupId: editingRequest.groupId,
     }
 
     // Merge enabled params into URL is handled by main process; pass them via headers record workaround
@@ -118,8 +126,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       console.error('Failed to save request:', error)
       return
     }
-    set((state) => ({
-      editingRequest: state.editingRequest ? { ...state.editingRequest, isDirty: false } : null,
-    }))
+    const saved = { ...editingRequest, isDirty: false }
+    set({ editingRequest: saved })
+    useCollectionsStore.getState().syncRequest(saved)
   },
 }))

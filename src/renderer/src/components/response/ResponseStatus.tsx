@@ -21,15 +21,15 @@ export function ResponseStatus({ response }: ResponseStatusProps) {
       ? 'bg-amber-900/50 text-amber-400'
       : status >= 400
       ? 'bg-rose-900/50 text-rose-400'
-      : 'bg-neutral-800 text-neutral-400'
+      : 'bg-th-surface-raised text-th-text-muted'
 
   return (
     <div className="flex items-center gap-3">
       <span className={cn('rounded px-2 py-0.5 text-xs font-medium', statusVariant)}>
         {status} {response.statusText}
       </span>
-      <span className="text-xs text-neutral-500">{response.duration} ms</span>
-      <span className="text-xs text-neutral-500">{formatSize(response.size)}</span>
+      <span className="text-xs text-th-text-subtle">{response.duration} ms</span>
+      <span className="text-xs text-th-text-subtle">{formatSize(response.size)}</span>
     </div>
   )
 }

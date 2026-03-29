@@ -1,7 +1,10 @@
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
-import { startGitHubOAuth, startGitLabOAuth } from '../services/scm-oauth'
+import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHubDeviceToken, requestGitLabDeviceCode, pollGitLabDeviceToken } from '../services/scm-oauth'
+
+// Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
+const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
 
 export function registerIntegrationHandlers(): void {
   ipcMain.handle('postly:integrations:list', async () => {
@@ -91,5 +94,58 @@ export function registerIntegrationHandlers(): void {
         ['', '', 'disconnected', Date.now(), args.id])
       return { data: true }
     } catch (err) { return { error: String(err) } }
+  })
+
+  // ── Device Flow ──────────────────────────────────────────────────────────────
+
+  ipcMain.handle('postly:integrations:device-init', async (_, args: { id: string }) => {
+    try {
+      const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [args.id])
+      if (!integration) return { error: 'Integration not found' }
+
+      const type = integration.type as string
+      const baseUrl = integration.base_url as string
+      const clientId = integration.client_id as string
+
+      if (!clientId) return { error: 'Client ID is required for Device Flow' }
+
+      let info
+      if (type === 'github') info = await requestGitHubDeviceCode({ baseUrl, clientId })
+      else if (type === 'gitlab') info = await requestGitLabDeviceCode({ baseUrl, clientId })
+      else return { error: 'Device flow not supported for this integration type' }
+
+      pendingDeviceFlows.set(args.id, { deviceCode: info.deviceCode, interval: info.interval, expiresIn: info.expiresIn, clientId, baseUrl, type })
+
+      return { data: { userCode: info.userCode, verificationUri: info.verificationUri, expiresIn: info.expiresIn } }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  ipcMain.handle('postly:integrations:device-poll', async (_, args: { id: string }) => {
+    try {
+      const pending = pendingDeviceFlows.get(args.id)
+      if (!pending) return { error: 'No pending device flow for this integration' }
+
+      let token = '', connectedUserJson = ''
+
+      if (pending.type === 'github') {
+        const result = await pollGitHubDeviceToken({ baseUrl: pending.baseUrl, clientId: pending.clientId, deviceCode: pending.deviceCode, interval: pending.interval, expiresIn: pending.expiresIn })
+        token = result.token
+        connectedUserJson = JSON.stringify(result.user)
+      } else if (pending.type === 'gitlab') {
+        const result = await pollGitLabDeviceToken({ baseUrl: pending.baseUrl, clientId: pending.clientId, deviceCode: pending.deviceCode, interval: pending.interval, expiresIn: pending.expiresIn })
+        token = result.token
+        connectedUserJson = JSON.stringify(result.user)
+      }
+
+      pendingDeviceFlows.delete(args.id)
+      run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
+        [token, connectedUserJson, 'connected', '', Date.now(), args.id])
+      return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
+    } catch (err) {
+      pendingDeviceFlows.delete(args.id)
+      run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
+        ['error', String(err), Date.now(), args.id])
+      return { error: String(err) }
+    }
   })
 }

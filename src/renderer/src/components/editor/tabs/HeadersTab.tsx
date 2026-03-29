@@ -47,7 +47,7 @@ export function HeadersTab({ params, onChange }: HeadersTabProps) {
       </datalist>
 
       {params.length > 0 && (
-        <div className="mb-1 grid grid-cols-[24px_1fr_1fr_28px] gap-1 px-1 text-xs text-neutral-500">
+        <div className="mb-1 grid grid-cols-[24px_1fr_1fr_28px] gap-1 px-1 text-xs text-th-text-subtle">
           <span />
           <span>Key</span>
           <span>Value</span>
@@ -64,31 +64,31 @@ export function HeadersTab({ params, onChange }: HeadersTabProps) {
             type="checkbox"
             checked={param.enabled}
             onChange={(e) => updateRow(param.id, 'enabled', e.target.checked)}
-            className="h-4 w-4 cursor-pointer accent-neutral-500"
+            className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
           <input
             list={listId}
             value={param.key}
             onChange={(e) => updateRow(param.id, 'key', e.target.value)}
             placeholder="Header name"
-            className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
           />
           <input
             value={param.value}
             onChange={(e) => updateRow(param.id, 'value', e.target.value)}
             placeholder="Value"
-            className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
           />
           <button
             onClick={() => deleteRow(param.id)}
-            className="flex h-8 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-800 hover:text-rose-400 focus:outline-none"
+            className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
 
-      <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-neutral-400" onClick={addRow}>
+      <Button variant="ghost" size="sm" className="mt-1 w-fit gap-1.5 text-th-text-muted" onClick={addRow}>
         <Plus className="h-3.5 w-3.5" /> Add header
       </Button>
     </div>
