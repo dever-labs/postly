@@ -1,10 +1,10 @@
 import { ChevronRight, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload, X } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
-import { cn } from '@/lib/utils'
 import type { CollectionSource } from '@/types'
 
 interface ParsedCollection {
@@ -28,10 +28,10 @@ const SOURCE_LABELS: Record<CollectionSource, string> = {
 }
 
 const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
-  local: <Globe className="h-5 w-5" />,
-  github: <GitFork className="h-5 w-5" />,
-  gitlab: <GitBranch className="h-5 w-5" />,
-  backstage: <Database className="h-5 w-5" />,
+  local: <Globe className="h-4 w-4" />,
+  github: <GitFork className="h-4 w-4" />,
+  gitlab: <GitBranch className="h-4 w-4" />,
+  backstage: <Database className="h-4 w-4" />,
 }
 
 function requestCount(col: ParsedCollection): number {
@@ -182,26 +182,32 @@ export function ImportPage() {
                   </p>
                 </div>
 
-                <div className="shrink-0 flex gap-1.5">
-                  {availableSources.map((src) => {
-                    const active = (sourceOverrides[i] ?? 'local') === src
-                    return (
-                      <button
-                        key={src}
-                        onClick={() => setSourceOverrides((prev) => ({ ...prev, [i]: src }))}
-                        title={SOURCE_LABELS[src]}
-                        className={cn(
-                          'flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors',
-                          active
-                            ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                            : 'border-th-border bg-th-surface text-th-text-subtle hover:border-th-border-strong hover:bg-th-surface-raised hover:text-th-text-secondary',
-                        )}
-                      >
-                        {SOURCE_ICONS[src]}
-                        <span>{SOURCE_LABELS[src]}</span>
-                      </button>
-                    )
-                  })}
+                <div className="shrink-0 w-36">
+                  <Select
+                    value={sourceOverrides[i] ?? 'local'}
+                    onValueChange={(v) =>
+                      setSourceOverrides((prev) => ({ ...prev, [i]: v as CollectionSource }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 text-th-text-subtle">
+                          {SOURCE_ICONS[sourceOverrides[i] ?? 'local']}
+                        </span>
+                        <SelectValue />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSources.map((src) => (
+                        <SelectItem key={src} value={src}>
+                          <span className="flex items-center gap-2">
+                            {SOURCE_ICONS[src]}
+                            {SOURCE_LABELS[src]}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             ))}
