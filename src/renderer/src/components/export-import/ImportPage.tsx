@@ -190,12 +190,7 @@ export function ImportPage() {
                     }
                   >
                     <SelectTrigger>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="shrink-0 text-th-text-subtle">
-                          {SOURCE_ICONS[sourceOverrides[i] ?? 'local']}
-                        </span>
-                        <SelectValue />
-                      </div>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {availableSources.map((src) => (
