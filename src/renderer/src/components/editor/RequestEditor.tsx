@@ -103,10 +103,10 @@ export function RequestEditor() {
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
-      {/* Breadcrumb + request name — drag-region: the pt-4 gap above content is the drag handle */}
-      <div className="drag-region border-b border-th-border px-4 pt-4 pb-4">
+      {/* Breadcrumb + request name */}
+      <div className="border-b border-th-border px-4 pt-4 pb-4">
         {breadcrumb && (
-          <div className="no-drag mb-3 flex items-center gap-1.5 text-xs flex-wrap">
+          <div className="mb-3 inline-flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
             {breadcrumb.collection && (
               <>
@@ -142,7 +142,7 @@ export function RequestEditor() {
             autoFocus
           />
         ) : (
-          <div className="no-drag group flex items-center gap-1.5">
+          <div className="group flex items-center gap-1.5">
             <span className="text-sm font-medium text-th-text-primary">
               {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
             </span>
@@ -158,7 +158,7 @@ export function RequestEditor() {
       </div>
 
       {/* Protocol selector + URL bar */}
-      <div className="no-drag flex flex-wrap items-center gap-2 border-b border-th-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-th-border px-3 py-2">
         <ProtocolSelector
           value={protocol}
           onChange={(p) => {

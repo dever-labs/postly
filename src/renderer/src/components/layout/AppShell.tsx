@@ -84,52 +84,59 @@ export function AppShell() {
         />
       </div>
 
-      {/* Right pane */}
-      {sidebarTab === 'environments' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <EnvironmentEditor />
-        </div>
-      ) : selectedItem?.type === 'add-integration' ? (
-        <div className="flex flex-1 overflow-hidden">
-          <IntegrationSetupPage />
-        </div>
-      ) : selectedItem?.type === 'collection' ? (
-        <div className="flex flex-1 overflow-y-auto">
-          <CollectionEditor collectionId={selectedItem.id} />
-        </div>
-      ) : selectedItem?.type === 'group' ? (
-        <div className="flex flex-1 overflow-y-auto">
-          <GroupEditor groupId={selectedItem.id} />
-        </div>
-      ) : selectedItem?.type === 'ai-collection' ? (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <AiCollectionPage collectionId={selectedItem.id} />
-        </div>
-      ) : selectedItem?.type === 'ai-group' ? (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <AiGroupPage groupId={selectedItem.id} />
-        </div>
-      ) : selectedItem?.type === 'ai-request' ? (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <AiRequestPage requestId={selectedItem.id} />
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div style={{ height: typeof editorHeight === 'number' ? editorHeight : 300 }} className="overflow-hidden">
-            <RequestEditor />
+      {/* Right pane — single wrapper so the drag strip is always present */}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        {/* Transparent drag strip: always covers the top of the right pane.
+            pointer-events-none means clicks pass through; -webkit-app-region
+            is collected independently by Chromium so dragging still works. */}
+        <div className="drag-region pointer-events-none absolute inset-x-0 top-0 z-50 h-8" />
+
+        {sidebarTab === 'environments' ? (
+          <div className="flex flex-1 overflow-hidden">
+            <EnvironmentEditor />
           </div>
-          <ResizablePanel
-            direction="vertical"
-            onResize={(d) => {
-              const h = useUIStore.getState().editorHeight
-              setEditorHeight(Math.max(150, Math.min(800, h + d)))
-            }}
-          />
-          <div className="flex-1 overflow-hidden">
-            <ResponseViewer />
+        ) : selectedItem?.type === 'add-integration' ? (
+          <div className="flex flex-1 overflow-hidden">
+            <IntegrationSetupPage />
           </div>
-        </div>
-      )}
+        ) : selectedItem?.type === 'collection' ? (
+          <div className="flex flex-1 overflow-y-auto">
+            <CollectionEditor collectionId={selectedItem.id} />
+          </div>
+        ) : selectedItem?.type === 'group' ? (
+          <div className="flex flex-1 overflow-y-auto">
+            <GroupEditor groupId={selectedItem.id} />
+          </div>
+        ) : selectedItem?.type === 'ai-collection' ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <AiCollectionPage collectionId={selectedItem.id} />
+          </div>
+        ) : selectedItem?.type === 'ai-group' ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <AiGroupPage groupId={selectedItem.id} />
+          </div>
+        ) : selectedItem?.type === 'ai-request' ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <AiRequestPage requestId={selectedItem.id} />
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div style={{ height: typeof editorHeight === 'number' ? editorHeight : 300 }} className="overflow-hidden">
+              <RequestEditor />
+            </div>
+            <ResizablePanel
+              direction="vertical"
+              onResize={(d) => {
+                const h = useUIStore.getState().editorHeight
+                setEditorHeight(Math.max(150, Math.min(800, h + d)))
+              }}
+            />
+            <div className="flex-1 overflow-hidden">
+              <ResponseViewer />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
