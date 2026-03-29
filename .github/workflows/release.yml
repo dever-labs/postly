@@ -1,21 +1,90 @@
 name: Release
 
+# Required SignPath.io secrets (set in repo Settings → Secrets):
+#   SIGNPATH_API_TOKEN  — API token from https://app.signpath.io → My Profile → API Tokens
+#   SIGNPATH_ORG_ID     — Organization ID from https://app.signpath.io → Settings
+#
+# Required SignPath.io setup (free Open Source plan):
+#   1. Register at https://app.signpath.io/Web/Home/Register
+#   2. Apply for Open Source program (takes 1-2 days to approve)
+#   3. Create project with slug "postly"
+#   4. Create artifact configuration that signs *.exe with Authenticode
+#   5. Create signing policy with slug "release-signing"
+#   6. Connect your GitHub repository in Settings → Trusted Build Systems
+
 on:
   release:
     types: [published]
 
 permissions:
   contents: write
+  id-token: write  # required by SignPath trusted build system integration
 
 jobs:
-  build:
+  # ── Windows: build unsigned → sign via SignPath → upload ──────────────────
+  build-windows:
+    name: Build · Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (electron-vite)
+        run: npm run build
+
+      - name: Package (unsigned)
+        # Build the installer without signing; SignPath signs it in the next step.
+        # electron-builder skips signing when WIN_CSC_LINK is not set.
+        run: npx electron-builder --win --publish never
+
+      - name: Upload unsigned installer for signing
+        id: unsigned-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-win
+          path: dist/*.exe
+
+      - name: Sign with SignPath.io
+        # Skip if secrets are not configured (e.g. forks, first-time setup)
+        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: postly
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: initial
+          github-artifact-id: ${{ steps.unsigned-artifact.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist-signed/
+
+      - name: Upload signed installer to release
+        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != '' }}
+        run: gh release upload ${{ github.event.release.tag_name }} dist-signed/*.exe --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload unsigned installer to release (fallback — no signing secrets)
+        if: ${{ secrets.SIGNPATH_API_TOKEN == '' || secrets.SIGNPATH_ORG_ID == '' }}
+        run: gh release upload ${{ github.event.release.tag_name }} dist/*.exe --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── macOS & Linux: build and publish directly via electron-builder ─────────
+  build-unix:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            platform: win
-            label: Windows
           - os: macos-latest
             platform: mac
             label: macOS
@@ -36,7 +105,6 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      # Linux arm64 cross-compilation requires additional tools
       - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -56,8 +124,7 @@ jobs:
 
       - name: Package and publish
         env:
-          # electron-builder uses GH_TOKEN to upload assets to the release
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing — set CSC_LINK / CSC_KEY_PASSWORD for signed builds
+          # Disable macOS keychain auto-discovery (no Apple cert configured)
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --${{ matrix.platform }} --publish always
