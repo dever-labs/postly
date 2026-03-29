@@ -29,7 +29,7 @@ interface UIState {
   editorHeight: number
   activeCommitRequestId: string | null
   toasts: ToastItem[]
-  selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request'; id: string } | null
+  selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration'; id: string } | null
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
   openSettings: (tab?: string) => void

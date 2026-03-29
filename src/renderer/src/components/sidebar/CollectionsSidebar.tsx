@@ -1,6 +1,5 @@
 import { Check, Globe, Layers, Plus, Settings, X, Link, Download, Upload } from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
-import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
@@ -16,11 +15,8 @@ export function CollectionsSidebar() {
   const { integrations, load: loadIntegrations } = useIntegrationsStore()
   const { load: loadEnvironments } = useEnvironmentsStore()
   const addToast = useUIStore((s) => s.addToast)
+  const selectItem = useUIStore((s) => s.selectItem)
   const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
-
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -134,7 +130,7 @@ export function CollectionsSidebar() {
             {/* Connect source row — lives in the tree so context is clear */}
             <div className="mx-2 mt-2 mb-1">
               <button
-                onClick={() => setConnectDialogOpen(true)}
+                onClick={() => selectItem('add-integration', '')}
                 className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-th-surface-raised focus:outline-none group"
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-th-border-strong text-th-text-faint group-hover:border-th-text-muted group-hover:text-th-text-subtle">
@@ -195,11 +191,6 @@ export function CollectionsSidebar() {
           <EnvironmentsPanel />
         </div>
       )}
-
-      <ConnectIntegrationDialog
-        open={connectDialogOpen}
-        onClose={() => setConnectDialogOpen(false)}
-      />
     </div>
   )
 }

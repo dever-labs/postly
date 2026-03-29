@@ -7,6 +7,7 @@ import { ResponseViewer } from '@/components/response/ResponseViewer'
 import { EnvironmentEditor } from '@/components/environments/EnvironmentEditor'
 import { ResizablePanel } from '@/components/layout/ResizablePanel'
 import { AiChatPanel } from '@/components/ai/AiChatPanel'
+import { IntegrationSetupPage } from '@/components/integrations/IntegrationSetupPage'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
 import type { AiContext } from '@/lib/aiContext'
@@ -87,6 +88,10 @@ export function AppShell() {
       {sidebarTab === 'environments' ? (
         <div className="flex flex-1 overflow-hidden">
           <EnvironmentEditor />
+        </div>
+      ) : selectedItem?.type === 'add-integration' ? (
+        <div className="flex flex-1 overflow-hidden">
+          <IntegrationSetupPage />
         </div>
       ) : selectedItem?.type === 'collection' ? (
         <div className="flex flex-1 overflow-y-auto">
