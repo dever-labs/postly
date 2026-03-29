@@ -5,7 +5,8 @@ const DEFAULTS = {
   general: { theme: 'dark', defaultTimeout: 30000, followRedirects: true, sslVerification: true },
   backstage: { baseUrl: '', token: '', autoSync: false },
   github: { token: '', orgs: [] as string[] },
-  gitlab: { baseUrl: 'https://gitlab.com', token: '', groups: [] as string[] }
+  gitlab: { baseUrl: 'https://gitlab.com', token: '', groups: [] as string[] },
+  ai: { provider: 'openai', apiKey: '', model: '' }
 }
 
 export function registerSettingsHandlers(): void {
@@ -34,7 +35,8 @@ export function registerSettingsHandlers(): void {
           general: { ...DEFAULTS.general, ...(parsed['general'] as object ?? {}) },
           backstage: { ...DEFAULTS.backstage, ...(parsed['backstage'] as object ?? {}) },
           github: { ...DEFAULTS.github, ...(parsed['github'] as object ?? {}) },
-          gitlab: { ...DEFAULTS.gitlab, ...(parsed['gitlab'] as object ?? {}) }
+          gitlab: { ...DEFAULTS.gitlab, ...(parsed['gitlab'] as object ?? {}) },
+          ai: { ...DEFAULTS.ai, ...(parsed['ai'] as object ?? {}) }
         }
       }
     } catch (err) { return { error: String(err) } }

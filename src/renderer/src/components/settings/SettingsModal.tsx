@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
 import { EnvironmentsSettings } from '@/components/settings/tabs/EnvironmentsSettings'
+import { AiSettings } from '@/components/settings/tabs/AiSettings'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
@@ -10,6 +11,7 @@ const TABS = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'environments', label: 'Environments' },
+  { id: 'ai', label: 'AI' },
 ]
 
 function TabContent({ tab }: { tab: string }) {
@@ -17,6 +19,7 @@ function TabContent({ tab }: { tab: string }) {
     case 'general': return <GeneralSettings />
     case 'appearance': return <AppearanceSettings />
     case 'environments': return <EnvironmentsSettings />
+    case 'ai': return <AiSettings />
     default: return null
   }
 }

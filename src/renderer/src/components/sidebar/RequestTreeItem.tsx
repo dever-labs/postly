@@ -2,6 +2,8 @@ import React, { useState } from 'react'
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import type { Request } from '@/types'
 import { Badge } from '@/components/ui/Badge'
+import { useUIStore } from '@/store/ui'
+import { AiActionButton } from '@/components/ai/AiActionButton'
 import { cn } from '@/lib/utils'
 
 const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
@@ -32,6 +34,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameValue, setNameValue] = useState(request.name)
+  const selectItem = useUIStore((s) => s.selectItem)
 
   const handleRename = async () => {
     if (nameValue.trim()) {
@@ -86,7 +89,13 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+            <AiActionButton
+              variant="menu-item"
+              label="Review with AI"
+              onClick={(e) => { (e as any).stopPropagation?.(); setMenuOpen(false); selectItem('ai-request', request.id) }}
+            />
+            <div className="border-t border-th-border mx-2" />
             <button
               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true) }}

@@ -29,7 +29,7 @@ interface UIState {
   editorHeight: number
   activeCommitRequestId: string | null
   toasts: ToastItem[]
-  selectedItem: { type: 'collection' | 'group'; id: string } | null
+  selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request'; id: string } | null
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
   openSettings: (tab?: string) => void
@@ -42,7 +42,7 @@ interface UIState {
   closeCommitPanel: () => void
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
-  selectItem: (type: 'collection' | 'group', id: string) => void
+  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request', id: string) => void
   clearSelectedItem: () => void
 }
 
@@ -92,6 +92,6 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
   },
 
-  selectItem: (type: 'collection' | 'group', id: string) => set({ selectedItem: { type, id } }),
+  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request', id: string) => set({ selectedItem: { type, id } }),
   clearSelectedItem: () => set({ selectedItem: null }),
 }))

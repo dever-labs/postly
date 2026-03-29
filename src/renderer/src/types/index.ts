@@ -180,6 +180,12 @@ export interface GeneralSettings {
   sslVerification: boolean
 }
 
+export interface AiSettings {
+  provider: 'openai' | 'anthropic'
+  apiKey: string
+  model: string
+}
+
 export interface ScmCommitPayload {
   requestId: string
   source: 'github' | 'gitlab'

@@ -6,6 +6,7 @@ import { SslEditor } from '@/components/editor/SslEditor'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 import { useIntegrationsStore } from '@/store/integrations'
+import { AiActionButton } from '@/components/ai/AiActionButton'
 
 function SourceCrumb({ source, name }: { source: string; name: string }) {
   const icon =
@@ -41,7 +42,9 @@ export function CollectionEditor({ collectionId }: Props) {
   const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === collectionId))
   const updateCollection = useCollectionsStore((s) => s.updateCollection)
   const integrations = useIntegrationsStore((s) => s.integrations)
-  const addToast = useUIStore((s) => s.addToast)
+  const { addToast, selectItem: selectUIItem } = useUIStore((s) => ({ addToast: s.addToast, selectItem: s.selectItem }))
+  const groups = useCollectionsStore((s) => s.groups)
+  const allRequests = useCollectionsStore((s) => s.requests)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -111,6 +114,10 @@ export function CollectionEditor({ collectionId }: Props) {
             onChange={(e) => { setName(e.target.value); mark() }}
           />
           <p className="mt-1 text-xs text-th-text-faint">Collection</p>
+          <AiActionButton
+            className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
+            onClick={() => selectUIItem('ai-collection', collectionId)}
+          />
         </div>
 
         {/* Description */}

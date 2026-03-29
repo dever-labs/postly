@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { Toaster } from './components/ui/Toast'
+import { TooltipProvider } from './components/ui/Tooltip'
 import { useCollectionsStore } from './store/collections'
 import { useEnvironmentsStore } from './store/environments'
 
@@ -15,10 +16,12 @@ export default function App(): React.ReactElement {
   }, [])
 
   return (
-    <div className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
-      <AppShell />
-      <SettingsModal />
-      <Toaster />
-    </div>
+    <TooltipProvider delayDuration={400}>
+      <div className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
+        <AppShell />
+        <SettingsModal />
+        <Toaster />
+      </div>
+    </TooltipProvider>
   )
 }

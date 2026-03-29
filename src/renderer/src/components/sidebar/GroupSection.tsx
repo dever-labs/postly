@@ -2,6 +2,7 @@ import * as Collapsible from '@radix-ui/react-collapsible'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Database, Eye, EyeOff, FolderOpen, GitBranch, GitFork, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import type { Collection, CollectionSource, Group, Integration, Request } from '@/types'
+import { AiActionButton } from '@/components/ai/AiActionButton'
 import { ConnectIntegrationDialog } from '@/components/integrations/ConnectIntegrationDialog'
 import { RequestTreeItem } from '@/components/sidebar/RequestTreeItem'
 import { Badge } from '@/components/ui/Badge'
@@ -76,7 +77,7 @@ interface CollectionRowProps {
   onDelete: () => void
 }
 
-function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onAddGroup, onRename, onDelete, isActive }: CollectionRowProps & { isActive?: boolean; onSelect: () => void }) {
+function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onAddGroup, onRename, onDelete, isActive, onAi }: CollectionRowProps & { isActive?: boolean; onSelect: () => void; onAi: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -131,7 +132,12 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+            <AiActionButton
+              variant="menu-item"
+              onClick={(e) => { (e as any).stopPropagation?.(); setMenuOpen(false); onAi() }}
+            />
+            <div className="border-t border-th-border mx-2" />
             <button
               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onRename() }}
@@ -290,6 +296,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
                     onDelete={() => deleteCollection(collection.id)}
+                    onAi={() => selectItem('ai-collection', collection.id)}
                   />
                 )}
 
@@ -365,7 +372,12 @@ export function GroupSection({ source, integration, collections, groups, request
                             {groupMenuOpen === group.id && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setGroupMenuOpen(null)} />
-                                <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+                                <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+                                  <AiActionButton
+                                    variant="menu-item"
+                                    onClick={(e) => { (e as any).stopPropagation?.(); setGroupMenuOpen(null); selectItem('ai-group', group.id) }}
+                                  />
+                                  <div className="border-t border-th-border mx-2" />
                                   <button
                                     className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
                                     onClick={(e) => { e.stopPropagation(); setGroupMenuOpen(null); setRenamingGroup(group.id) }}

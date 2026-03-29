@@ -6,6 +6,7 @@ import { SslEditor } from '@/components/editor/SslEditor'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 import { useIntegrationsStore } from '@/store/integrations'
+import { AiActionButton } from '@/components/ai/AiActionButton'
 
 function SourceCrumb({ source, name }: { source: string; name: string }) {
   const icon =
@@ -44,6 +45,7 @@ export function GroupEditor({ groupId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
+  const allRequests = useCollectionsStore((s) => s.requests)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -52,6 +54,7 @@ export function GroupEditor({ groupId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+
 
   const collection = group ? collections.find((c) => c.id === group.collectionId) : null
 
@@ -133,6 +136,10 @@ export function GroupEditor({ groupId }: Props) {
             onChange={(e) => { setName(e.target.value); mark() }}
           />
           <p className="mt-1 text-xs text-th-text-faint">Group</p>
+          <AiActionButton
+            className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
+            onClick={() => selectItem('ai-group', groupId)}
+          />
         </div>
 
         {/* Description */}

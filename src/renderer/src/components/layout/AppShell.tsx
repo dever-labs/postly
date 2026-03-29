@@ -6,10 +6,41 @@ import { GroupEditor } from '@/components/editor/GroupEditor'
 import { ResponseViewer } from '@/components/response/ResponseViewer'
 import { EnvironmentEditor } from '@/components/environments/EnvironmentEditor'
 import { ResizablePanel } from '@/components/layout/ResizablePanel'
+import { AiChatPanel } from '@/components/ai/AiChatPanel'
 import { useUIStore } from '@/store/ui'
+import { useCollectionsStore } from '@/store/collections'
+import type { AiContext } from '@/lib/aiContext'
 
-function useDrag(direction: 'horizontal' | 'vertical', onResize: (delta: number) => void) {
-  return useCallback((e: React.MouseEvent) => {
+function AiCollectionPage({ collectionId }: { collectionId: string }) {
+  const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === collectionId))
+  const groups = useCollectionsStore((s) => s.groups.filter((g) => g.collectionId === collectionId))
+  const allRequests = useCollectionsStore((s) => s.requests)
+  const existingRequests = allRequests.filter((r) => groups.some((g) => g.id === r.groupId))
+  if (!collection) return null
+  const ctx: AiContext = { type: 'collection', collectionId, name: collection.name, description: collection.description, existingRequests }
+  return <AiChatPanel context={ctx} />
+}
+
+function AiGroupPage({ groupId }: { groupId: string }) {
+  const group = useCollectionsStore((s) => s.groups.find((g) => g.id === groupId))
+  const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === group?.collectionId))
+  const existingRequests = useCollectionsStore((s) => s.requests.filter((r) => r.groupId === groupId))
+  if (!group) return null
+  const ctx: AiContext = { type: 'group', collectionId: group.collectionId, groupId, name: group.name, collectionName: collection?.name, description: group.description, existingRequests }
+  return <AiChatPanel context={ctx} groupId={groupId} />
+}
+
+function AiRequestPage({ requestId }: { requestId: string }) {
+  const request = useCollectionsStore((s) => s.requests.find((r) => r.id === requestId))
+  const group = useCollectionsStore((s) => s.groups.find((g) => g.id === request?.groupId))
+  const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === group?.collectionId))
+  const siblingRequests = useCollectionsStore((s) => s.requests.filter((r) => r.groupId === request?.groupId))
+  if (!request) return null
+  const ctx: AiContext = { type: 'request', collectionId: group?.collectionId, groupId: request.groupId, name: request.name, collectionName: collection?.name, groupName: group?.name, existingRequests: siblingRequests, currentRequest: request }
+  return <AiChatPanel context={ctx} groupId={request.groupId} />
+}
+
+function useDrag(direction: 'horizontal' | 'vertical', onResize: (delta: number) => void) {  return useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     let last = direction === 'horizontal' ? e.clientX : e.clientY
     const onMove = (ev: MouseEvent) => {
@@ -69,6 +100,18 @@ export function AppShell() {
       ) : selectedItem?.type === 'group' ? (
         <div className="flex flex-1 overflow-y-auto">
           <GroupEditor groupId={selectedItem.id} />
+        </div>
+      ) : selectedItem?.type === 'ai-collection' ? (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <AiCollectionPage collectionId={selectedItem.id} />
+        </div>
+      ) : selectedItem?.type === 'ai-group' ? (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <AiGroupPage groupId={selectedItem.id} />
+        </div>
+      ) : selectedItem?.type === 'ai-request' ? (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <AiRequestPage requestId={selectedItem.id} />
         </div>
       ) : (
         <div className="flex flex-1 flex-col overflow-hidden">

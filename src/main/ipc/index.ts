@@ -11,6 +11,7 @@ import { registerIntegrationHandlers } from './integrations'
 import { registerWsHandlers } from './ws'
 import { registerGrpcHandlers } from './grpc'
 import { registerMqttHandlers } from './mqtt'
+import { registerAiHandlers } from './ai'
 
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
@@ -26,4 +27,5 @@ export function registerAllIpcHandlers(): void {
   registerWsHandlers()
   registerGrpcHandlers()
   registerMqttHandlers()
+  registerAiHandlers()
 }

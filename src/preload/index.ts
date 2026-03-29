@@ -142,6 +142,16 @@ const api = {
     deviceInit: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-init', data),
     devicePoll: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-poll', data),
   },
+  ai: {
+    chat: (data: { requestId: string; provider: string; apiKey: string; model: string; messages: unknown[] }) =>
+      ipcRenderer.invoke('postly:ai:chat', data),
+    cancel: (data: { requestId: string }) => ipcRenderer.invoke('postly:ai:cancel', data),
+    onChunk: (cb: (payload: { requestId: string; text: string; done: boolean; error?: string }) => void) => {
+      const handler = (_: unknown, payload: unknown) => cb(payload as { requestId: string; text: string; done: boolean; error?: string })
+      ipcRenderer.on('postly:ai:chunk', handler)
+      return () => ipcRenderer.removeListener('postly:ai:chunk', handler)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
