@@ -68,7 +68,17 @@ function handleDragEnd(event: DragEndEvent) {
     if (overType === 'req') {
       const overReq = requests.find((r) => r.id === overId)
       if (!overReq) return
-      moveRequestToGroup(activeId, overReq.groupId, overReq.id)
+      // Determine insert position based on drag direction
+      const sortedGroupReqs = requests
+        .filter((r) => r.groupId === overReq.groupId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+      const activeIdx = sortedGroupReqs.findIndex((r) => r.id === activeId)
+      const overIdx = sortedGroupReqs.findIndex((r) => r.id === overId)
+      // Dragging down: insert after over item (before the item after it)
+      const insertBeforeId = activeIdx < overIdx
+        ? sortedGroupReqs[overIdx + 1]?.id ?? null
+        : overReq.id
+      moveRequestToGroup(activeId, overReq.groupId, insertBeforeId)
     } else if (overType === 'grp') {
       moveRequestToGroup(activeId, overId, null)
     }
@@ -79,7 +89,15 @@ function handleDragEnd(event: DragEndEvent) {
     if (overType === 'grp') {
       const overGrp = groups.find((g) => g.id === overId)
       if (!overGrp) return
-      moveGroupToCollection(activeId, overGrp.collectionId, overGrp.id)
+      const sortedColGroups = groups
+        .filter((g) => g.collectionId === overGrp.collectionId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+      const activeIdx = sortedColGroups.findIndex((g) => g.id === activeId)
+      const overIdx = sortedColGroups.findIndex((g) => g.id === overId)
+      const insertBeforeId = activeIdx < overIdx
+        ? sortedColGroups[overIdx + 1]?.id ?? null
+        : overGrp.id
+      moveGroupToCollection(activeId, overGrp.collectionId, insertBeforeId)
     } else if (overType === 'col') {
       moveGroupToCollection(activeId, overId, null)
     }
