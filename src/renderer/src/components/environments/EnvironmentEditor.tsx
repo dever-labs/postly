@@ -125,7 +125,7 @@ export function EnvironmentEditor() {
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg">
       {/* Header — drag-region; py-4 padding + name area are the drag target */}
-      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 py-4">
+      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
