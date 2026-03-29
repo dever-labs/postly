@@ -33,7 +33,7 @@ function BreadcrumbItem({
   return onClick ? (
     <button
       onClick={onClick}
-      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-th-text-faint hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-none"
+      className="no-drag flex items-center gap-1 rounded px-1.5 py-0.5 text-th-text-faint hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-none"
     >
       {icon}
       <span>{label}</span>
@@ -103,8 +103,9 @@ export function RequestEditor() {
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
-      {/* Breadcrumb + request name */}
-      <div className="border-b border-th-border px-4 pt-4 pb-4">
+      {/* Breadcrumb + request name — header is the drag region;
+          padding/gaps are drag targets, interactive elements opt out */}
+      <div className="drag-region border-b border-th-border px-4 pt-4 pb-4">
         {breadcrumb && (
           <div className="mb-3 inline-flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
@@ -142,7 +143,7 @@ export function RequestEditor() {
             autoFocus
           />
         ) : (
-          <div className="group flex items-center gap-1.5">
+          <div className="no-drag group flex items-center gap-1.5">
             <span className="text-sm font-medium text-th-text-primary">
               {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
             </span>

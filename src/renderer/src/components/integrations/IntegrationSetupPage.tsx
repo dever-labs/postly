@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Database, GitBranch, GitFork, Loader2 } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Loader2 } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -67,7 +67,7 @@ export function IntegrationSetupPage() {
   const handleBack = () => selectItem('collection', '')
 
   const handleTypeSelect = (type: IntegrationType) => {
-    setForm({ ...form, type, baseUrl: DEFAULTS[type].baseUrl ?? '', name: form.name || TYPE_LABELS[type] })
+    setForm(prev => ({ ...prev, type, baseUrl: DEFAULTS[type].baseUrl ?? '', name: TYPE_LABELS[type] }))
     setStep(2)
   }
 
@@ -132,13 +132,6 @@ export function IntegrationSetupPage() {
     <div className="flex h-full w-full flex-col overflow-y-auto bg-th-bg">
       {/* Page header */}
       <div className="flex items-center gap-3 border-b border-th-border px-6 py-4">
-        <button
-          onClick={handleBack}
-          className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
         <div>
           <h1 className="text-sm font-semibold text-th-text-primary">Add Integration</h1>
           <p className="text-xs text-th-text-subtle">{stepLabel}</p>

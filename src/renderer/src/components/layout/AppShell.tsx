@@ -84,11 +84,8 @@ export function AppShell() {
         />
       </div>
 
-      {/* Right pane — single wrapper so the drag strip is always present */}
+      {/* Right pane */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Drag strip: empty row at the top — drag-region with nothing on top of it,
-            so the drag region is always clean and never fights with interactive content */}
-        <div className="drag-region shrink-0 h-11 bg-th-bg" />
 
         {sidebarTab === 'environments' ? (
           <div className="flex flex-1 overflow-hidden">
