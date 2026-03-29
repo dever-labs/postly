@@ -18,7 +18,7 @@ async function getFreePort(): Promise<number> {
 async function waitForCallback(port: number, win: BrowserWindow): Promise<{ code: string; state: string }> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost:${port}`)
+      const url = new URL(req.url ?? '/', `http://localhost:${port}`)
       const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       res.writeHead(200, { 'Content-Type': 'text/html' })

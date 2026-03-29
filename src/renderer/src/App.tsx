@@ -13,7 +13,7 @@ export default function App(): React.ReactElement {
   useEffect(() => {
     loadCollections()
     loadEnvironments()
-  }, [])
+  }, [loadCollections, loadEnvironments])
 
   return (
     <TooltipProvider delayDuration={400}>

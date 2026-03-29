@@ -14,13 +14,13 @@ export function BackstageSettings() {
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
-    ;(window as any).api.settings.get({ key: 'backstage' }).then(({ data }: { data: BackstageSettings }) => {
+    ;window.api.settings.get({ key: 'backstage' }).then(({ data }: { data: BackstageSettings }) => {
       if (data) setSettings({ ...DEFAULTS, ...data })
     })
   }, [])
 
   const save = async () => {
-    const { error } = await (window as any).api.settings.set({ key: 'backstage', value: settings })
+    const { error } = await window.api.settings.set({ key: 'backstage', value: settings })
     if (error) {
       addToast('Failed to save Backstage settings', 'error')
     } else {
@@ -31,7 +31,7 @@ export function BackstageSettings() {
 
   const syncNow = async () => {
     setSyncing(true)
-    const { error } = await (window as any).api.backstage.sync()
+    const { error } = await window.api.backstage.sync()
     setSyncing(false)
     if (error) addToast(`Sync failed: ${error}`, 'error')
     else addToast('Backstage sync complete', 'success')

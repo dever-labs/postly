@@ -40,7 +40,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
 
-  const authUrl = new URL(config.authUrl!)
+  const authUrl = new URL(config.authUrl ?? '')
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('client_id', config.clientId)
   authUrl.searchParams.set('redirect_uri', config.redirectUri)
@@ -51,7 +51,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
 
   const code = await new Promise<string>((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      const url = new URL(req.url!, 'http://localhost:9876')
+      const url = new URL(req.url ?? '/', 'http://localhost:9876')
       const returnedCode = url.searchParams.get('code')
       const returnedState = url.searchParams.get('state')
 
@@ -121,7 +121,7 @@ export async function clientCredentials(config: OAuthConfig): Promise<Token> {
 export async function refreshTokenGrant(token: Token, config: OAuthConfig): Promise<Token> {
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: token.refreshToken!,
+    refresh_token: token.refreshToken ?? '',
     client_id: config.clientId
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)

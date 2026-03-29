@@ -82,10 +82,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       sslVerification: editingRequest.sslVerification,
       groupId: editingRequest.groupId,
     }
-    ;(httpRequest as any).params = kvpToRecord(editingRequest.params)
+    httpRequest.params = kvpToRecord(editingRequest.params)
 
     try {
-      const { data, error } = await (window as any).api.http.execute(httpRequest)
+      const { data, error } = await window.api.http.execute(httpRequest)
       if (error) {
         const errorResponse: HttpResponse = {
           status: 0,
@@ -117,7 +117,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (!editingRequest) return
 
     const payload = serializeRequest(editingRequest)
-    const { error } = await (window as any).api.requests.update({ id: editingRequest.id, ...payload })
+    const { error } = await window.api.requests.update({ id: editingRequest.id, ...payload })
     if (error) {
       console.error('Failed to save request:', error)
       return

@@ -72,10 +72,8 @@ export function AiChatPanel({ context, groupId }: Props) {
   const groups = useCollectionsStore((s) => s.groups)
   const aiSettings = useSettingsStore((s) => s.ai)
 
-  const ai = (window as any).api.ai
-
   useEffect(() => {
-    const unsub = ai.onChunk((payload: { requestId: string; text: string; done: boolean; error?: string }) => {
+    const unsub = window.api.ai.onChunk((payload) => {
       if (payload.requestId !== requestIdRef.current) return
       if (payload.done) {
         setStreaming(false)
@@ -98,7 +96,7 @@ export function AiChatPanel({ context, groupId }: Props) {
         })
       }
     })
-    return unsub
+    return () => { unsub() }
   }, [])
 
   useEffect(() => {
@@ -123,10 +121,10 @@ export function AiChatPanel({ context, groupId }: Props) {
       { role: 'system', content: systemPrompt },
       ...newMessages.map((m) => ({ role: m.role, content: m.content })),
     ]
-    await ai.chat({ requestId, provider, apiKey, model, messages: apiMessages })
+    await window.api.ai.chat({ requestId, provider, apiKey, model, messages: apiMessages })
   }
 
-  const cancel = () => { ai.cancel({ requestId: requestIdRef.current }); setStreaming(false) }
+  const cancel = () => { window.api.ai.cancel({ requestId: requestIdRef.current }); setStreaming(false) }
 
   const addEndpoint = async (msgIdx: number, epIdx: number, ep: EndpointDraft) => {
     let targetGroupId = groupId
@@ -140,7 +138,7 @@ export function AiChatPanel({ context, groupId }: Props) {
     await new Promise((r) => setTimeout(r, 150))
     const newReq = useCollectionsStore.getState().requests.find((r) => !beforeIds.has(r.id) && r.groupId === targetGroupId)
     if (newReq) {
-      await (window as any).api.requests.update({
+      await window.api.requests.update({
         id: newReq.id, name: ep.name, protocol: ep.protocol, method: ep.method, url: ep.url,
         description: ep.description,
         params: JSON.stringify(ep.params.map((p) => ({ ...p, id: p.id || crypto.randomUUID() }))),

@@ -40,7 +40,7 @@ export function CollectionsSidebar() {
     const name = newName.trim()
     if (!name) { cancelCreating(); return }
     setCreating(false); setNewName('')
-    const { error } = await (window as any).api.collections.create({ name, source: 'local' })
+    const { error } = await window.api.collections.create({ name, source: 'local' })
     if (error) addToast('Failed to create collection', 'error')
     else { addToast(`Collection "${name}" created`, 'success'); load() }
   }

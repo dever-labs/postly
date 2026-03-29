@@ -35,30 +35,30 @@ export const useIntegrationsStore = create<IntegrationsState>((set) => ({
   integrations: [],
 
   load: async () => {
-    const { data, error } = await (window as any).api.integrations.list()
+    const { data, error } = await window.api.integrations.list()
     if (error) { console.error('Failed to load integrations:', error); return }
     set({ integrations: (data ?? []).map((r: Record<string, unknown>) => normalize(r)) })
   },
 
   connect: async (id: string) => {
-    const { data, error } = await (window as any).api.integrations.connect({ id })
+    const { data, error } = await window.api.integrations.connect({ id })
     if (error) return { error }
     if (data) set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? normalize(data as Record<string, unknown>) : i) }))
     return {}
   },
 
   disconnect: async (id: string) => {
-    await (window as any).api.integrations.disconnect({ id })
+    await window.api.integrations.disconnect({ id })
     set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? { ...i, status: 'disconnected' as const, token: '', connectedUser: null } : i) }))
   },
 
   remove: async (id: string) => {
-    await (window as any).api.integrations.delete({ id })
+    await window.api.integrations.delete({ id })
     set((s) => ({ integrations: s.integrations.filter((i) => i.id !== id) }))
   },
 
   update: async (id: string, fields: Partial<Integration>) => {
-    await (window as any).api.integrations.update({ id, ...fields })
+    await window.api.integrations.update({ id, ...fields })
     set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? { ...i, ...fields } : i) }))
   },
 }))

@@ -149,7 +149,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
                   ref={(el) => { fileRefs.current[pair.id] = el }}
                   onChange={(e) => {
                     const file = e.target.files?.[0]
-                    if (file) update(pair.id, 'value', (file as any).path ?? file.name)
+                    if (file) update(pair.id, 'value', (file as File & { path?: string }).path ?? file.name)
                   }}
                 />
                 <button
@@ -223,7 +223,7 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
   }, [monaco])
 
   // Attach to a Monaco editor instance: auto-trigger suggestions when `{{` is typed
-  const attachEnvSuggest = useCallback((editor: any) => {
+  const attachEnvSuggest = useCallback((editor: Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0]) => {
     editor.onDidChangeModelContent(() => {
       const pos = editor.getPosition()
       if (!pos) return
@@ -350,7 +350,7 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
           <div className="flex flex-col gap-3 p-4">
             <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => {
               const file = e.target.files?.[0]
-              if (file) onContentChange((file as any).path ?? file.name)
+              if (file) onContentChange((file as File & { path?: string }).path ?? file.name)
             }} />
             <button
               onClick={() => fileInputRef.current?.click()}

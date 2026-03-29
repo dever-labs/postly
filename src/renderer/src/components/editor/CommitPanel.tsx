@@ -5,6 +5,7 @@ import type { DiffResult } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
+import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 
 interface CommitPanelProps {
@@ -15,6 +16,9 @@ interface CommitPanelProps {
 export function CommitPanel({ requestId, source }: CommitPanelProps) {
   const addToast = useUIStore((s) => s.addToast)
   const theme = useUIStore((s) => s.theme)
+  const requests = useCollectionsStore((s) => s.requests)
+  const groups = useCollectionsStore((s) => s.groups)
+  const collections = useCollectionsStore((s) => s.collections)
   const [commitMessage, setCommitMessage] = useState('')
   const [branches, setBranches] = useState<string[]>([])
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -27,21 +31,30 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
   const [loadingDiff, setLoadingDiff] = useState(false)
 
   useEffect(() => {
-    const api = (window as any).api
-    const loader = source === 'github' ? api.github.branches : api.gitlab.branches
-    loader({ requestId }).then(({ data }: { data: string[] }) => {
-      if (data) {
-        setBranches(data)
-        setSelectedBranch(data[0] ?? '')
-        setFromBranch(data[0] ?? '')
-      }
-    })
-  }, [requestId, source])
+    const request = requests.find((r) => r.id === requestId)
+    const group = request ? groups.find((g) => g.id === request.groupId) : undefined
+    const collection = group ? collections.find((c) => c.id === group.collectionId) : undefined
+    const sourceMeta = collection?.sourceMeta ?? {}
+
+    if (source === 'github') {
+      const [owner, repo] = (sourceMeta.repo ?? '/').split('/')
+      if (!owner || !repo) return
+      window.api.github.listBranches({ owner, repo }).then(({ data }: { data: string[] }) => {
+        if (data) { setBranches(data); setSelectedBranch(data[0] ?? ''); setFromBranch(data[0] ?? '') }
+      })
+    } else if (source === 'gitlab') {
+      const projectId = sourceMeta.projectId ?? ''
+      if (!projectId) return
+      window.api.gitlab.listBranches({ projectId }).then(({ data }: { data: string[] }) => {
+        if (data) { setBranches(data); setSelectedBranch(data[0] ?? ''); setFromBranch(data[0] ?? '') }
+      })
+    }
+  }, [requestId, source, requests, groups, collections])
 
   const handleShowDiff = async () => {
     if (showDiff) { setShowDiff(false); return }
     setLoadingDiff(true)
-    const api = (window as any).api
+    const api = window.api
     const loader = source === 'github' ? api.github.diff : api.gitlab.diff
     const { data } = await loader({ requestId })
     if (data) setDiff(data)
@@ -52,7 +65,7 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
   const handleCommit = async () => {
     if (!commitMessage.trim()) return
     setCommitting(true)
-    const api = (window as any).api
+    const api = window.api
     const branch = isNewBranch ? newBranch : selectedBranch
     const committer = source === 'github' ? api.github.commit : api.gitlab.commit
     const { error } = await committer({ requestId, commitMessage, branch, fromBranch: isNewBranch ? fromBranch : undefined })

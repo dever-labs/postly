@@ -23,7 +23,7 @@ export function GitLabSettings() {
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
-    ;(window as any).api.settings.get({ key: 'gitlab' }).then(({ data }: { data: GitLabSettings }) => {
+    ;window.api.settings.get({ key: 'gitlab' }).then(({ data }: { data: GitLabSettings }) => {
       if (data) setSettings({ ...DEFAULTS, ...data, groups: data.groups ?? [] })
     })
   }, [])
@@ -32,7 +32,7 @@ export function GitLabSettings() {
 
   const connect = async () => {
     setConnecting(true)
-    const { data, error } = await (window as any).api.gitlab.oauth({
+    const { data, error } = await window.api.gitlab.oauth({
       baseUrl: settings.baseUrl,
       clientId: settings.clientId,
     })
@@ -47,7 +47,7 @@ export function GitLabSettings() {
   }
 
   const disconnect = async () => {
-    const { error } = await (window as any).api.gitlab.disconnect()
+    const { error } = await window.api.gitlab.disconnect()
     if (error) {
       addToast(`Failed to disconnect: ${error}`, 'error')
     } else {
@@ -58,7 +58,7 @@ export function GitLabSettings() {
   }
 
   const saveConfig = async () => {
-    const { error } = await (window as any).api.settings.set({ key: 'gitlab', value: settings })
+    const { error } = await window.api.settings.set({ key: 'gitlab', value: settings })
     if (error) addToast('Failed to save settings', 'error')
     else { addToast('GitLab settings saved', 'success'); loadSettings() }
   }
@@ -76,7 +76,7 @@ export function GitLabSettings() {
 
   const syncNow = async () => {
     setSyncing(true)
-    const { error } = await (window as any).api.gitlab.sync()
+    const { error } = await window.api.gitlab.sync()
     setSyncing(false)
     if (error) addToast(`Sync failed: ${error}`, 'error')
     else addToast('GitLab sync complete', 'success')
@@ -129,13 +129,13 @@ export function GitLabSettings() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3 rounded-md border border-th-border-strong bg-th-surface-raised/50 px-3 py-2">
               <img
-                src={settings.connectedUser!.avatarUrl}
-                alt={settings.connectedUser!.username}
+                src={settings.connectedUser?.avatarUrl}
+                alt={settings.connectedUser?.username}
                 className="h-8 w-8 rounded-full"
               />
               <div className="flex-1">
-                <div className="text-sm font-medium text-th-text-primary">{settings.connectedUser!.name}</div>
-                <div className="text-xs text-th-text-muted">@{settings.connectedUser!.username}</div>
+                <div className="text-sm font-medium text-th-text-primary">{settings.connectedUser?.name}</div>
+                <div className="text-xs text-th-text-muted">@{settings.connectedUser?.username}</div>
               </div>
               <span className="mr-2 text-xs text-green-400">✓ Connected</span>
               <Button variant="outline" size="sm" onClick={disconnect}>

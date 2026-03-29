@@ -102,7 +102,6 @@ export async function executeRequest(
         if (!enabled || !key) continue
         if (fieldType === 'file') {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const fs = require('fs') as typeof import('fs')
             if (fs.existsSync(value)) {
               const blob = new Blob([fs.readFileSync(value)])
@@ -130,7 +129,6 @@ export async function executeRequest(
 
   } else if (bodyType === 'binary' && req.body) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('fs') as typeof import('fs')
       if (fs.existsSync(req.body)) {
         data = fs.readFileSync(req.body)
@@ -146,7 +144,6 @@ export async function executeRequest(
     timeout,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     httpsAgent: sslVerification ? undefined : new (require('https').Agent)({ rejectUnauthorized: false })
   }
 
@@ -191,7 +188,6 @@ async function executeNtlmRequest(
   options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number }
 ): Promise<HttpResponse> {
   const start = Date.now()
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const httpntlm = require('httpntlm') as Record<string, (opts: Record<string, unknown>, cb: (err: Error | null, res: { statusCode: number; headers: Record<string, string>; body: string }) => void) => void>
   const method = req.method.toLowerCase()
   const fn = httpntlm[method] ?? httpntlm['get']

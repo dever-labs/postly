@@ -54,7 +54,7 @@ export function GrpcView({
     if (!protoContent.trim()) return
     setLoadingProto(true)
     setProtoError(null)
-    const { data, error } = await (window as any).api.grpc.loadProto({ protoContent })
+    const { data, error } = await window.api.grpc.loadProto({ protoContent })
     setLoadingProto(false)
     if (error) { setProtoError(error); return }
     setServices(data as GrpcServiceInfo)
@@ -72,7 +72,7 @@ export function GrpcView({
     setResponse(null)
     const meta: Record<string, string> = {}
     metadata.filter((m) => m.enabled && m.key).forEach((m) => { meta[m.key] = m.value })
-    const result = await (window as any).api.grpc.invoke({
+    const result = await window.api.grpc.invoke({
       serverUrl, protoContent, serviceName, methodName,
       metadata: meta, requestBody: requestBody || '{}', useTls,
     })

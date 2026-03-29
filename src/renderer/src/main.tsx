@@ -13,7 +13,7 @@ window.addEventListener('unhandledrejection', (e) => {
   if (e.reason?.type === 'cancelation') e.preventDefault()
 })
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

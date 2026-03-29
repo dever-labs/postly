@@ -37,7 +37,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   vars: [],
 
   load: async () => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error } = await api.environments.list()
     if (error) {
       console.error('Failed to load environments:', error)
@@ -55,7 +55,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   },
 
   createEnvironment: async (name: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error } = await api.environments.create({ name })
     if (error) {
       console.error('Failed to create environment:', error)
@@ -66,7 +66,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   },
 
   deleteEnvironment: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.environments.delete({ id })
     if (error) {
       console.error('Failed to delete environment:', error)
@@ -81,7 +81,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   },
 
   setActive: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.environments.setActive({ id })
     if (error) {
       console.error('Failed to set active environment:', error)
@@ -95,7 +95,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   },
 
   upsertVar: async (envId: string, key: string, value: string, isSecret = false, id?: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error } = await api.environments.vars.upsert({ envId, key, value, isSecret, id })
     if (error) {
       console.error('Failed to upsert env var:', error)
@@ -112,7 +112,7 @@ export const useEnvironmentsStore = create<EnvironmentsState>((set) => ({
   },
 
   deleteVar: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.environments.vars.delete({ id })
     if (error) {
       console.error('Failed to delete env var:', error)

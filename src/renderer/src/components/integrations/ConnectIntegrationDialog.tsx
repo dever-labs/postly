@@ -99,7 +99,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
     setStep(3)
 
     try {
-      const api = (window as any).api
+      const api = window.api
 
       // Create or update the integration record first
       let integrationId = createdId
@@ -303,8 +303,8 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
                       <img src={connectedUser.avatarUrl} alt={connectedUser.name} className="h-8 w-8 rounded-full" />
                       <div>
                         <div className="text-sm font-medium text-th-text-primary">{connectedUser.name}</div>
-                        {(connectedUser as any).login && <div className="text-xs text-th-text-muted">@{(connectedUser as any).login}</div>}
-                        {(connectedUser as any).username && <div className="text-xs text-th-text-muted">@{(connectedUser as any).username}</div>}
+                        {connectedUser.login && <div className="text-xs text-th-text-muted">@{connectedUser.login}</div>}
+                        {connectedUser.username && <div className="text-xs text-th-text-muted">@{connectedUser.username}</div>}
                       </div>
                     </div>
                   )}

@@ -38,7 +38,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete }: Reques
 
   const handleRename = async () => {
     if (nameValue.trim()) {
-      await (window as any).api.requests.update({ id: request.id, name: nameValue.trim() })
+      await window.api.requests.update({ id: request.id, name: nameValue.trim() })
     }
     setRenaming(false)
   }

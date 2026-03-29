@@ -54,22 +54,30 @@ export function MqttView({
   const saveSubs = (next: MqttSubscription[]) => onConfigChange('subscriptions', JSON.stringify(next))
 
   useEffect(() => {
-    const unsub = (window as any).api.mqtt.onEvent((event: any) => {
+    const unsub = window.api.mqtt.onEvent((rawEvent) => {
+      const event = rawEvent as {
+        connectionId: string
+        type: string
+        message?: string
+        topic?: string
+        payload?: string
+        timestamp?: number
+      }
       if (event.connectionId !== connectionId.current) return
       if (event.type === 'connect') { setConnected(true); setConnecting(false); setError(null) }
       else if (event.type === 'close' || event.type === 'disconnect') { setConnected(false); setConnecting(false) }
-      else if (event.type === 'error') { setConnected(false); setConnecting(false); setError(event.message) }
+      else if (event.type === 'error') { setConnected(false); setConnecting(false); setError(event.message ?? null) }
       else if (event.type === 'message') {
         setMessages((prev) => [...prev, {
           id: crypto.randomUUID(),
-          topic: event.topic,
-          payload: event.payload,
-          timestamp: event.timestamp,
+          topic: event.topic ?? '',
+          payload: event.payload ?? '',
+          timestamp: event.timestamp ?? Date.now(),
           direction: 'in',
         }])
       }
     })
-    return unsub
+    return () => { unsub() }
   }, [])
 
   useEffect(() => {
@@ -79,7 +87,7 @@ export function MqttView({
   const connect = async (brokerUrl: string) => {
     if (!brokerUrl) return
     setConnecting(true); setError(null)
-    const { error: err } = await (window as any).api.mqtt.connect({
+    const { error: err } = await window.api.mqtt.connect({
       connectionId: connectionId.current,
       brokerUrl,
       clientId: clientId || undefined,
@@ -92,13 +100,13 @@ export function MqttView({
     else {
       // re-subscribe to saved topics
       for (const s of subs) {
-        await (window as any).api.mqtt.subscribe({ connectionId: connectionId.current, topic: s.topic, qos: s.qos })
+        await window.api.mqtt.subscribe({ connectionId: connectionId.current, topic: s.topic, qos: s.qos })
       }
     }
   }
 
   const disconnect = async () => {
-    await (window as any).api.mqtt.disconnect({ connectionId: connectionId.current })
+    await window.api.mqtt.disconnect({ connectionId: connectionId.current })
     setConnected(false)
   }
 
@@ -108,14 +116,14 @@ export function MqttView({
     saveSubs([...subs, newSub])
     setSubTopic('')
     if (connected) {
-      await (window as any).api.mqtt.subscribe({ connectionId: connectionId.current, topic: newSub.topic, qos: newSub.qos })
+      await window.api.mqtt.subscribe({ connectionId: connectionId.current, topic: newSub.topic, qos: newSub.qos })
     }
   }
 
   const unsubscribe = async (topic: string) => {
     saveSubs(subs.filter((s) => s.topic !== topic))
     if (connected) {
-      await (window as any).api.mqtt.unsubscribe({ connectionId: connectionId.current, topic })
+      await window.api.mqtt.unsubscribe({ connectionId: connectionId.current, topic })
     }
   }
 
@@ -124,7 +132,7 @@ export function MqttView({
     setMessages((prev) => [...prev, {
       id: crypto.randomUUID(), topic: pubTopic, payload: pubPayload, timestamp: Date.now(), direction: 'out',
     }])
-    await (window as any).api.mqtt.publish({
+    await window.api.mqtt.publish({
       connectionId: connectionId.current, topic: pubTopic, payload: pubPayload, qos: pubQos, retain: pubRetain,
     })
   }

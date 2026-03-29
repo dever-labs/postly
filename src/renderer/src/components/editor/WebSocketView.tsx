@@ -28,7 +28,14 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
   const unsubRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    const unsub = (window as any).api.ws.onEvent((event: any) => {
+    const unsub = window.api.ws.onEvent((rawEvent) => {
+      const event = rawEvent as {
+        connectionId: string
+        type: 'open' | 'message' | 'close' | 'error'
+        data?: string
+        message?: string
+        timestamp?: number
+      }
       if (event.connectionId !== connectionId.current) return
       if (event.type === 'open') {
         setConnected(true)
@@ -37,7 +44,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
       } else if (event.type === 'message') {
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), direction: 'in', data: event.data, timestamp: event.timestamp },
+          { id: crypto.randomUUID(), direction: 'in', data: event.data ?? '', timestamp: event.timestamp ?? Date.now() },
         ])
       } else if (event.type === 'close') {
         setConnected(false)
@@ -45,7 +52,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
       } else if (event.type === 'error') {
         setConnected(false)
         setConnecting(false)
-        setError(event.message)
+        setError(event.message ?? null)
       }
     })
     unsubRef.current = unsub
@@ -62,7 +69,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
     setError(null)
     const hdrs: Record<string, string> = {}
     headers.filter((h) => h.enabled && h.key).forEach((h) => { hdrs[h.key] = h.value })
-    const { error: err } = await (window as any).api.ws.connect({
+    const { error: err } = await window.api.ws.connect({
       connectionId: connectionId.current,
       url,
       headers: hdrs,
@@ -74,7 +81,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
   }
 
   const disconnect = async () => {
-    await (window as any).api.ws.disconnect({ connectionId: connectionId.current })
+    await window.api.ws.disconnect({ connectionId: connectionId.current })
     setConnected(false)
   }
 
@@ -86,7 +93,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
       ...prev,
       { id: crypto.randomUUID(), direction: 'out', data: msg, timestamp: Date.now() },
     ])
-    await (window as any).api.ws.send({ connectionId: connectionId.current, message: msg })
+    await window.api.ws.send({ connectionId: connectionId.current, message: msg })
   }
 
   return (

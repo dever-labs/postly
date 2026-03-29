@@ -47,7 +47,8 @@ export async function parseOpenApiToRequests(
   const groupMap = new Map<string, ParsedGroup>()
 
   function getOrCreateGroup(tag: string): ParsedGroup {
-    if (groupMap.has(tag)) return groupMap.get(tag)!
+    const existing = groupMap.get(tag)
+    if (existing) return existing
     const group: ParsedGroup = {
       id: crypto.randomUUID(),
       collectionId,

@@ -36,23 +36,23 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
   useEffect(() => {
     if (!hasMinConfig) { setToken(null); return }
     const config = buildInlineConfig(authConfig)
-    ;(window as any).api.oauth.inline.getToken(config).then(({ data }: { data: Token | null }) => {
+    window.api.oauth.inline.getToken(config).then(({ data }: { data: Token | null }) => {
       setToken(data ?? null)
     })
-  }, [authConfig.clientId, authConfig.tokenUrl, authConfig.scopes])
+  }, [authConfig, hasMinConfig])
 
   const handleAuthorize = async () => {
     if (!hasMinConfig) return
     setAuthorizing(true)
     const config = buildInlineConfig(authConfig)
-    const { data, error } = await (window as any).api.oauth.inline.authorize(config)
+    const { data, error } = await window.api.oauth.inline.authorize(config)
     setAuthorizing(false)
     if (data) setToken(data)
     if (error) console.error('OAuth error:', error)
   }
 
   const handleClearToken = async () => {
-    await (window as any).api.oauth.inline.clearToken(buildInlineConfig(authConfig))
+    await window.api.oauth.inline.clearToken(buildInlineConfig(authConfig))
     setToken(null)
   }
 

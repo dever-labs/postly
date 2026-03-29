@@ -38,7 +38,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   loaded: false,
 
   load: async () => {
-    const { data, error } = await (window as any).api.settings.getAll()
+    const { data, error } = await window.api.settings.getAll()
     if (error) {
       console.error('Failed to load settings:', error)
       return
@@ -61,7 +61,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 
   save: async (key: string, value: unknown) => {
-    await (window as any).api.settings.set({ key, value })
+    await window.api.settings.set({ key, value })
     set((state) => ({ ...state, [key]: value }))
   },
 }))

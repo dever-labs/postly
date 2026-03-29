@@ -13,7 +13,7 @@ export function GeneralSettings() {
   const [settings, setSettings] = useState<GeneralSettings>(DEFAULTS)
 
   useEffect(() => {
-    ;(window as any).api.settings.get({ key: 'general' }).then(({ data }: { data: GeneralSettings }) => {
+    ;window.api.settings.get({ key: 'general' }).then(({ data }: { data: GeneralSettings }) => {
       if (data) setSettings({ ...DEFAULTS, ...data })
     })
   }, [])
@@ -21,7 +21,7 @@ export function GeneralSettings() {
   const update = <K extends keyof GeneralSettings>(key: K, value: GeneralSettings[K]) => {
     const next = { ...settings, [key]: value }
     setSettings(next)
-    ;(window as any).api.settings.set({ key: 'general', value: next })
+    ;window.api.settings.set({ key: 'general', value: next })
   }
 
   return (

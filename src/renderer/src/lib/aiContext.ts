@@ -29,9 +29,10 @@ ${ctx.existingRequests.length > 0 ? `\nExisting endpoints in this group (${ctx.e
 When creating endpoints, build on existing ones if present (same base URL patterns, auth headers, etc.).`
     }
     // request type — review mode
-    const req = ctx.currentRequest!
-    const headers = (req.headers ?? []).map((h: any) => `  ${h.key}: ${h.value}`).join('\n')
-    const params = (req.params ?? []).filter((p: any) => p.enabled).map((p: any) => `  ${p.key}=${p.value}`).join('\n')
+    if (!ctx.currentRequest) return ''
+    const req = ctx.currentRequest
+    const headers = (req.headers ?? []).map((h) => `  ${h.key}: ${h.value}`).join('\n')
+    const params = (req.params ?? []).filter((p) => p.enabled).map((p) => `  ${p.key}=${p.value}`).join('\n')
     return `Reviewing an existing API endpoint:
 - Name: ${req.name}
 - Protocol: ${req.protocol?.toUpperCase() ?? 'HTTP'}

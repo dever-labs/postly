@@ -70,12 +70,12 @@ export function EnvironmentEditor() {
   const [saved, setSaved] = useState(false)
   const [varSearch, setVarSearch] = useState('')
 
-  useEffect(() => { setName(env?.name ?? '') }, [env?.id])
+  useEffect(() => { setName(env?.name ?? '') }, [env?.id, env?.name])
   useEffect(() => { setLocalVars(envVars) }, [env?.id, vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNameBlur = async () => {
     if (!env || !name.trim() || name.trim() === env.name) return
-    await (window as any).api.environments.rename({ id: env.id, name: name.trim() })
+    await window.api.environments.rename({ id: env.id, name: name.trim() })
     load()
   }
 

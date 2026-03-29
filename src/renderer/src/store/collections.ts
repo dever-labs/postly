@@ -34,7 +34,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   hiddenSources: new Set<CollectionSource>(),
 
   load: async () => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error: collectionsError } = await api.collections.list()
     if (collectionsError || !data) {
       console.error('Failed to load collections:', collectionsError)
@@ -50,7 +50,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       name: c.name as string,
       description: (c.description ?? '') as string,
       source: (c.source ?? 'local') as CollectionSource,
-      sourceMeta: parseJsonField<Record<string, string>>(c.source_meta, undefined as any),
+      sourceMeta: parseJsonField<Record<string, string> | undefined>(c.source_meta, undefined),
       integrationId: (c.integration_id ?? undefined) as string | undefined,
       authType: (c.auth_type ?? 'none') as AuthType,
       authConfig: parseJsonField<Record<string, string>>(c.auth_config, {}),
@@ -79,7 +79,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     const group = get().groups.find((g) => g.id === groupId)
     if (!group) return
     const newCollapsed = !group.collapsed
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.groups.update({ id: groupId, collapsed: newCollapsed })
     if (error) {
       console.error('Failed to update group:', error)
@@ -105,7 +105,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   setSearchQuery: (q: string) => set({ searchQuery: q }),
 
   createGroup: async (collectionId: string, name: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error } = await api.groups.create({ collectionId, name })
     if (error) {
       console.error('Failed to create group:', error)
@@ -116,7 +116,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   deleteCollection: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.collections.delete({ id })
     if (error) { console.error('Failed to delete collection:', error); return }
     set((state) => ({
@@ -126,7 +126,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   renameCollection: async (id: string, name: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.collections.rename({ id, name })
     if (error) { console.error('Failed to rename collection:', error); return }
     set((state) => ({
@@ -135,14 +135,15 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   addRequestToCollection: async (collectionId: string) => {
-    const api = (window as any).api
+    const api = window.api
     // reuse an existing group or auto-create a "Default" one
     let group = get().groups.find((g) => g.collectionId === collectionId)
     if (!group) {
       const { data, error } = await api.groups.create({ collectionId, name: 'Default' })
       if (error) { console.error('Failed to create default group:', error); return }
-      group = normalizeGroup(data as Record<string, unknown>)
-      set((state) => ({ groups: [...state.groups, group!] }))
+      const newGroup = normalizeGroup(data as Record<string, unknown>)
+      group = newGroup
+      set((state) => ({ groups: [...state.groups, newGroup] }))
     }
     const { data, error } = await api.requests.create({ groupId: group.id, name: 'New Request', method: 'GET' })
     if (error) { console.error('Failed to create request:', error); return }
@@ -151,7 +152,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   createLocalRequest: async (groupId: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { data, error } = await api.requests.create({ groupId, name: 'New Request', method: 'GET' })
     if (error) {
       console.error('Failed to create request:', error)
@@ -162,7 +163,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   deleteRequest: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.requests.delete({ id })
     if (error) {
       console.error('Failed to delete request:', error)
@@ -172,7 +173,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   markDirty: (requestId: string) => {
-    const api = (window as any).api
+    const api = window.api
     api.requests.markDirty({ id: requestId, isDirty: true })
     set((state) => ({
       requests: state.requests.map((r) => (r.id === requestId ? { ...r, isDirty: true } : r)),
@@ -186,7 +187,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.collections.update({ id, ...updates })
     if (error) { console.error('Failed to update collection:', error); return }
     set((state) => ({
@@ -197,7 +198,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   updateGroup: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.groups.update({ id, ...updates })
     if (error) { console.error('Failed to update group:', error); return }
     set((state) => ({
@@ -208,7 +209,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   deleteGroup: async (id: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.groups.delete({ id })
     if (error) { console.error('Failed to delete group:', error); return }
     set((state) => ({
@@ -218,7 +219,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   renameGroup: async (id: string, name: string) => {
-    const api = (window as any).api
+    const api = window.api
     const { error } = await api.groups.update({ id, name })
     if (error) { console.error('Failed to rename group:', error); return }
     set((state) => ({
