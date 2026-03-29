@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, FolderOpen, HardDrive, GitFork, GitBranch, Box, Pencil } from 'lucide-react'
+import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box, Pencil } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
@@ -132,6 +132,17 @@ export function CollectionEditor({ collectionId }: Props) {
                 title="Rename collection"
               >
                 <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                onClick={async () => {
+                  const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
+                  if (error) addToast(`Export failed: ${error}`, 'error')
+                  else if (data) addToast(`Exported "${name}"`, 'success')
+                }}
+                className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-opacity focus:opacity-100 focus:outline-none"
+                title="Export this collection"
+              >
+                <Download className="h-4 w-4" />
               </button>
             </div>
           )}

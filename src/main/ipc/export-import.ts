@@ -34,6 +34,7 @@ interface ExportCollection {
   name: string
   description: string
   source: string
+  integrationName?: string
   auth: { type: string; config: Record<string, unknown> }
   ssl: string
   groups: ExportGroup[]
@@ -91,10 +92,15 @@ function buildExport(collectionIds?: string[]): PostlyExportFile {
       }
     })
 
+    const integrationRow = col.integration_id
+      ? (queryAll('SELECT name FROM integrations WHERE id = ?', [col.integration_id]) as Record<string, unknown>[])[0]
+      : null
+
     return {
       name: String(col.name ?? ''),
       description: String(col.description ?? ''),
       source: String(col.source ?? 'local'),
+      integrationName: integrationRow ? String(integrationRow.name) : undefined,
       auth: { type: String(col.auth_type ?? 'none'), config: tryParse(col.auth_config, {}) },
       ssl: String(col.ssl_verification ?? 'inherit'),
       groups,
@@ -113,7 +119,7 @@ function importData(data: PostlyExportFile): number {
     run(
       `INSERT INTO collections (id, name, source, description, auth_type, auth_config, ssl_verification, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [colId, col.name, 'local', col.description ?? '', col.auth?.type ?? 'none',
+      [colId, col.name, col.source ?? 'local', col.description ?? '', col.auth?.type ?? 'none',
        JSON.stringify(col.auth?.config ?? {}), col.ssl ?? 'inherit', now, now]
     )
     for (const [gi, grp] of col.groups.entries()) {
