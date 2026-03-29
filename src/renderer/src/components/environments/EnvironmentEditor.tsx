@@ -108,15 +108,18 @@ export function EnvironmentEditor() {
   // ── Empty state ────────────────────────────────────────────────────────────
   if (!env) {
     return (
-      <div className="drag-region flex h-full flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
-        <div className="no-drag rounded-full border border-th-border p-6">
-          <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2}
-              d="M3.75 9h16.5m-16.5 6.75h16.5M3 4.5h18M3 19.5h18" />
-          </svg>
+      <div className="flex h-full flex-1 flex-col bg-th-bg">
+        <div className="drag-region shrink-0 border-b border-th-border px-6 pt-8 pb-4" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
+          <div className="rounded-full border border-th-border p-6">
+            <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2}
+                d="M3.75 9h16.5m-16.5 6.75h16.5M3 4.5h18M3 19.5h18" />
+            </svg>
+          </div>
+          <p className="text-sm">Select an environment to edit</p>
+          <p className="text-xs text-th-text-faint">or create one from the sidebar</p>
         </div>
-        <p className="no-drag text-sm">Select an environment to edit</p>
-        <p className="no-drag text-xs text-th-text-faint">or create one from the sidebar</p>
       </div>
     )
   }
