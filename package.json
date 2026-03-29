@@ -123,6 +123,9 @@
   },
   "homepage": "https://github.com/dever-labs/postly#readme",
   "private": true,
+  "overrides": {
+    "underscore": "^1.13.8"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -146,7 +149,7 @@
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
-    "vitest": "^1.6.1"
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
