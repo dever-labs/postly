@@ -2,7 +2,9 @@ import { ChevronRight, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { useCollectionsStore } from '@/store/collections'
+import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
+import { cn } from '@/lib/utils'
 import type { CollectionSource } from '@/types'
 
 interface ParsedCollection {
@@ -26,13 +28,11 @@ const SOURCE_LABELS: Record<CollectionSource, string> = {
 }
 
 const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
-  local: <Globe className="h-4 w-4" />,
-  github: <GitFork className="h-4 w-4" />,
-  gitlab: <GitBranch className="h-4 w-4" />,
-  backstage: <Database className="h-4 w-4" />,
+  local: <Globe className="h-5 w-5" />,
+  github: <GitFork className="h-5 w-5" />,
+  gitlab: <GitBranch className="h-5 w-5" />,
+  backstage: <Database className="h-5 w-5" />,
 }
-
-const SOURCES: CollectionSource[] = ['local', 'github', 'gitlab', 'backstage']
 
 function requestCount(col: ParsedCollection): number {
   return col.groups?.reduce((sum, g) => sum + (g.requests?.length ?? 0), 0) ?? 0
@@ -41,6 +41,15 @@ function requestCount(col: ParsedCollection): number {
 export function ImportPage() {
   const { load } = useCollectionsStore()
   const { clearSelectedItem, addToast } = useUIStore()
+  const integrations = useIntegrationsStore((s) => s.integrations)
+
+  // Local is always available; other sources only if an integration exists
+  const availableSources: CollectionSource[] = [
+    'local',
+    ...(['github', 'gitlab', 'backstage'] as CollectionSource[]).filter((src) =>
+      integrations.some((i) => i.type === src),
+    ),
+  ]
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null)
@@ -67,7 +76,7 @@ export function ImportPage() {
         setParsedFile(parsed)
         const overrides: Record<number, CollectionSource> = {}
         parsed.collections.forEach((col, i) => {
-          overrides[i] = SOURCES.includes(col.source as CollectionSource)
+          overrides[i] = (['local', 'github', 'gitlab', 'backstage'] as CollectionSource[]).includes(col.source as CollectionSource)
             ? (col.source as CollectionSource)
             : 'local'
         })
@@ -173,29 +182,26 @@ export function ImportPage() {
                   </p>
                 </div>
 
-                <div className="shrink-0 flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-wide text-th-text-faint">Import as</label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-th-text-subtle">
-                      {SOURCE_ICONS[sourceOverrides[i] ?? 'local']}
-                    </span>
-                    <select
-                      value={sourceOverrides[i] ?? 'local'}
-                      onChange={(e) =>
-                        setSourceOverrides((prev) => ({
-                          ...prev,
-                          [i]: e.target.value as CollectionSource,
-                        }))
-                      }
-                      className="rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary focus:border-th-border-strong focus:outline-none"
-                    >
-                      {SOURCES.map((src) => (
-                        <option key={src} value={src}>
-                          {SOURCE_LABELS[src]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="shrink-0 flex gap-1.5">
+                  {availableSources.map((src) => {
+                    const active = (sourceOverrides[i] ?? 'local') === src
+                    return (
+                      <button
+                        key={src}
+                        onClick={() => setSourceOverrides((prev) => ({ ...prev, [i]: src }))}
+                        title={SOURCE_LABELS[src]}
+                        className={cn(
+                          'flex flex-col items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors',
+                          active
+                            ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                            : 'border-th-border bg-th-surface text-th-text-subtle hover:border-th-border-strong hover:bg-th-surface-raised hover:text-th-text-secondary',
+                        )}
+                      >
+                        {SOURCE_ICONS[src]}
+                        <span>{SOURCE_LABELS[src]}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ))}
