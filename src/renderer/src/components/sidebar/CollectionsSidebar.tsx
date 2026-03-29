@@ -1,11 +1,10 @@
-import { Check, Globe, Layers, Plus, Settings, X, Link, Download, Upload } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import { Globe, Layers, Settings, Link, Download, Upload } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import type { DragEndEvent } from '@dnd-kit/core'
+import type { DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
-import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
 import { useEnvironmentsStore } from '@/store/environments'
@@ -114,43 +113,18 @@ export function CollectionsSidebar() {
   const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
   const { integrations, load: loadIntegrations } = useIntegrationsStore()
   const { load: loadEnvironments } = useEnvironmentsStore()
-  const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
   const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
 
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   useEffect(() => {
     load()
     loadIntegrations()
     loadEnvironments()
   }, [load, loadIntegrations, loadEnvironments])
-
-  useEffect(() => {
-    if (creating) inputRef.current?.focus()
-  }, [creating])
-
-  const startCreating = () => { setNewName(''); setCreating(true) }
-  const cancelCreating = () => { setCreating(false); setNewName('') }
-
-  const confirmCreate = async () => {
-    const name = newName.trim()
-    if (!name) { cancelCreating(); return }
-    setCreating(false); setNewName('')
-    const { error } = await window.api.collections.create({ name, source: 'local' })
-    if (error) addToast('Failed to create collection', 'error')
-    else { addToast(`Collection "${name}" created`, 'success'); load() }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') confirmCreate()
-    if (e.key === 'Escape') cancelCreating()
-  }
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
@@ -188,9 +162,10 @@ export function CollectionsSidebar() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragStart={({ active }) => setDragActiveId(String(active.id))}
-          onDragEnd={(event) => { setDragActiveId(null); handleDragEnd(event) }}
-          onDragCancel={() => setDragActiveId(null)}
+          onDragStart={({ active }) => { setDragActiveId(String(active.id)); setDragOverId(null) }}
+          onDragOver={({ over }: DragOverEvent) => setDragOverId(over ? String(over.id) : null)}
+          onDragEnd={(event) => { setDragActiveId(null); setDragOverId(null); handleDragEnd(event) }}
+          onDragCancel={() => { setDragActiveId(null); setDragOverId(null) }}
         >
         <>
           <div className="shrink-0 p-2">
@@ -206,6 +181,8 @@ export function CollectionsSidebar() {
               groups={groups}
               requests={requests}
               searchQuery={searchQuery}
+              dragActiveId={dragActiveId}
+              dragOverId={dragOverId}
             />
 
             {integrations.map((integration) => (
@@ -217,28 +194,10 @@ export function CollectionsSidebar() {
                 groups={groups}
                 requests={requests}
                 searchQuery={searchQuery}
+                dragActiveId={dragActiveId}
+                dragOverId={dragOverId}
               />
             ))}
-
-            {/* Inline new-collection input */}
-            {creating && (
-              <div className="mx-2 mt-1 flex items-center gap-1 rounded-md border border-blue-500/50 bg-th-surface px-2 py-1">
-                <input
-                  ref={inputRef}
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Collection name…"
-                  className="flex-1 bg-transparent text-sm text-th-text-primary placeholder-th-text-subtle outline-none"
-                />
-                <button onClick={confirmCreate} className="text-green-400 hover:text-green-300">
-                  <Check className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={cancelCreating} className="text-th-text-subtle hover:text-th-text-secondary">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
 
             {/* Connect source row — lives in the tree so context is clear */}
             <div className="mx-2 mt-2 mb-1">
@@ -259,11 +218,7 @@ export function CollectionsSidebar() {
 
           {/* APIs footer — always visible */}
           <div className="shrink-0 border-t border-th-border">
-            <div className="flex items-center gap-1 px-2 py-2">
-              <Button variant="ghost" size="sm" className="flex-1 justify-start gap-1.5 text-th-text-muted" onClick={startCreating}>
-                <Plus className="h-3.5 w-3.5" />
-                New Collection
-              </Button>
+            <div className="flex items-center justify-end gap-1 px-2 py-2">
               <button
                 onClick={() => selectItem('export-page', '')}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"

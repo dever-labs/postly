@@ -14,10 +14,10 @@ import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
 const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
-  local: <FolderOpen className="h-4 w-4" />,
-  backstage: <Database className="h-4 w-4" />,
-  github: <GitFork className="h-4 w-4" />,
-  gitlab: <GitBranch className="h-4 w-4" />,
+  local: <FolderOpen className="h-3.5 w-3.5" />,
+  backstage: <Database className="h-3.5 w-3.5" />,
+  github: <GitFork className="h-3.5 w-3.5" />,
+  gitlab: <GitBranch className="h-3.5 w-3.5" />,
 }
 
 function capitalize(s: string) {
@@ -31,6 +31,8 @@ interface GroupSectionProps {
   groups: Group[]
   requests: Request[]
   searchQuery: string
+  dragActiveId?: string | null
+  dragOverId?: string | null
 }
 
 // ─── Inline input helper ──────────────────────────────────────────────────────
@@ -195,12 +197,15 @@ interface SortableGroupRowProps {
   onDeleteRequest: (reqId: string) => void
   onClickRequest: (req: Request) => void
   activeRequestId: string | null
+  dragActiveId?: string | null
+  dragOverId?: string | null
 }
 
 function SortableGroupRow({
   group, requests, searchQuery, renamingGroup, groupMenuOpen, selectedItem,
   onRenameConfirm, onRenameCancel, onSelect, onAddRequest, onMenuToggle,
   onMenuClose, onRenameStart, onDelete, onAiGroup, onDeleteRequest, onClickRequest, activeRequestId,
+  dragActiveId, dragOverId,
 }: SortableGroupRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `grp:${group.id}` })
   const grpStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
@@ -212,6 +217,33 @@ function SortableGroupRow({
     })
     .sort((a, b) => a.sortOrder - b.sortOrder)
   if (searchQuery && filteredReqs.length === 0) return null
+
+  // Determine if a foreign request is being dragged over this group
+  const activeReqId = dragActiveId?.startsWith('req:') ? dragActiveId.slice(4) : null
+  const activeReq = activeReqId ? requests.find((r) => r.id === activeReqId) : null
+  const isExternalReqDrag = !!activeReq && activeReq.groupId !== group.id
+  const overIsThisGroup = dragOverId === `grp:${group.id}` ||
+    filteredReqs.some((r) => dragOverId === `req:${r.id}`)
+  const isGroupDropTarget = isExternalReqDrag && overIsThisGroup
+
+  // Compute insertion line positions for within-same-group reorder
+  const overReqId = dragOverId?.startsWith('req:') ? dragOverId.slice(4) : null
+  const isSameGroupDrag = !!activeReqId && activeReq?.groupId === group.id
+  let insertLineAboveId: string | null = null
+  let insertLineBelowId: string | null = null
+  if (isSameGroupDrag && overReqId) {
+    const activeIdx = filteredReqs.findIndex((r) => r.id === activeReqId)
+    const overIdx = filteredReqs.findIndex((r) => r.id === overReqId)
+    if (activeIdx !== -1 && overIdx !== -1 && activeIdx !== overIdx) {
+      if (activeIdx < overIdx) {
+        // dragging down — line appears below the over item
+        insertLineBelowId = overReqId
+      } else {
+        // dragging up — line appears above the over item
+        insertLineAboveId = overReqId
+      }
+    }
+  }
 
   return (
     <div ref={setNodeRef} style={grpStyle}>
@@ -290,7 +322,7 @@ function SortableGroupRow({
         )}
 
         <Collapsible.Content>
-          <div className="pl-1">
+          <div className={cn('pl-1 rounded transition-colors', isGroupDropTarget && 'ring-1 ring-blue-500/40 bg-blue-500/5')}>
             {filteredReqs.length === 0 && !searchQuery && (
               <div className="mx-2 my-1.5 rounded border border-dashed border-th-border px-2 py-2 text-center">
                 <p className="text-xs text-th-text-faint">No endpoints defined</p>
@@ -304,6 +336,7 @@ function SortableGroupRow({
                   dndId={`req:${req.id}`}
                   request={req}
                   isActive={req.id === activeRequestId && !selectedItem}
+                  insertLine={insertLineAboveId === req.id ? 'above' : insertLineBelowId === req.id ? 'below' : null}
                   onClick={() => onClickRequest(req)}
                   onDelete={() => onDeleteRequest(req.id)}
                 />
@@ -318,11 +351,12 @@ function SortableGroupRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GroupSection({ source, integration, collections, groups, requests, searchQuery }: GroupSectionProps) {
+export function GroupSection({ source, integration, collections, groups, requests, searchQuery, dragActiveId, dragOverId }: GroupSectionProps) {
   const [sourceOpen, setSourceOpen] = useState(true)
   const [openCollections, setOpenCollections] = useState<Set<string>>(new Set())
   const [addingGroupTo, setAddingGroupTo] = useState<string | null>(null)
   const [renamingCollection, setRenamingCollection] = useState<string | null>(null)
+  const [addingCollection, setAddingCollection] = useState(false)
 
   const {
     toggleSourceHidden,
@@ -335,7 +369,9 @@ export function GroupSection({ source, integration, collections, groups, request
     createLocalRequest,
     deleteGroup,
     renameGroup,
+    load,
   } = useCollectionsStore()
+  const addToast = useUIStore((s) => s.addToast)
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
@@ -396,6 +432,13 @@ export function GroupSection({ source, integration, collections, groups, request
               </button>
             )}
             <button
+              onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
+              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
+              title="Add collection"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <button
               onClick={() => selectItem('edit-integration', integration.id)}
               className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
               title="Edit integration"
@@ -404,22 +447,31 @@ export function GroupSection({ source, integration, collections, groups, request
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => toggleSourceHidden(source)}
-            className="rounded p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-none"
-            title={isSourceHidden ? 'Show source' : 'Hide source'}
-          >
-            {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
+              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
+              title="Add collection"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => toggleSourceHidden(source)}
+              className="rounded p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-none"
+              title={isSourceHidden ? 'Show source' : 'Hide source'}
+            >
+              {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         )}
       </div>
 
       <Collapsible.Content>
         <div className={cn(isSourceHidden && 'opacity-40')}>
-          {sourceCollections.length === 0 && (
+          {sourceCollections.length === 0 && !addingCollection && (
             <div className="mx-3 my-2 rounded border border-dashed border-th-border px-3 py-3 text-center">
               <p className="text-xs text-th-text-faint">No collections yet</p>
-              <p className="mt-0.5 text-xs text-th-text-muted">Create one with the + button above</p>
+              <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
             </div>
           )}
           <SortableContext items={sourceCollections.map((c) => `col:${c.id}`)} strategy={verticalListSortingStrategy}>
@@ -467,6 +519,8 @@ export function GroupSection({ source, integration, collections, groups, request
                           groupMenuOpen={groupMenuOpen}
                           selectedItem={selectedItem}
                           activeRequestId={activeRequestId}
+                          dragActiveId={dragActiveId}
+                          dragOverId={dragOverId}
                           onRenameConfirm={(name) => { renameGroup(group.id, name); setRenamingGroup(null) }}
                           onRenameCancel={() => setRenamingGroup(null)}
                           onSelect={() => selectItem('group', group.id)}
@@ -503,6 +557,22 @@ export function GroupSection({ source, integration, collections, groups, request
             )
           })}
           </SortableContext>
+
+          {addingCollection && (
+            <InlineInput
+              placeholder="Collection name…"
+              onConfirm={async (name) => {
+                setAddingCollection(false)
+                const payload: { name: string; source: string; integrationId?: string } = { name, source }
+                if (integration) payload.integrationId = integration.id
+                const { error } = await window.api.collections.create(payload)
+                if (error) addToast('Failed to create collection', 'error')
+                else load()
+              }}
+              onCancel={() => setAddingCollection(false)}
+              indent="pl-2"
+            />
+          )}
         </div>
       </Collapsible.Content>
     </Collapsible.Root>

@@ -31,9 +31,10 @@ interface RequestTreeItemProps {
   onClick: () => void
   onDelete: () => void
   dndId: string
+  insertLine?: 'above' | 'below' | null
 }
 
-export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }: RequestTreeItemProps) {
+export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, insertLine }: RequestTreeItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameValue, setNameValue] = useState(request.name)
@@ -50,9 +51,11 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }:
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
+    <div className="relative">
+      {insertLine === 'above' && <div className="mx-1 h-0.5 rounded bg-blue-500" />}
+      <div
+        ref={setNodeRef}
+        style={style}
       className={cn(
         'group relative flex items-center gap-1 px-2 py-0.5 text-sm cursor-pointer rounded',
         isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
@@ -128,6 +131,8 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId }:
           </div>
         </>
       )}
+      </div>
+      {insertLine === 'below' && <div className="mx-1 h-0.5 rounded bg-blue-500" />}
     </div>
   )
 }
