@@ -205,10 +205,12 @@ function SortableGroupRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `grp:${group.id}` })
   const grpStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
-  const filteredReqs = requests.filter((r) => {
-    const q = searchQuery.toLowerCase()
-    return r.groupId === group.id && (!q || r.name.toLowerCase().includes(q) || r.url.toLowerCase().includes(q))
-  })
+  const filteredReqs = requests
+    .filter((r) => {
+      const q = searchQuery.toLowerCase()
+      return r.groupId === group.id && (!q || r.name.toLowerCase().includes(q) || r.url.toLowerCase().includes(q))
+    })
+    .sort((a, b) => a.sortOrder - b.sortOrder)
   if (searchQuery && filteredReqs.length === 0) return null
 
   return (
@@ -422,7 +424,9 @@ export function GroupSection({ source, integration, collections, groups, request
           )}
           <SortableContext items={sourceCollections.map((c) => `col:${c.id}`)} strategy={verticalListSortingStrategy}>
           {sourceCollections.map((collection) => {
-            const collectionGroups = groups.filter((g) => g.collectionId === collection.id)
+            const collectionGroups = groups
+              .filter((g) => g.collectionId === collection.id)
+              .sort((a, b) => a.sortOrder - b.sortOrder)
             const isOpen = openCollections.has(collection.id)
 
             return (
