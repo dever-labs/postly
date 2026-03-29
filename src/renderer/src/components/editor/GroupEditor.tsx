@@ -100,8 +100,8 @@ export function GroupEditor({ groupId }: Props) {
   const mark = () => setIsDirty(true)
 
   return (
-    <div className="relative h-full overflow-y-auto bg-th-bg">
-      <div className="mx-auto max-w-2xl px-8 py-8 flex flex-col gap-8 pb-24">
+    <div className="bg-th-bg w-full">
+      <div className="px-8 py-8 flex flex-col gap-8 pb-4">
 
         {/* Title with breadcrumb */}
         <div>
@@ -176,7 +176,7 @@ export function GroupEditor({ groupId }: Props) {
 
       {/* Sticky save bar */}
       {isDirty && (
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-sm">
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-sm">
           <button
             onClick={discard}
             className="rounded px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-none"
