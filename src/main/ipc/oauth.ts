@@ -41,7 +41,8 @@ export function registerOAuthHandlers(): void {
         [id, args.name, args.grantType, args.clientId, args.clientSecret ?? null, args.authUrl ?? null,
          args.tokenUrl, args.scopes ?? '', args.redirectUri ?? 'http://localhost:9876/callback', now, now]
       )
-      return { data: rowToConfig(queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])!) }
+      const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])
+      return { data: row ? rowToConfig(row) : null }
     } catch (err) { return { error: String(err) } }
   })
 

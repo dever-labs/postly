@@ -33,22 +33,22 @@ export function registerHttpHandlers(): void {
       const shouldInherit = (t: string) => t === 'inherit' || !t
 
       if (shouldInherit(resolvedAuthType) && req.groupId) {
-        const group = queryOne<any>('SELECT * FROM groups WHERE id = ?', [req.groupId])
-        if (group?.auth_type && !shouldInherit(group.auth_type)) {
-          resolvedAuthType = group.auth_type
-          resolvedAuthConfig = safeParseJSON(group.auth_config, {})
+        const group = queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
+        if (group?.auth_type && !shouldInherit(group.auth_type as string)) {
+          resolvedAuthType = group.auth_type as string
+          resolvedAuthConfig = safeParseJSON(group.auth_config as string, {})
         } else {
           const collection = group?.collection_id
-            ? queryOne<any>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
+            ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
             : null
-          if (collection?.auth_type && !shouldInherit(collection.auth_type)) {
-            resolvedAuthType = collection.auth_type
-            resolvedAuthConfig = safeParseJSON(collection.auth_config, {})
+          if (collection?.auth_type && !shouldInherit(collection.auth_type as string)) {
+            resolvedAuthType = collection.auth_type as string
+            resolvedAuthConfig = safeParseJSON(collection.auth_config as string, {})
           } else if (collection?.integration_id) {
-            const integration = queryOne<any>('SELECT * FROM integrations WHERE id = ?', [collection.integration_id])
+            const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [collection.integration_id])
             if (integration?.token) {
               resolvedAuthType = 'bearer'
-              resolvedAuthConfig = { token: integration.token }
+              resolvedAuthConfig = { token: integration.token as string }
             }
           }
         }
@@ -114,15 +114,15 @@ export function registerHttpHandlers(): void {
       const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
       let resolvedSsl: string | undefined = req.sslVerification
       if (shouldInheritSsl(resolvedSsl) && req.groupId) {
-        const group = queryOne<any>('SELECT * FROM groups WHERE id = ?', [req.groupId])
-        if (group?.ssl_verification && !shouldInheritSsl(group.ssl_verification)) {
-          resolvedSsl = group.ssl_verification
+        const group = queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
+        if (group?.ssl_verification && !shouldInheritSsl(group.ssl_verification as string)) {
+          resolvedSsl = group.ssl_verification as string
         } else {
           const collection = group?.collection_id
-            ? queryOne<any>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
+            ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
             : null
-          if (collection?.ssl_verification && !shouldInheritSsl(collection.ssl_verification)) {
-            resolvedSsl = collection.ssl_verification
+          if (collection?.ssl_verification && !shouldInheritSsl(collection.ssl_verification as string)) {
+            resolvedSsl = collection.ssl_verification as string
           }
         }
       }

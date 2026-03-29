@@ -19,7 +19,7 @@ function createWindow(): void {
   })
 
   if (!app.isPackaged) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL']!)
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173')
     win.webContents.openDevTools()
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))

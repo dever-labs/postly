@@ -31,11 +31,11 @@ export async function loadProtoContent(protoContent: string): Promise<GrpcServic
 
     const result: GrpcServiceInfo = {}
     for (const [fqName, def] of Object.entries(packageDef)) {
-      const svcDef = def as any
+      const svcDef = def as Record<string, unknown>
       if (svcDef && typeof svcDef === 'object' && !Array.isArray(svcDef)) {
         const methods: GrpcServiceMethod[] = []
         for (const [methodName, methodDef] of Object.entries(svcDef)) {
-          const md = methodDef as any
+          const md = methodDef as Record<string, unknown>
           if (md?.requestStream !== undefined) {
             methods.push({
               name: methodName,
@@ -87,9 +87,9 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
 
     // Navigate to the service constructor
     const parts = params.serviceName.split('.')
-    let svcCtor: any = grpcObj
+    let svcCtor: unknown = grpcObj
     for (const part of parts) {
-      svcCtor = svcCtor?.[part]
+      svcCtor = (svcCtor as Record<string, unknown>)?.[part]
     }
     if (!svcCtor || typeof svcCtor !== 'function') {
       return { error: `Service "${params.serviceName}" not found in proto`, duration: Date.now() - start }
@@ -99,7 +99,8 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
       ? grpc.credentials.createSsl()
       : grpc.credentials.createInsecure()
 
-    const client = new svcCtor(params.serverUrl, creds)
+    type GrpcClientCtor = new (url: string, creds: grpc.ChannelCredentials) => grpc.Client
+    const client = new (svcCtor as GrpcClientCtor)(params.serverUrl, creds)
 
     const meta = new grpc.Metadata()
     for (const [k, v] of Object.entries(params.metadata)) {
