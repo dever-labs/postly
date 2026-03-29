@@ -123,7 +123,10 @@
     "backstage",
     "postman"
   ],
-  "author": "Dever Labs",
+  "author": {
+    "name": "Dever Labs",
+    "email": "opensource@dever-labs.com"
+  },
   "license": "MIT",
   "type": "commonjs",
   "bugs": {
