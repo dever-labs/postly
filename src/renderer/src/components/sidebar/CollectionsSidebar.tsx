@@ -158,8 +158,8 @@ export function CollectionsSidebar() {
               <button
                 onClick={async () => {
                   const { data, error } = await window.api.exportImport.export()
-                  if (error) { addToast({ type: 'error', message: `Export failed: ${error}` }); return }
-                  if (data) addToast({ type: 'success', message: `Exported ${data.count} collection${data.count !== 1 ? 's' : ''}` })
+                  if (error) { addToast(`Export failed: ${error}`, 'error'); return }
+                  if (data) addToast(`Exported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
                 }}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Export collections to file"
@@ -169,8 +169,8 @@ export function CollectionsSidebar() {
               <button
                 onClick={async () => {
                   const { data, error } = await window.api.exportImport.import()
-                  if (error) { addToast({ type: 'error', message: `Import failed: ${error}` }); return }
-                  if (data) { await load(); addToast({ type: 'success', message: `Imported ${data.count} collection${data.count !== 1 ? 's' : ''}` }) }
+                  if (error) { addToast(`Import failed: ${error}`, 'error'); return }
+                  if (data) { await load(); addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success') }
                 }}
                 className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
                 title="Import collections from file"
