@@ -42,7 +42,11 @@ html, body {
   color: var(--color-text-primary);
 }
 
-/* Subtle inner blur for depth on panels */
+/* Window drag regions for frameless window */
+.drag-region    { -webkit-app-region: drag; }
+.no-drag        { -webkit-app-region: no-drag; }
+
+
 #root {
   min-height: 100vh;
 }

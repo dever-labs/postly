@@ -9,14 +9,19 @@ function createWindow(): void {
   const iconFile = platform === 'win32' ? 'icon.ico' : 'icon.png'
   const icon = nativeImage.createFromPath(join(__dirname, '../../resources', iconFile))
 
+  // titleBarOverlay adds native Win32 caption buttons (close/min/max) in the
+  // top-right corner while keeping our custom title bar look everywhere else.
+  // Height matches the sidebar tab strip (~44px).
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#030712',
-    // 'hiddenInset' is macOS-only; use 'hidden' on Windows/Linux
     titleBarStyle: platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(platform === 'win32' && {
+      titleBarOverlay: { color: '#030712', symbolColor: '#d1d5db', height: 44 },
+    }),
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
