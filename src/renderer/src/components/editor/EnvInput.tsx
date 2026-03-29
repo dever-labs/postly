@@ -65,7 +65,7 @@ function computeHitZones(value: string, input: HTMLInputElement): TokenHitZone[]
 
 // ─── Overlay style sync ───────────────────────────────────────────────────────
 
-function buildOverlayStyle(input: HTMLInputElement, scrollLeft: number): React.CSSProperties {
+function buildOverlayStyle(input: HTMLInputElement, scrollLeft: number, color: string): React.CSSProperties {
   const s = getComputedStyle(input)
   return {
     fontFamily: s.fontFamily,
@@ -73,7 +73,7 @@ function buildOverlayStyle(input: HTMLInputElement, scrollLeft: number): React.C
     fontWeight: s.fontWeight,
     letterSpacing: s.letterSpacing,
     lineHeight: s.lineHeight,
-    color: s.color,                  // inherit the input's text color for plain segments
+    color,                           // use the pre-captured color, not s.color (which is now transparent)
     paddingLeft: `calc(${s.paddingLeft} + ${s.borderLeftWidth})`,
     paddingRight: `calc(${s.paddingRight} + ${s.borderRightWidth})`,
     paddingTop: `calc(${s.paddingTop} + ${s.borderTopWidth})`,
@@ -95,6 +95,7 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
+  const baseColorRef = useRef<string>('')   // captured before we set color:transparent
   const ac = useEnvAutocomplete()
   const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
   const vars = useEnvironmentsStore((s) => s.vars)
@@ -107,10 +108,17 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const hasVars = /\{\{[^}]+\}\}/.test(value)
   const segments = hasVars ? parseSegments(value, activeVars) : null
 
+  // Capture the real text color once on mount, before we ever set color:transparent
+  useLayoutEffect(() => {
+    if (inputRef.current) {
+      baseColorRef.current = getComputedStyle(inputRef.current).color
+    }
+  }, [])
+
   // Sync overlay font/padding from the input after mount and on value change
   useLayoutEffect(() => {
     if (!inputRef.current || !hasVars) return
-    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft))
+    setOverlayStyle(buildOverlayStyle(inputRef.current, inputRef.current.scrollLeft, baseColorRef.current))
   }, [hasVars, value])
 
   // Recompute hover hit zones whenever value changes
@@ -130,7 +138,6 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
     if (overlayRef.current) overlayRef.current.style.transform = `translateX(-${sl}px)`
     recalcHitZones()
   }
-
   // ─── Input handlers ─────────────────────────────────────────────────────────
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
