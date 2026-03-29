@@ -7,6 +7,7 @@ import { ResponseViewer } from '@/components/response/ResponseViewer'
 import { EnvironmentEditor } from '@/components/environments/EnvironmentEditor'
 import { ResizablePanel } from '@/components/layout/ResizablePanel'
 import { AiChatPanel } from '@/components/ai/AiChatPanel'
+import { IntegrationEditPage } from '@/components/integrations/IntegrationEditPage'
 import { IntegrationSetupPage } from '@/components/integrations/IntegrationSetupPage'
 import { ExportPage } from '@/components/export-import/ExportPage'
 import { ImportPage } from '@/components/export-import/ImportPage'
@@ -97,6 +98,10 @@ export function AppShell() {
         ) : selectedItem?.type === 'add-integration' ? (
           <div className="no-drag flex flex-1 overflow-hidden">
             <IntegrationSetupPage />
+          </div>
+        ) : selectedItem?.type === 'edit-integration' ? (
+          <div className="no-drag flex flex-1 overflow-hidden">
+            <IntegrationEditPage integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'export-page' ? (
           <div className="no-drag flex flex-1 overflow-hidden">

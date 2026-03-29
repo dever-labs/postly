@@ -248,7 +248,7 @@ export function GroupSection({ source, integration, collections, groups, request
               </button>
             )}
             <button
-              onClick={() => setEditDialogOpen(true)}
+              onClick={() => selectItem('edit-integration', integration.id)}
               className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
               title="Edit integration"
             >
