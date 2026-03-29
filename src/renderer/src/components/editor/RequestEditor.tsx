@@ -1,5 +1,5 @@
 import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useMemo } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
@@ -58,8 +58,7 @@ export function RequestEditor() {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const selectItem = useUIStore((s) => s.selectItem)
 
-  const [editingTitle, setEditingTitle] = useState(false)
-  const titleInputRef = useRef<HTMLInputElement>(null)
+  // no per-request title state needed — input is always rendered
 
   const breadcrumb = useMemo(() => {
     if (!editingRequest) return null
@@ -134,26 +133,12 @@ export function RequestEditor() {
             )}
           </div>
         )}
-        {editingTitle ? (
-          <input
-            ref={titleInputRef}
-            className="no-drag -mx-1.5 rounded-md border border-th-border-strong bg-th-surface px-1.5 py-0.5 text-sm font-medium text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
-            placeholder="Request name"
-            value={editingRequest.name}
-            onChange={(e) => updateField('name', e.target.value)}
-            onBlur={() => setEditingTitle(false)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.currentTarget.blur() } }}
-            autoFocus
-          />
-        ) : (
-          <div
-            onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-            className="no-drag -mx-1.5 cursor-text rounded-md px-1.5 py-0.5 text-sm font-medium text-th-text-primary hover:bg-th-surface-hover transition-colors"
-            title="Click to rename"
-          >
-            {editingRequest.name || <span className="text-th-text-faint">Request name</span>}
-          </div>
-        )}
+        <input
+          className="no-drag -mx-1.5 cursor-text rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-th-text-primary placeholder:text-th-text-faint outline-none transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
+          placeholder="Request name"
+          value={editingRequest.name}
+          onChange={(e) => updateField('name', e.target.value)}
+        />
       </div>
 
       {/* Protocol selector + URL bar */}

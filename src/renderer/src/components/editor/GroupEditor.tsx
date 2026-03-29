@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
@@ -53,8 +53,6 @@ export function GroupEditor({ groupId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editingTitle, setEditingTitle] = useState(false)
-  const titleInputRef = useRef<HTMLInputElement>(null)
 
   const collection = group ? collections.find((c) => c.id === group.collectionId) : null
 
@@ -131,26 +129,12 @@ export function GroupEditor({ groupId }: Props) {
               {name || 'Group'}
             </span>
           </div>
-          {editingTitle ? (
-            <input
-              ref={titleInputRef}
-              className="-mx-2 w-full rounded-md border border-th-border-strong bg-th-surface px-2 py-1 text-2xl font-semibold text-th-text-primary focus:outline-none placeholder:text-th-text-faint"
-              placeholder="Group name"
-              value={name}
-              onChange={(e) => { setName(e.target.value); mark() }}
-              onBlur={() => setEditingTitle(false)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.currentTarget.blur() } }}
-              autoFocus
-            />
-          ) : (
-            <div
-              onClick={() => { setEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0) }}
-              className="-mx-2 cursor-text rounded-md px-2 py-1 text-2xl font-semibold text-th-text-primary hover:bg-th-surface-hover transition-colors"
-              title="Click to rename"
-            >
-              {name || <span className="text-th-text-faint">Group name</span>}
-            </div>
-          )}
+          <input
+            className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-none transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
+            placeholder="Group name"
+            value={name}
+            onChange={(e) => { setName(e.target.value); mark() }}
+          />
           <p className="mt-1 text-xs text-th-text-faint">Group</p>
           <AiActionButton
             className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
