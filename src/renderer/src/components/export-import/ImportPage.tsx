@@ -114,19 +114,19 @@ export function ImportPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="drag-region flex items-start justify-between px-8 pt-8 pb-4">
-        <div className="no-drag flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-sm text-th-text-subtle">
-            <FileJson className="h-4 w-4" />
+      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 py-4">
+        <div className="no-drag flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
+            <FileJson className="h-3.5 w-3.5" />
             Import Collections
           </div>
-          <h1 className="text-lg font-semibold text-th-text-primary">
+          <h1 className="text-sm font-semibold text-th-text-primary">
             {parsedFile ? 'Configure import sources' : 'Choose a file to import'}
           </h1>
         </div>
         <button
           onClick={clearSelectedItem}
-          className="no-drag mt-1 rounded p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
+          className="no-drag rounded p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
         >
           <X className="h-4 w-4" />
         </button>

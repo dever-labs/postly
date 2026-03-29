@@ -102,7 +102,7 @@ export function GroupEditor({ groupId }: Props) {
 
   return (
     <div className="bg-th-bg w-full">
-      <div className="drag-region px-8 py-8 flex flex-col gap-8 pb-4">
+      <div className="drag-region px-8 pt-6 pb-4 flex flex-col gap-6 border-b border-th-border">
 
         {/* Title with breadcrumb */}
         <div className="no-drag">

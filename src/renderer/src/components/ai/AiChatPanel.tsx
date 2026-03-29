@@ -158,13 +158,13 @@ export function AiChatPanel({ context, groupId }: Props) {
   return (
     <div className="flex h-full w-full flex-col bg-th-bg">
       {/* Header */}
-      <div className="shrink-0 border-b border-th-border py-6">
-        <div className="mx-auto w-full max-w-3xl px-8">
-          <div className="flex items-center gap-2.5 mb-1">
-            <Sparkles className="h-5 w-5 text-blue-400" />
-            <h1 className="text-xl font-semibold text-th-text-primary">AI Assistant</h1>
+      <div className="drag-region flex shrink-0 items-center border-b border-th-border px-6 py-4">
+        <div className="no-drag">
+          <div className="flex items-center gap-2 mb-0.5">
+            <Sparkles className="h-4 w-4 text-blue-400" />
+            <h1 className="text-sm font-semibold text-th-text-primary">AI Assistant</h1>
           </div>
-          <p className="text-sm text-th-text-muted flex items-center gap-1.5 flex-wrap">
+          <p className="text-xs text-th-text-muted flex items-center gap-1.5 flex-wrap">
             <span>{context.type === 'request' ? '🔍 Reviewing' : '✨ Building'}</span>
             {context.collectionName && (
               <>
