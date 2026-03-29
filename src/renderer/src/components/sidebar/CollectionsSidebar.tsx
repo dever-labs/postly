@@ -17,6 +17,9 @@ export function CollectionsSidebar() {
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
   const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
+
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
