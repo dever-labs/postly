@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HttpRequest, HttpResponse, KeyValuePair, Request } from '../types'
+import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { useCollectionsStore } from './collections'
 
 interface RequestsState {
@@ -19,25 +20,6 @@ const DIRTY_FIELDS = new Set<keyof Request>([
   'bodyType', 'bodyContent', 'authType', 'authConfig', 'description',
   'sslVerification', 'protocol', 'protocolConfig',
 ])
-
-function kvpToRecord(pairs: KeyValuePair[]): Record<string, string> {
-  return pairs
-    .filter((p) => p.enabled && p.key.trim() !== '')
-    .reduce<Record<string, string>>((acc, p) => {
-      acc[p.key] = p.value
-      return acc
-    }, {})
-}
-
-function serializeRequest(req: Request): Record<string, unknown> {
-  return {
-    ...req,
-    params: JSON.stringify(req.params),
-    headers: JSON.stringify(req.headers),
-    authConfig: JSON.stringify(req.authConfig),
-    protocolConfig: JSON.stringify(req.protocolConfig),
-  }
-}
 
 export const useRequestsStore = create<RequestsState>((set, get) => ({
   activeRequestId: null,

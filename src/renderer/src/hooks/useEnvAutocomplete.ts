@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useEnvironmentsStore } from '@/store/environments'
+import { detectEnvPattern, completeEnvVar } from '@/lib/envAutocomplete'
 import type { EnvVar } from '@/types'
 
 export interface EnvAutocompleteState {
@@ -27,10 +28,9 @@ export function useEnvAutocomplete(): EnvAutocompleteState {
   )
 
   const detect = useCallback((value: string, cursorPos: number) => {
-    const beforeCursor = value.slice(0, cursorPos)
-    const match = beforeCursor.match(/\{\{([^}]*)$/)
-    if (match) {
-      setSearch(match[1])
+    const partial = detectEnvPattern(value, cursorPos)
+    if (partial !== null) {
+      setSearch(partial)
       setShow(true)
       setSelectedIndex(0)
     } else {
@@ -41,23 +41,10 @@ export function useEnvAutocomplete(): EnvAutocompleteState {
 
   const complete = useCallback(
     (value: string, cursorPos: number, key: string) => {
-      const beforeCursor = value.slice(0, cursorPos)
-      const openBrace = beforeCursor.lastIndexOf('{{')
-      if (openBrace === -1) return { newValue: value, newCursorPos: cursorPos }
-
-      const afterCursorRaw = value.slice(cursorPos)
-      // Only consume trailing word chars if they are immediately closed by }}.
-      // This handles editing inside an existing {{key}} without eating unrelated text.
-      const trailingClose = afterCursorRaw.match(/^(\w*)(\}\})/)
-      const afterCursor = trailingClose
-        ? afterCursorRaw.slice(trailingClose[0].length)
-        : afterCursorRaw
-
-      const newValue = value.slice(0, openBrace) + `{{${key}}}` + afterCursor
-      const newCursorPos = openBrace + key.length + 4
+      const result = completeEnvVar(value, cursorPos, key)
       setShow(false)
       setSearch('')
-      return { newValue, newCursorPos }
+      return result
     },
     []
   )
