@@ -107,7 +107,7 @@ export function RequestEditor() {
     <div className="flex h-full flex-col bg-th-bg">
       {/* Breadcrumb + request name — drag-region; pt-8 gives 32px drag
           target above content. Only interactive buttons are no-drag. */}
-      <div className="drag-region flex flex-col gap-1 border-b border-th-border px-4 pt-8 pb-3">
+      <div className="drag-region flex flex-col gap-2 border-b border-th-border px-4 pt-8 pb-3">
         {breadcrumb && (
           <div className="inline-flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />
