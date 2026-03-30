@@ -14,7 +14,7 @@ interface CollectionsState {
   setSearchQuery: (q: string) => void
   createGroup: (collectionId: string, name: string) => Promise<void>
   addRequestToCollection: (collectionId: string) => Promise<void>
-  deleteCollection: (id: string) => Promise<void>
+  deleteCollection: (id: string, commitMessage?: string) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
   markDirty: (requestId: string) => void
@@ -118,9 +118,9 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({ groups: [...state.groups, group] }))
   },
 
-  deleteCollection: async (id: string) => {
+  deleteCollection: async (id: string, commitMessage?: string) => {
     const api = window.api
-    const { error } = await api.collections.delete({ id })
+    const { error } = await api.collections.delete({ id, commitMessage })
     if (error) { console.error('Failed to delete collection:', error); return }
     set((state) => ({
       collections: state.collections.filter((c) => c.id !== id),

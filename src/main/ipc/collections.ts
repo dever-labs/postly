@@ -43,7 +43,7 @@ export function registerCollectionHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:collections:delete', async (_, args: { id: string }) => {
+  ipcMain.handle('postly:collections:delete', async (_, args: { id: string; commitMessage?: string }) => {
     try {
       const collection = queryOne<CollectionRow>('SELECT * FROM collections WHERE id = ?', [args.id])
       if (collection?.source === 'git' && collection.integration_id) {
@@ -59,7 +59,7 @@ export function registerCollectionHandlers(): void {
               integration.id,
               meta.fileName,
               integration.branch ?? 'main',
-              `Remove collection: ${collection.name}`
+              args.commitMessage ?? `Remove collection: ${collection.name}`
             )
           }
         } catch { /* git failure should not block DB deletion */ }
