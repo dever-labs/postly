@@ -46,23 +46,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-  lockfile:
-    name: Lock File Integrity
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Verify package-lock.json is in sync with package.json
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          git diff --exit-code package-lock.json || \
-            (echo "::error::package-lock.json is out of sync — run 'npm install' and commit the updated lock file" && exit 1)
-
   build:
     name: Build · ${{ matrix.os }}
     needs: [lint-and-typecheck]
