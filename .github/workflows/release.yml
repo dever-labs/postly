@@ -1,91 +1,21 @@
 name: Release
 
-# Windows code signing via SignPath Foundation (free for open source):
-#   1. Apply at https://signpath.org/apply
-#   2. Once approved, you get an org on app.signpath.io with a project + signing policy
-#   3. Add two repository secrets (Settings → Secrets → Actions):
-#        SIGNPATH_API_TOKEN  — from app.signpath.io → My Profile → API Tokens
-#        SIGNPATH_ORG_ID     — from app.signpath.io → Settings → Overview
-#   4. Update SIGNPATH_PROJECT_SLUG and SIGNPATH_POLICY_SLUG below to match
-#      the slugs created for you in app.signpath.io
-#
-# Until secrets are configured, the workflow falls back to unsigned builds.
-
 on:
   release:
     types: [published]
 
 permissions:
   contents: write
-  id-token: write   # required by SignPath trusted build system verification
-  actions: read     # required for SignPath to read job details
-
-env:
-  SIGNPATH_PROJECT_SLUG: postly
-  SIGNPATH_POLICY_SLUG: release-signing
 
 jobs:
-  # ── Windows: build unsigned → sign via SignPath Foundation → upload ────────
-  build-windows:
-    name: Build · Windows
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build (electron-vite)
-        run: npm run build
-
-      - name: Package (unsigned)
-        run: npx electron-builder --win --publish never
-
-      - name: Upload unsigned installer
-        id: unsigned-artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: unsigned-win
-          path: dist/*.exe
-
-      - name: Sign with SignPath Foundation
-        id: signing
-        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != '' }}
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
-          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-artifact.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: dist-signed/
-
-      - name: Upload signed installer to release
-        if: ${{ secrets.SIGNPATH_API_TOKEN != '' && secrets.SIGNPATH_ORG_ID != '' }}
-        run: gh release upload ${{ github.event.release.tag_name }} dist-signed/*.exe --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload unsigned installer to release (no signing secrets configured)
-        if: ${{ secrets.SIGNPATH_API_TOKEN == '' || secrets.SIGNPATH_ORG_ID == '' }}
-        run: gh release upload ${{ github.event.release.tag_name }} dist/*.exe --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── macOS & Linux ──────────────────────────────────────────────────────────
-  build-unix:
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
+          - os: windows-latest
+            platform: win
+            label: Windows
           - os: macos-latest
             platform: mac
             label: macOS
@@ -106,6 +36,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # Linux arm64 cross-compilation requires additional tools
       - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -125,6 +56,8 @@ jobs:
 
       - name: Package and publish
         env:
+          # electron-builder uses GH_TOKEN to upload assets to the release
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing — set CSC_LINK / CSC_KEY_PASSWORD for signed builds
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-builder --${{ matrix.platform }} --publish always
