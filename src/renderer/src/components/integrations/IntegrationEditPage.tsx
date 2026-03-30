@@ -140,7 +140,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
     <div className="flex h-full w-full flex-col overflow-y-auto bg-th-bg">
       <div className="drag-region flex items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag">
-          <h1 className="text-sm font-semibold text-th-text-primary">Edit Integration</h1>
+          <h1 className="text-sm font-semibold text-th-text-primary">Edit Git Source</h1>
           <p className="text-xs text-th-text-subtle">{stepLabel}</p>
         </div>
       </div>

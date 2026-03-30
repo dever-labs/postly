@@ -9,6 +9,7 @@ import { ResizablePanel } from '@/components/layout/ResizablePanel'
 import { AiChatPanel } from '@/components/ai/AiChatPanel'
 import { IntegrationEditPage } from '@/components/integrations/IntegrationEditPage'
 import { IntegrationSetupPage } from '@/components/integrations/IntegrationSetupPage'
+import { GitSourceView } from '@/components/git/GitSourceView'
 import { ExportPage } from '@/components/export-import/ExportPage'
 import { ImportPage } from '@/components/export-import/ImportPage'
 import { useUIStore } from '@/store/ui'
@@ -110,6 +111,10 @@ export function AppShell() {
         ) : selectedItem?.type === 'import-page' ? (
           <div className="no-drag flex flex-1 overflow-hidden">
             <ImportPage />
+          </div>
+        ) : selectedItem?.type === 'git-source' ? (
+          <div className="no-drag flex flex-1 overflow-hidden">
+            <GitSourceView collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'collection' ? (
           <div className="no-drag min-h-0 flex-1 overflow-y-auto">

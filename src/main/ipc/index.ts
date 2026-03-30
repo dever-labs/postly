@@ -6,6 +6,7 @@ import { registerEnvironmentHandlers } from './environments'
 import { registerBackstageHandlers } from './backstage'
 import { registerGitHubHandlers } from './github'
 import { registerGitLabHandlers } from './gitlab'
+import { registerGitHandlers } from './git'
 import { registerSettingsHandlers } from './settings'
 import { registerIntegrationHandlers } from './integrations'
 import { registerWsHandlers } from './ws'
@@ -23,6 +24,7 @@ export function registerAllIpcHandlers(): void {
   registerBackstageHandlers()
   registerGitHubHandlers()
   registerGitLabHandlers()
+  registerGitHandlers()
   registerSettingsHandlers()
   registerIntegrationHandlers()
   registerWsHandlers()

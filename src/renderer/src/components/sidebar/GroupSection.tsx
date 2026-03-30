@@ -504,9 +504,16 @@ export function GroupSection({ source, integration, collections, groups, request
                     collection={collection}
                     open={isOpen}
                     dndId={`col:${collection.id}`}
-                    isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
+                    isActive={
+                      (selectedItem?.type === 'collection' || selectedItem?.type === 'git-source') &&
+                      selectedItem.id === collection.id
+                    }
                     onToggle={() => toggleCollection(collection.id)}
-                    onSelect={() => selectItem('collection', collection.id)}
+                    onSelect={() =>
+                      collection.source === 'github' || collection.source === 'gitlab'
+                        ? selectItem('git-source', collection.id)
+                        : selectItem('collection', collection.id)
+                    }
                     onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}

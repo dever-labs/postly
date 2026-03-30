@@ -143,6 +143,15 @@ const api = {
     deviceInit: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-init', data),
     devicePoll: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-poll', data),
   },
+  git: {
+    listBranches: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:branches:list', data),
+    createBranch: (data: { integrationId: string; newBranch: string; fromBranch: string }) => ipcRenderer.invoke('postly:git:branch:create', data),
+    switchBranch: (data: { integrationId: string; branch: string }) => ipcRenderer.invoke('postly:git:branch:switch', data),
+    sync: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:sync', data),
+    diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:git:diff', data),
+    commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string; content: string }) => ipcRenderer.invoke('postly:git:commit', data),
+    dirtyRequests: (data: { collectionId: string }) => ipcRenderer.invoke('postly:git:dirty-requests', data),
+  },
   ai: {
     chat: (data: { requestId: string; provider: string; apiKey: string; model: string; messages: unknown[] }) =>
       ipcRenderer.invoke('postly:ai:chat', data),

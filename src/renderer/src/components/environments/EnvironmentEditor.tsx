@@ -207,7 +207,7 @@ export function EnvironmentEditor() {
         <button
           onClick={handleSave}
           className={cn(
-            'mt-2 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
+            'mt-4 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
             saved
               ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
               : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
