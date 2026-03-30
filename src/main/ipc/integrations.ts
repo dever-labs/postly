@@ -60,10 +60,13 @@ export function registerIntegrationHandlers(): void {
       let token = '', connectedUserJson = ''
 
       if (type === 'git') {
-        // Uses system git credentials — just test connectivity with ls-remote
-        const { name } = await testConnectivity(integration.repo as string)
+        // Uses system git credentials — test connectivity and detect default branch
+        const { name, defaultBranch } = await testConnectivity(integration.repo as string)
         connectedUserJson = JSON.stringify({ name, avatarUrl: '' })
         token = ''
+        // Store the detected default branch so discoverAndImport uses the right one
+        run('UPDATE integrations SET branch = ?, updated_at = ? WHERE id = ?',
+          [defaultBranch, Date.now(), args.id])
       } else if (type === 'github') {
         const result = await startGitHubOAuth({
           baseUrl: integration.base_url as string,

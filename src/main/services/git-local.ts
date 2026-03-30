@@ -15,15 +15,24 @@ export function getRepoPath(integrationId: string): string {
   return path.join(getDataDir(), 'repos', integrationId)
 }
 
-/** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.). */
-export async function testConnectivity(repoUrl: string): Promise<{ name: string }> {
-  await simpleGit().listRemote([repoUrl])
+/** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).
+ *  Also detects the default branch via `ls-remote --symref`. */
+export async function testConnectivity(repoUrl: string): Promise<{ name: string; defaultBranch: string }> {
+  let defaultBranch = 'main'
   try {
-    const name = (await simpleGit().raw(['config', '--global', 'user.name'])).trim()
-    return { name: name || repoUrl }
+    const raw = await simpleGit().raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
+    const match = raw.match(/ref: refs\/heads\/(\S+)\s+HEAD/)
+    if (match) defaultBranch = match[1]
   } catch {
-    return { name: repoUrl }
+    // Some servers don't support --symref; fall back to plain ls-remote
+    await simpleGit().listRemote([repoUrl])
   }
+  let name = repoUrl
+  try {
+    const gitName = (await simpleGit().raw(['config', '--global', 'user.name'])).trim()
+    if (gitName) name = gitName
+  } catch { /* ok */ }
+  return { name, defaultBranch }
 }
 
 /** Clone the repo if not present, otherwise fetch + checkout + pull. */
@@ -127,11 +136,13 @@ const OPENAPI_CANDIDATES = [
   'swagger.json',
 ]
 
-/** Clone/pull the repo, scan for OpenAPI files, and upsert collections + requests into the DB. */
+/** Clone/pull the repo, scan for OpenAPI files, and upsert collections + requests into the DB.
+ *  Pass `opts.collectionId` + `opts.collectionName` to import into a specific collection. */
 export async function discoverAndImport(
   integrationId: string,
   repoUrl: string,
-  branch: string
+  branch: string,
+  opts?: { collectionId?: string; collectionName?: string }
 ): Promise<void> {
   const localPath = getRepoPath(integrationId)
   await cloneOrPull(integrationId, repoUrl, branch)
@@ -149,18 +160,22 @@ export async function discoverAndImport(
     }
 
     const sourceMeta = JSON.stringify({ integrationId, filePath })
-    const existing = queryOne<{ id: string }>(
-      `SELECT id FROM collections WHERE integration_id = ? AND source = 'git'`,
-      [integrationId]
-    )
+
+    // Prefer an explicitly supplied collectionId, then look for one already tied to this integration
+    const existing = opts?.collectionId
+      ? queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
+      : queryOne<{ id: string }>(
+          `SELECT id FROM collections WHERE integration_id = ? AND source = 'git'`,
+          [integrationId]
+        )
 
     let collectionId: string
     if (existing) {
       collectionId = existing.id
       run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?', [sourceMeta, now, collectionId])
     } else {
-      collectionId = crypto.randomUUID()
-      const repoName = repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
+      collectionId = opts?.collectionId ?? crypto.randomUUID()
+      const repoName = opts?.collectionName ?? repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
       run(
         `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
         [collectionId, repoName, sourceMeta, integrationId, now, now]

@@ -121,13 +121,16 @@ export function registerGitHandlers(): void {
 
   // ── Sync / pull ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('postly:git:sync', async (_, args: { integrationId: string }) => {
+  ipcMain.handle('postly:git:sync', async (_, args: { integrationId: string; collectionId?: string; collectionName?: string }) => {
     try {
       const row = queryOne<IntegrationRow>('SELECT * FROM integrations WHERE id = ?', [args.integrationId])
       if (!row) return { error: 'Integration not found' }
 
       if (row.type === 'git') {
-        await gitLocal.discoverAndImport(row.id, row.repo, row.branch ?? 'main')
+        await gitLocal.discoverAndImport(row.id, row.repo, row.branch ?? 'main', {
+          collectionId: args.collectionId,
+          collectionName: args.collectionName,
+        })
       } else if (row.type === 'github') {
         const settings: github.GitHubSettings = {
           baseUrl: row.base_url, clientId: '', clientSecret: '',
@@ -234,6 +237,29 @@ export function registerGitHandlers(): void {
 
       run('UPDATE requests SET scm_sha = ?, is_dirty = 0, updated_at = ? WHERE id = ?', [newSha, Date.now(), args.requestId])
       return { data: true }
+    } catch (err) { return { error: String(err) } }
+  })
+
+  // ── Import into a specific collection (used during setup) ──────────────────
+
+  ipcMain.handle('postly:git:import', async (_, args: {
+    integrationId: string
+    collectionId?: string
+    collectionName: string
+  }) => {
+    try {
+      const row = queryOne<IntegrationRow>('SELECT * FROM integrations WHERE id = ?', [args.integrationId])
+      if (!row) return { error: 'Integration not found' }
+      await gitLocal.discoverAndImport(row.id, row.repo, row.branch ?? 'main', {
+        collectionId: args.collectionId,
+        collectionName: args.collectionName,
+      })
+      // Return the collection that was created/updated
+      const collection = queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM collections WHERE integration_id = ? AND source = 'git'`,
+        [args.integrationId]
+      )
+      return { data: collection }
     } catch (err) { return { error: String(err) } }
   })
 
