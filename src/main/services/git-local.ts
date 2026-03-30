@@ -107,6 +107,18 @@ export async function getDiff(
   return { localContent, remoteContent, hasChanges: localContent !== remoteContent }
 }
 
+/** Return the currently checked-out branch name (or 'HEAD' if detached). */
+export async function getCurrentBranch(integrationId: string): Promise<string> {
+  const localPath = getRepoPath(integrationId)
+  const git = simpleGit(localPath)
+  try {
+    const branch = await git.revparse(['--abbrev-ref', 'HEAD'])
+    return branch.trim() || 'HEAD'
+  } catch {
+    return 'HEAD'
+  }
+}
+
 /** Write content to the file, stage, commit, and push. */
 export async function commitAndPush(
   integrationId: string,

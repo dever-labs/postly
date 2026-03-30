@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { SettingsModal } from './components/settings/SettingsModal'
+import { CommitOverlay } from './components/git/CommitOverlay'
 import { Toaster } from './components/ui/Toast'
 import { TooltipProvider } from './components/ui/Tooltip'
 import { useCollectionsStore } from './store/collections'
@@ -20,6 +21,7 @@ export default function App(): React.ReactElement {
       <div data-testid="app-root" className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
         <AppShell />
         <SettingsModal />
+        <CommitOverlay />
         <Toaster />
       </div>
     </TooltipProvider>

@@ -13,6 +13,7 @@ interface RequestsState {
   updateField: (field: keyof Request, value: unknown) => void
   sendRequest: () => Promise<void>
   saveRequest: () => Promise<void>
+  clearDirty: (requestId: string) => void
 }
 
 const DIRTY_FIELDS = new Set<keyof Request>([
@@ -133,6 +134,20 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const collection = group ? collections.find((c) => c.id === group.collectionId) : null
     if (['git', 'github', 'gitlab'].includes(collection?.source ?? '')) {
       markDirty(editingRequest.id)
+    }
+  },
+
+  clearDirty: (requestId: string) => {
+    const { editingRequest } = get()
+    if (editingRequest?.id === requestId) {
+      const cleared = { ...editingRequest, isDirty: false }
+      set({ editingRequest: cleared })
+      useCollectionsStore.getState().syncRequest(cleared)
+    } else {
+      // Update in collections store only
+      const { requests } = useCollectionsStore.getState()
+      const req = requests.find((r) => r.id === requestId)
+      if (req) useCollectionsStore.getState().syncRequest({ ...req, isDirty: false })
     }
   },
 }))

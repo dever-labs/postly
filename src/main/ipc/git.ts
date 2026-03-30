@@ -70,6 +70,14 @@ function getSourceMetaForRequest(requestId: string): {
 }
 
 export function registerGitHandlers(): void {
+  // ── Current branch ────────────────────────────────────────────────────────────
+
+  ipcMain.handle('postly:git:current-branch', async (_, args: { integrationId: string }) => {
+    try {
+      return { data: await gitLocal.getCurrentBranch(args.integrationId) }
+    } catch (err) { return { error: String(err) } }
+  })
+
   // ── List branches ────────────────────────────────────────────────────────────
 
   ipcMain.handle('postly:git:branches:list', async (_, args: { integrationId: string }) => {

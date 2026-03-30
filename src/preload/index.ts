@@ -144,6 +144,7 @@ const api = {
     devicePoll: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-poll', data),
   },
   git: {
+    currentBranch: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:current-branch', data),
     listBranches: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:branches:list', data),
     createBranch: (data: { integrationId: string; newBranch: string; fromBranch: string }) => ipcRenderer.invoke('postly:git:branch:create', data),
     switchBranch: (data: { integrationId: string; branch: string }) => ipcRenderer.invoke('postly:git:branch:switch', data),
