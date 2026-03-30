@@ -1,6 +1,6 @@
 {
   "name": "postly",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cross-platform API client with Backstage and source control integration",
   "main": "out/main/index.js",
   "scripts": {
