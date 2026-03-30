@@ -139,6 +139,51 @@ export async function commitAndPush(
   await git.push('origin', branch)
 }
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+
+/** Import a single Postly collection entry into a DB collection (create or update). */
+function upsertPostlyCollection(
+  integrationId: string,
+  collectionId: string,
+  col: { name: string; groups?: Array<{ name: string; description?: string; auth?: { type: string; config: Record<string,string> }; ssl?: string; requests?: Array<Record<string,unknown>> }> },
+  fileName: string,
+  now: number
+) {
+  run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+  run(
+    'UPDATE collections SET name = ?, source_meta = ?, updated_at = ? WHERE id = ?',
+    [col.name, JSON.stringify({ integrationId, fileName }), now, collectionId]
+  )
+  for (const [gi, grp] of (col.groups ?? []).entries()) {
+    const grpId = crypto.randomUUID()
+    run(
+      `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, auth_type, auth_config, ssl_verification, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+      [grpId, collectionId, grp.name, grp.description ?? '', gi,
+       grp.auth?.type ?? 'none', JSON.stringify(grp.auth?.config ?? {}),
+       grp.ssl ?? 'inherit', now, now]
+    )
+    for (const [ri, req] of ((grp.requests ?? []) as Array<Record<string,unknown>>).entries()) {
+      const reqId = crypto.randomUUID()
+      run(
+        `INSERT INTO requests
+           (id, group_id, name, method, url, params, headers, body_type, body_content,
+            auth_type, auth_config, ssl_verification, protocol, protocol_config,
+            description, scm_path, is_dirty, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        [reqId, grpId, req.name, req.method ?? 'GET', req.url ?? '',
+         JSON.stringify(req.params ?? []), JSON.stringify(req.headers ?? []),
+         req.bodyType ?? 'none', req.bodyContent ?? '',
+         (req.auth as Record<string,string>)?.type ?? 'none',
+         JSON.stringify((req.auth as Record<string,unknown>)?.config ?? {}),
+         req.ssl ?? 'inherit', req.protocol ?? 'http',
+         JSON.stringify(req.protocolConfig ?? {}),
+         req.description ?? '', fileName, ri, now, now]
+      )
+    }
+  }
+}
+
 const OPENAPI_CANDIDATES = [
   'openapi.yaml',
   'openapi.json',
@@ -149,134 +194,15 @@ const OPENAPI_CANDIDATES = [
   'swagger.json',
 ]
 
-/** Clone/pull the repo, scan for OpenAPI files, and upsert collections + requests into the DB.
- *  Pass `opts.collectionId` + `opts.collectionName` to import into a specific collection.
- *  The collection is created/found FIRST — before any network calls — so it always exists
- *  even if the clone or spec scan fails. */
-export async function discoverAndImport(
-  integrationId: string,
-  repoUrl: string,
-  branch: string,
-  opts?: { collectionId?: string; collectionName?: string }
-): Promise<string> {
-  const now = Date.now()
-  const repoName = repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
-
-  // ── 1. Create/find collection BEFORE any network calls ────────────────────
-  // Priority:
-  //   a) explicit collectionId → re-link that collection to this integration
-  //   b) explicit collectionName (no id) → always create a NEW collection
-  //   c) neither → sync path: find/create by integration_id (one per sync)
-  let collectionId: string
-
-  if (opts?.collectionId) {
-    const found = queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
-    if (found) {
-      collectionId = found.id
-      run(
-        'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
-        ['git', integrationId, now, collectionId]
-      )
-    } else {
-      // ID supplied but row missing — create it
-      collectionId = opts.collectionId
-      run(
-        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-        [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
-      )
-    }
-  } else if (opts?.collectionName) {
-    // User typed a name → always a brand new collection
-    collectionId = crypto.randomUUID()
-    run(
-      `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-      [collectionId, opts.collectionName, JSON.stringify({ integrationId }), integrationId, now, now]
-    )
-  } else {
-    // Sync path: update the first existing collection for this integration, or create one
-    const existing = queryOne<{ id: string }>(
-      `SELECT id FROM collections WHERE integration_id = ? AND source = 'git' ORDER BY created_at ASC LIMIT 1`,
-      [integrationId]
-    )
-    if (existing) {
-      collectionId = existing.id
-      run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
-    } else {
-      collectionId = crypto.randomUUID()
-      run(
-        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-        [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
-      )
-    }
-  }
-
-  // ── 2. Clone/pull (collection already persisted — clone failure won't lose it) ──
-  const localPath = getRepoPath(integrationId)
-  await cloneOrPull(integrationId, repoUrl, branch)
-
-  // ── 3. Scan for Postly-format files first, then fall back to OpenAPI ─────────
-
-  // Prefer *.postly.json at repo root — the Postly native format
-  const postlyFiles = fs.readdirSync(localPath).filter(f => f.endsWith('.postly.json'))
-  if (postlyFiles.length > 0) {
-    for (const file of postlyFiles) {
-      try {
-        const raw = fs.readFileSync(path.join(localPath, file), 'utf-8')
-        const parsed: PostlyExportFile = JSON.parse(raw)
-        if (!parsed.$schema?.startsWith('postly/') || !Array.isArray(parsed.collections)) continue
-        for (const col of parsed.collections) {
-          run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
-          // Update collection name from the file
-          run('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?', [col.name, now, collectionId])
-          for (const [gi, grp] of (col.groups ?? []).entries()) {
-            const grpId = crypto.randomUUID()
-            run(
-              `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, auth_type, auth_config, ssl_verification, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-              [grpId, collectionId, grp.name, grp.description ?? '', gi,
-               grp.auth?.type ?? 'none', JSON.stringify(grp.auth?.config ?? {}),
-               grp.ssl ?? 'inherit', now, now]
-            )
-            for (const [ri, req] of (grp.requests ?? []).entries()) {
-              const reqId = crypto.randomUUID()
-              run(
-                `INSERT INTO requests
-                   (id, group_id, name, method, url, params, headers, body_type, body_content,
-                    auth_type, auth_config, ssl_verification, protocol, protocol_config,
-                    description, scm_path, is_dirty, sort_order, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-                [reqId, grpId, req.name, req.method ?? 'GET', req.url ?? '',
-                 JSON.stringify(req.params ?? []), JSON.stringify(req.headers ?? []),
-                 req.bodyType ?? 'none', req.bodyContent ?? '',
-                 req.auth?.type ?? 'none', JSON.stringify(req.auth?.config ?? {}),
-                 req.ssl ?? 'inherit', req.protocol ?? 'http',
-                 JSON.stringify(req.protocolConfig ?? {}),
-                 req.description ?? '', file, ri, now, now]
-              )
-            }
-          }
-          break // use first collection in the file
-        }
-      } catch { /* skip invalid files */ }
-    }
-    return collectionId
-  }
-
-  // Fall back to OpenAPI spec scanning
+/** Scan for OpenAPI files and import into a single collection. Returns collectionId. */
+async function importOpenApi(integrationId: string, localPath: string, collectionId: string, now: number): Promise<string> {
   for (const filePath of OPENAPI_CANDIDATES) {
     const fullPath = path.join(localPath, filePath)
     if (!fs.existsSync(fullPath)) continue
-
     let spec: object
-    try {
-      spec = await SwaggerParser.dereference(fullPath)
-    } catch {
-      continue
-    }
-
+    try { spec = await SwaggerParser.dereference(fullPath) } catch { continue }
     run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify({ integrationId, filePath }), now, collectionId])
-
     try {
       const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
       run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
@@ -294,8 +220,145 @@ export async function discoverAndImport(
            0, req.sortOrder, req.createdAt, req.updatedAt]
         )
       }
-    } catch { /* skip unparseable specs */ }
+    } catch { /* skip unparseable */ }
+  }
+  return collectionId
+}
+export async function discoverAndImport(
+  integrationId: string,
+  repoUrl: string,
+  branch: string,
+  opts?: { collectionId?: string; collectionName?: string }
+): Promise<string> {
+  const now = Date.now()
+  const repoName = repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
+
+  // ── 1. Clone/pull first ────────────────────────────────────────────────────
+  const localPath = getRepoPath(integrationId)
+  await cloneOrPull(integrationId, repoUrl, branch)
+
+  // ── 2. Auto-discover all *.postly.json files (no specific collection) ──────
+  if (!opts?.collectionId && !opts?.collectionName) {
+    const postlyFiles = fs.readdirSync(localPath).filter(f => f.endsWith('.postly.json'))
+    if (postlyFiles.length > 0) {
+      let firstId: string | null = null
+      for (const file of postlyFiles) {
+        try {
+          const raw = fs.readFileSync(path.join(localPath, file), 'utf-8')
+          const parsed: PostlyExportFile = JSON.parse(raw)
+          if (!parsed.$schema?.startsWith('postly/') || !Array.isArray(parsed.collections)) continue
+          const col = parsed.collections[0]
+          if (!col) continue
+
+          // Find existing collection by fileName in source_meta, or by name
+          const byFile = queryOne<{ id: string }>(
+            `SELECT id FROM collections WHERE integration_id = ? AND source_meta LIKE ?`,
+            [integrationId, `%"fileName":"${file}"%`]
+          )
+          const byName = !byFile ? queryOne<{ id: string }>(
+            `SELECT id FROM collections WHERE integration_id = ? AND name = ? AND source = 'git'`,
+            [integrationId, col.name]
+          ) : null
+
+          let colId: string
+          if (byFile) {
+            colId = byFile.id
+          } else if (byName) {
+            colId = byName.id
+          } else {
+            colId = crypto.randomUUID()
+            run(
+              `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+              [colId, col.name, JSON.stringify({ integrationId, fileName: file }), integrationId, now, now]
+            )
+          }
+          upsertPostlyCollection(integrationId, colId, col, file, now)
+          if (!firstId) firstId = colId
+        } catch { /* skip invalid files */ }
+      }
+      return firstId ?? ''
+    }
+    // No postly files — fall through to OpenAPI for the single-collection sync path
+    const existing = queryOne<{ id: string }>(
+      `SELECT id FROM collections WHERE integration_id = ? AND source = 'git' ORDER BY created_at ASC LIMIT 1`,
+      [integrationId]
+    )
+    let collectionId: string
+    if (existing) {
+      collectionId = existing.id
+      run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+    } else {
+      collectionId = crypto.randomUUID()
+      run(
+        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+      )
+    }
+    return await importOpenApi(integrationId, localPath, collectionId, now)
   }
 
-  return collectionId
+  // ── 3. Specific collection import (manual import with collectionId/Name) ───
+  let collectionId: string
+
+  if (opts?.collectionId) {
+    const found = queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
+    if (found) {
+      collectionId = found.id
+      run(
+        'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
+        ['git', integrationId, now, collectionId]
+      )
+    } else {
+      collectionId = opts.collectionId
+      run(
+        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+      )
+    }
+  } else {
+    // collectionName supplied → always new
+    collectionId = crypto.randomUUID()
+    run(
+      `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+      [collectionId, opts.collectionName!, JSON.stringify({ integrationId }), integrationId, now, now]
+    )
+  }
+
+  // Scan postly files for this specific collection
+  const postlyFiles = fs.readdirSync(localPath).filter(f => f.endsWith('.postly.json'))
+  if (postlyFiles.length > 0) {
+    for (const file of postlyFiles) {
+      try {
+        const raw = fs.readFileSync(path.join(localPath, file), 'utf-8')
+        const parsed: PostlyExportFile = JSON.parse(raw)
+        if (!parsed.$schema?.startsWith('postly/') || !Array.isArray(parsed.collections)) continue
+        const col = parsed.collections[0]
+        if (!col) continue
+        upsertPostlyCollection(integrationId, collectionId, col, file, now)
+        break
+      } catch { /* skip */ }
+    }
+    return collectionId
+  }
+
+  return await importOpenApi(integrationId, localPath, collectionId, now)
+}
+
+/** Delete a collection's .postly.json file from the repo, commit, and push. */
+export async function deleteCollectionFile(
+  integrationId: string,
+  fileName: string,
+  branch: string,
+  commitMessage: string
+): Promise<void> {
+  const localPath = getRepoPath(integrationId)
+  const fullPath = path.join(localPath, fileName)
+  if (!fs.existsSync(localPath)) return
+  const git = simpleGit(localPath)
+  if (fs.existsSync(fullPath)) {
+    fs.unlinkSync(fullPath)
+    await git.rm([fileName]).catch(() => {})
+    await git.commit(commitMessage)
+    await git.push('origin', branch)
+  }
 }

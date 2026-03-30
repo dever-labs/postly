@@ -32,6 +32,7 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
   const selectItem = useUIStore((s) => s.selectItem)
 
   const allCollections = useCollectionsStore((s) => s.collections)
+  const loadCollections = useCollectionsStore((s) => s.load)
   const collections = allCollections.filter((c) => c.integrationId === integrationId)
 
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -99,6 +100,7 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
     const { error } = await window.api.git.sync({ integrationId: integration.id })
     setSyncing(false)
     if (error) { addToast(`Sync failed: ${error}`, 'error'); return }
+    await loadCollections()
     addToast('Synced from remote', 'success')
   }
 
