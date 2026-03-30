@@ -6,7 +6,7 @@ import crypto from 'crypto'
 import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
-import type { PostlyExportFile } from '../ipc/export-import'
+import type { PostlyExportFile, ExportCollection } from '../ipc/export-import'
 
 export function getDataDir(): string {
   return app.getPath('userData')
@@ -139,13 +139,11 @@ export async function commitAndPush(
   await git.push('origin', branch)
 }
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
-
 /** Import a single Postly collection entry into a DB collection (create or update). */
 function upsertPostlyCollection(
   integrationId: string,
   collectionId: string,
-  col: { name: string; groups?: Array<{ name: string; description?: string; auth?: { type: string; config: Record<string,string> }; ssl?: string; requests?: Array<Record<string,unknown>> }> },
+  col: ExportCollection,
   fileName: string,
   now: number
 ) {
@@ -163,7 +161,7 @@ function upsertPostlyCollection(
        grp.auth?.type ?? 'none', JSON.stringify(grp.auth?.config ?? {}),
        grp.ssl ?? 'inherit', now, now]
     )
-    for (const [ri, req] of ((grp.requests ?? []) as Array<Record<string,unknown>>).entries()) {
+    for (const [ri, req] of ((grp.requests ?? []) as unknown as Array<Record<string,unknown>>).entries()) {
       const reqId = crypto.randomUUID()
       run(
         `INSERT INTO requests

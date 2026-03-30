@@ -79,8 +79,6 @@ export function RequestEditor() {
     return <HardDrive className="h-3 w-3" />
   }
 
-  const source = breadcrumb?.sourceType
-
   const triggerGitSave = () => {
     if (!editingRequest || !breadcrumb?.collection) return
     const isGit = ['git', 'github', 'gitlab'].includes(breadcrumb.sourceType)

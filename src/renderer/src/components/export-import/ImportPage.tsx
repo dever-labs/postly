@@ -1,4 +1,4 @@
-import { Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload, X } from 'lucide-react'
+import { Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
