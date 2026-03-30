@@ -259,7 +259,16 @@ export function registerGitHandlers(): void {
         [collectionId]
       )
       return { data: collection }
-    } catch (err) { return { error: String(err) } }
+    } catch (err) {
+      // discoverAndImport creates the collection before cloning, so it may already
+      // exist even when clone/scan throws. Return it so the UI can still navigate there.
+      const collection = queryOne<{ id: string; name: string }>(
+        `SELECT id, name FROM collections WHERE integration_id = ? AND source = 'git'`,
+        [args.integrationId]
+      )
+      if (collection) return { data: collection }
+      return { error: String(err) }
+    }
   })
 
   // ── List dirty requests for a collection ────────────────────────────────────

@@ -138,19 +138,17 @@ const OPENAPI_CANDIDATES = [
 
 /** Clone/pull the repo, scan for OpenAPI files, and upsert collections + requests into the DB.
  *  Pass `opts.collectionId` + `opts.collectionName` to import into a specific collection.
- *  The collection is always created/found first — even if no specs are discovered. */
+ *  The collection is created/found FIRST — before any network calls — so it always exists
+ *  even if the clone or spec scan fails. */
 export async function discoverAndImport(
   integrationId: string,
   repoUrl: string,
   branch: string,
   opts?: { collectionId?: string; collectionName?: string }
 ): Promise<string> {
-  const localPath = getRepoPath(integrationId)
-  await cloneOrPull(integrationId, repoUrl, branch)
-
   const now = Date.now()
 
-  // ── Ensure the collection exists BEFORE scanning ──────────────────────────
+  // ── 1. Create/find collection BEFORE any network calls ────────────────────
   const findExisting = opts?.collectionId
     ? queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
     : queryOne<{ id: string }>(
@@ -172,7 +170,11 @@ export async function discoverAndImport(
     )
   }
 
-  // ── Scan for OpenAPI specs and populate the collection ────────────────────
+  // ── 2. Clone/pull (collection already persisted — clone failure won't lose it) ──
+  const localPath = getRepoPath(integrationId)
+  await cloneOrPull(integrationId, repoUrl, branch)
+
+  // ── 3. Scan for OpenAPI specs and populate the collection ─────────────────
   for (const filePath of OPENAPI_CANDIDATES) {
     const fullPath = path.join(localPath, filePath)
     if (!fs.existsSync(fullPath)) continue
