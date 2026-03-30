@@ -25,6 +25,7 @@ const SOURCE_LABELS: Record<CollectionSource, string> = {
   github: 'GitHub',
   gitlab: 'GitLab',
   backstage: 'Backstage',
+  git: 'Git',
 }
 
 const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
@@ -32,6 +33,7 @@ const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
   github: <GitFork className="h-4 w-4" />,
   gitlab: <GitBranch className="h-4 w-4" />,
   backstage: <Database className="h-4 w-4" />,
+  git: <GitBranch className="h-4 w-4" />,
 }
 
 function requestCount(col: ParsedCollection): number {

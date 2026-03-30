@@ -327,7 +327,7 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
     )
   }
 
-  const providerLabel = integration.type === 'github' ? 'GitHub' : integration.type === 'gitlab' ? 'GitLab' : 'Git'
+  const providerLabel = integration.type === 'github' ? 'GitHub' : integration.type === 'gitlab' ? 'GitLab' : integration.type === 'git' ? 'Git' : 'Git'
 
   // ── Main view ─────────────────────────────────────────────────────────────
 

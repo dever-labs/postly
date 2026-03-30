@@ -18,6 +18,7 @@ const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
   backstage: <Database className="h-3.5 w-3.5" />,
   github: <GitFork className="h-3.5 w-3.5" />,
   gitlab: <GitBranch className="h-3.5 w-3.5" />,
+  git: <GitBranch className="h-3.5 w-3.5" />,
 }
 
 function capitalize(s: string) {
@@ -510,7 +511,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     }
                     onToggle={() => toggleCollection(collection.id)}
                     onSelect={() =>
-                      collection.source === 'github' || collection.source === 'gitlab'
+                      collection.source === 'github' || collection.source === 'gitlab' || collection.source === 'git'
                         ? selectItem('git-source', collection.id)
                         : selectItem('collection', collection.id)
                     }
