@@ -423,9 +423,10 @@ export function GroupSection({ source, integration, collections, groups, request
 
         <button
           onClick={() => {
-            setSourceOpen((o) => !o)
             if (integration && ['git', 'github', 'gitlab'].includes(integration.type)) {
               selectItem('git-source', integration.id)
+            } else {
+              setSourceOpen((o) => !o)
             }
           }}
           className={`flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden ${selectedItem?.type === 'git-source' && selectedItem.id === integration?.id ? 'text-th-text-primary' : ''}`}

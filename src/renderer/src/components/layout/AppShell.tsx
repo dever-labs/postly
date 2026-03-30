@@ -11,6 +11,7 @@ import { IntegrationEditPage } from '@/components/integrations/IntegrationEditPa
 import { IntegrationSetupPage } from '@/components/integrations/IntegrationSetupPage'
 import { GitSourceView } from '@/components/git/GitSourceView'
 import { ExportPage } from '@/components/export-import/ExportPage'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
@@ -91,6 +92,7 @@ export function AppShell() {
       {/* Right pane — drag-region on the wrapper so there's always some
           drag area; individual views add more via their own headers */}
       <div className="drag-region flex flex-1 flex-col overflow-hidden">
+        <ErrorBoundary>
 
         {sidebarTab === 'environments' ? (
           <div className="no-drag flex flex-1 overflow-hidden">
@@ -153,6 +155,7 @@ export function AppShell() {
             </div>
           </div>
         )}
+        </ErrorBoundary>
       </div>
     </div>
   )
