@@ -20,8 +20,8 @@ interface ToastItem {
 }
 
 export type GitPendingAction =
-  | { type: 'push'; collectionId: string; title: string; subtitle?: string }
-  | { type: 'delete-collection'; collectionId: string; title: string; subtitle?: string }
+  | { type: 'push'; collectionId: string; title: string; subtitle?: string; onCancel?: () => void | Promise<void> }
+  | { type: 'delete-collection'; collectionId: string; title: string; subtitle?: string; onCancel?: () => void | Promise<void> }
 
 interface UIState {
   theme: Theme

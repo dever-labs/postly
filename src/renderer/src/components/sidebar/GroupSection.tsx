@@ -594,12 +594,21 @@ export function GroupSection({ source, integration, collections, groups, request
                       <InlineInput
                         placeholder="Group name…"
                         onConfirm={(name) => {
-                          createGroup(collection.id, name).then(() => {
-                            if (['git', 'github', 'gitlab'].includes(collection.source)) {
-                              openGitAction({ type: 'push', collectionId: collection.id, title: `Created group '${name}'`, subtitle: collection.name })
-                            }
-                          })
                           setAddingGroupTo(null)
+                          if (['git', 'github', 'gitlab'].includes(collection.source)) {
+                            createGroup(collection.id, name).then((groupId) => {
+                              if (!groupId) return
+                              openGitAction({
+                                type: 'push',
+                                collectionId: collection.id,
+                                title: `Created group '${name}'`,
+                                subtitle: collection.name,
+                                onCancel: () => deleteGroup(groupId),
+                              })
+                            })
+                          } else {
+                            createGroup(collection.id, name)
+                          }
                         }}
                         onCancel={() => setAddingGroupTo(null)}
                         indent="pl-2"
@@ -631,7 +640,13 @@ export function GroupSection({ source, integration, collections, groups, request
                 else {
                   await load()
                   if (['git', 'github', 'gitlab'].includes(source) && data?.id) {
-                    openGitAction({ type: 'push', collectionId: data.id, title: `Created collection '${name}'` })
+                    const colId = data.id
+                    openGitAction({
+                      type: 'push',
+                      collectionId: colId,
+                      title: `Created collection '${name}'`,
+                      onCancel: () => window.api.collections.delete({ id: colId }).then(() => load()),
+                    })
                   }
                 }
               }}

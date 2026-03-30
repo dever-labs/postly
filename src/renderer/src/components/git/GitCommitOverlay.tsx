@@ -56,8 +56,9 @@ export function GitCommitOverlay() {
 
   const handleClose = useCallback(() => {
     if (streamingRef.current) window.api.ai.cancel({ requestId: AI_SESSION_ID })
+    action?.onCancel?.()
     closeGitAction()
-  }, [closeGitAction])
+  }, [closeGitAction, action])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
