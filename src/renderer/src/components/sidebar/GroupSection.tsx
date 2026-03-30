@@ -523,11 +523,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     onSelect={() => selectItem('collection', collection.id)}
                     onAddRequest={() => {
                       setOpenCollections((p) => new Set([...p, collection.id]))
-                      addRequestToCollection(collection.id).then(() => {
-                        if (['git', 'github', 'gitlab'].includes(collection.source)) {
-                          openGitAction({ type: 'push', collectionId: collection.id, title: 'Created endpoint', subtitle: collection.name })
-                        }
-                      })
+                      addRequestToCollection(collection.id)
                     }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
@@ -567,14 +563,7 @@ export function GroupSection({ source, integration, collections, groups, request
                           }}
                           onRenameCancel={() => setRenamingGroup(null)}
                           onSelect={() => selectItem('group', group.id)}
-                          onAddRequest={() => {
-                            const col = collections.find((c) => c.id === group.collectionId)
-                            createLocalRequest(group.id).then(() => {
-                              if (col && ['git', 'github', 'gitlab'].includes(col.source)) {
-                                openGitAction({ type: 'push', collectionId: col.id, title: 'Created endpoint', subtitle: col.name })
-                              }
-                            })
-                          }}
+                          onAddRequest={() => { createLocalRequest(group.id) }}
                           onMenuToggle={() => setGroupMenuOpen(groupMenuOpen === group.id ? null : group.id)}
                           onMenuClose={() => setGroupMenuOpen(null)}
                           onRenameStart={() => setRenamingGroup(group.id)}
