@@ -13,13 +13,15 @@ export function registerCollectionHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:collections:create', async (_, args: { name: string; source?: string }) => {
+  ipcMain.handle('postly:collections:create', async (_, args: { name: string; source?: string; integrationId?: string }) => {
     try {
       const id = crypto.randomUUID()
       const now = Date.now()
       const source = args.source ?? 'local'
-      run('INSERT INTO collections (id, name, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [id, args.name, source, now, now])
+      run(
+        'INSERT INTO collections (id, name, source, integration_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, args.name, source, args.integrationId ?? null, now, now]
+      )
       return { data: queryOne('SELECT * FROM collections WHERE id = ?', [id]) }
     } catch (err) {
       return { error: String(err) }

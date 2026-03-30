@@ -147,31 +147,54 @@ export async function discoverAndImport(
   opts?: { collectionId?: string; collectionName?: string }
 ): Promise<string> {
   const now = Date.now()
+  const repoName = repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
 
   // ── 1. Create/find collection BEFORE any network calls ────────────────────
-  const findExisting = opts?.collectionId
-    ? queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
-    : queryOne<{ id: string }>(
-        `SELECT id FROM collections WHERE integration_id = ? AND source = 'git'`,
-        [integrationId]
-      )
-
+  // Priority:
+  //   a) explicit collectionId → re-link that collection to this integration
+  //   b) explicit collectionName (no id) → always create a NEW collection
+  //   c) neither → sync path: find/create by integration_id (one per sync)
   let collectionId: string
-  const repoName = opts?.collectionName ?? repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
 
-  if (findExisting) {
-    collectionId = findExisting.id
-    // Always re-link source and integration_id so it shows under the correct git integration
-    run(
-      'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
-      ['git', integrationId, now, collectionId]
-    )
-  } else {
-    collectionId = opts?.collectionId ?? crypto.randomUUID()
+  if (opts?.collectionId) {
+    const found = queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
+    if (found) {
+      collectionId = found.id
+      run(
+        'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
+        ['git', integrationId, now, collectionId]
+      )
+    } else {
+      // ID supplied but row missing — create it
+      collectionId = opts.collectionId
+      run(
+        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+      )
+    }
+  } else if (opts?.collectionName) {
+    // User typed a name → always a brand new collection
+    collectionId = crypto.randomUUID()
     run(
       `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-      [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+      [collectionId, opts.collectionName, JSON.stringify({ integrationId }), integrationId, now, now]
     )
+  } else {
+    // Sync path: update the first existing collection for this integration, or create one
+    const existing = queryOne<{ id: string }>(
+      `SELECT id FROM collections WHERE integration_id = ? AND source = 'git' ORDER BY created_at ASC LIMIT 1`,
+      [integrationId]
+    )
+    if (existing) {
+      collectionId = existing.id
+      run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+    } else {
+      collectionId = crypto.randomUUID()
+      run(
+        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+      )
+    }
   }
 
   // ── 2. Clone/pull (collection already persisted — clone failure won't lose it) ──
