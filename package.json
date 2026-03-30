@@ -1,6 +1,6 @@
 {
   "name": "postly",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Cross-platform API client with Backstage and source control integration",
   "main": "out/main/index.js",
   "scripts": {
@@ -203,3 +203,4 @@
     "zustand": "^5.0.12"
   }
 }
+
