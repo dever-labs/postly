@@ -46,6 +46,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       const updated: Request = { ...state.editingRequest, [field]: value }
       if (DIRTY_FIELDS.has(field)) {
         updated.isDirty = true
+        // On the first dirty change, push the flag to the sidebar immediately
+        if (!state.editingRequest.isDirty) {
+          useCollectionsStore.getState().syncRequest({ ...state.editingRequest, isDirty: true })
+        }
       }
       return { editingRequest: updated }
     })
