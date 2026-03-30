@@ -126,5 +126,13 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     }
     set({ editingRequest: saved })
     useCollectionsStore.getState().syncRequest(saved)
+
+    // For git-sourced collections, mark the request as uncommitted to git
+    const { groups, collections, markDirty } = useCollectionsStore.getState()
+    const group = groups.find((g) => g.id === editingRequest.groupId)
+    const collection = group ? collections.find((c) => c.id === group.collectionId) : null
+    if (['git', 'github', 'gitlab'].includes(collection?.source ?? '')) {
+      markDirty(editingRequest.id)
+    }
   },
 }))

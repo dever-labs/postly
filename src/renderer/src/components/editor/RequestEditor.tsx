@@ -166,8 +166,8 @@ export function RequestEditor() {
         )}
         <button
           onClick={saveRequest}
-          className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
-          title="Save"
+          className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
+          title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
         >
           <Save className="h-4 w-4" />
         </button>
@@ -283,7 +283,7 @@ export function RequestEditor() {
       </div>
 
       {/* Commit panel for SCM-backed requests */}
-      {editingRequest.isDirty && (source === 'github' || source === 'gitlab') && (
+      {editingRequest.isDirty && (source === 'github' || source === 'gitlab' || source === 'git') && (
         <CommitPanel requestId={editingRequest.id} source={source} />
       )}
     </div>

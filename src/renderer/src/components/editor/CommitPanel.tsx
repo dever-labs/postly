@@ -10,7 +10,7 @@ import { useUIStore } from '@/store/ui'
 
 interface CommitPanelProps {
   requestId: string
-  source: 'github' | 'gitlab'
+  source: 'github' | 'gitlab' | 'git'
 }
 
 export function CommitPanel({ requestId, source }: CommitPanelProps) {
