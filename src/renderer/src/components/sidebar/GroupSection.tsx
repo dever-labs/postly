@@ -371,8 +371,6 @@ export function GroupSection({ source, integration, collections, groups, request
     renameGroup,
     load,
   } = useCollectionsStore()
-  const collections = useCollectionsStore((s) => s.collections)
-  const groups = useCollectionsStore((s) => s.groups)
   const addToast = useUIStore((s) => s.addToast)
   const openDeleteCollection = useUIStore((s) => s.openDeleteCollection)
   const openDeleteRequest = useUIStore((s) => s.openDeleteRequest)
