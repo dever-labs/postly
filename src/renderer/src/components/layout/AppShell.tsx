@@ -114,7 +114,7 @@ export function AppShell() {
           </div>
         ) : selectedItem?.type === 'git-source' ? (
           <div className="no-drag flex flex-1 overflow-hidden">
-            <GitSourceView collectionId={selectedItem.id} />
+            <GitSourceView integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'collection' ? (
           <div className="no-drag min-h-0 flex-1 overflow-y-auto">

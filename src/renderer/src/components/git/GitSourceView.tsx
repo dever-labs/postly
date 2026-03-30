@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   FileCode,
+  FolderOpen,
   GitBranch,
   GitCommit,
   GitFork,
@@ -217,20 +218,18 @@ function RequestCommitRow({
 
 // ─── Main view ────────────────────────────────────────────────────────────────
 
-export function GitSourceView({ collectionId }: { collectionId: string }) {
+export function GitSourceView({ integrationId }: { integrationId: string }) {
   const theme = useUIStore((s) => s.theme)
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
 
-  const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === collectionId))
+  const collections = useCollectionsStore((s) => s.collections.filter((c) => c.integrationId === integrationId))
   const { load: loadCollections } = useCollectionsStore()
 
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { update: updateIntegration } = useIntegrationsStore()
 
-  const integration = integrations.find((i) => i.id === collection?.integrationId)
-    ?? integrations.find((i) => i.type === collection?.source && (collection?.source === 'github' || collection?.source === 'gitlab'))
-    ?? null
+  const integration = integrations.find((i) => i.id === integrationId) ?? null
 
   const [branches, setBranches] = useState<string[]>([])
   const [loadingBranches, setLoadingBranches] = useState(false)
@@ -266,9 +265,12 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
 
   const loadDirtyRequests = async () => {
     setLoadingDirty(true)
-    const { data } = await window.api.git.dirtyRequests({ collectionId })
+    // Load dirty requests across all collections belonging to this integration
+    const results = await Promise.all(
+      collections.map((c) => window.api.git.dirtyRequests({ collectionId: c.id }))
+    )
     setLoadingDirty(false)
-    setDirtyRequests(data ?? [])
+    setDirtyRequests(results.flatMap((r: { data?: DirtyRequest[] }) => r.data ?? []))
   }
 
   const handleSwitchBranch = async (branch: string) => {
@@ -307,9 +309,7 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
     addToast('Synced from remote', 'success')
   }
 
-  // ── Empty / no-integration state ──────────────────────────────────────────
-
-  if (!collection) return null
+  // ── No-integration state ──────────────────────────────────────────────────
 
   if (!integration) {
     return (
@@ -317,7 +317,7 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
         <div className="drag-region shrink-0 px-6 pt-8 pb-4" />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-th-text-faint">
           <AlertCircle className="h-10 w-10" />
-          <p className="text-sm">No Git integration found for this collection</p>
+          <p className="text-sm">Git integration not found</p>
           <Button size="sm" variant="outline" onClick={() => selectItem('add-integration', '')}>
             Add Git integration
           </Button>
@@ -326,7 +326,7 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
     )
   }
 
-  const providerLabel = integration.type === 'github' ? 'GitHub' : integration.type === 'gitlab' ? 'GitLab' : integration.type === 'git' ? 'Git' : 'Git'
+  const providerLabel = integration.type === 'github' ? 'GitHub' : integration.type === 'gitlab' ? 'GitLab' : 'Git'
 
   // ── Main view ─────────────────────────────────────────────────────────────
 
@@ -337,7 +337,7 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
         <div className="no-drag flex min-w-0 flex-1 items-center gap-3">
           <ProviderIcon type={integration.type} className="h-4 w-4 shrink-0 text-th-text-muted" />
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-th-text-primary">{collection.name}</h1>
+            <h1 className="truncate text-sm font-semibold text-th-text-primary">{integration.name}</h1>
             <p className="text-xs text-th-text-subtle">{providerLabel} · {integration.repo}</p>
           </div>
         </div>
@@ -380,6 +380,28 @@ export function GitSourceView({ collectionId }: { collectionId: string }) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+        {/* ── Collections section ───────────────────────────────────────────── */}
+        {collections.length > 0 && (
+          <section>
+            <h2 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-th-text-faint">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Collections
+            </h2>
+            <div className="flex flex-col gap-1">
+              {collections.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => selectItem('collection', c.id)}
+                  className="flex items-center gap-2 rounded-md border border-th-border bg-th-surface px-3 py-2 text-sm text-th-text-secondary hover:bg-th-surface-raised hover:text-th-text-primary text-left transition-colors"
+                >
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0 text-th-text-muted" />
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Branches section ─────────────────────────────────────────────── */}
         <section>

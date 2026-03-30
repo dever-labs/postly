@@ -422,8 +422,13 @@ export function GroupSection({ source, integration, collections, groups, request
         </span>
 
         <button
-          onClick={() => setSourceOpen((o) => !o)}
-          className="flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden"
+          onClick={() => {
+            setSourceOpen((o) => !o)
+            if (integration && ['git', 'github', 'gitlab'].includes(integration.type)) {
+              selectItem('git-source', integration.id)
+            }
+          }}
+          className={`flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden ${selectedItem?.type === 'git-source' && selectedItem.id === integration?.id ? 'text-th-text-primary' : ''}`}
         >
           <span className="truncate">{integration ? integration.name : capitalize(source)}</span>
           <Badge variant="grey" className="ml-0.5">{totalRequests.length}</Badge>
@@ -505,16 +510,9 @@ export function GroupSection({ source, integration, collections, groups, request
                     collection={collection}
                     open={isOpen}
                     dndId={`col:${collection.id}`}
-                    isActive={
-                      (selectedItem?.type === 'collection' || selectedItem?.type === 'git-source') &&
-                      selectedItem.id === collection.id
-                    }
+                    isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
                     onToggle={() => toggleCollection(collection.id)}
-                    onSelect={() =>
-                      collection.source === 'github' || collection.source === 'gitlab' || collection.source === 'git'
-                        ? selectItem('git-source', collection.id)
-                        : selectItem('collection', collection.id)
-                    }
+                    onSelect={() => selectItem('collection', collection.id)}
                     onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
