@@ -161,7 +161,11 @@ export async function discoverAndImport(
 
   if (findExisting) {
     collectionId = findExisting.id
-    run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+    // Always re-link source and integration_id so it shows under the correct git integration
+    run(
+      'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
+      ['git', integrationId, now, collectionId]
+    )
   } else {
     collectionId = opts?.collectionId ?? crypto.randomUUID()
     run(
