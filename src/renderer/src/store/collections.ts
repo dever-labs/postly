@@ -16,7 +16,7 @@ interface CollectionsState {
   addRequestToCollection: (collectionId: string) => Promise<void>
   deleteCollection: (id: string, commitMessage?: string) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
-  deleteRequest: (id: string) => Promise<void>
+  deleteRequest: (id: string, commitMessage?: string, branch?: string) => Promise<void>
   markDirty: (requestId: string) => void
   syncRequest: (request: Request) => void
   updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
@@ -165,9 +165,9 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({ requests: [...state.requests, req] }))
   },
 
-  deleteRequest: async (id: string) => {
+  deleteRequest: async (id: string, commitMessage?: string, branch?: string) => {
     const api = window.api
-    const { error } = await api.requests.delete({ id })
+    const { error } = await api.requests.delete({ id, commitMessage, branch })
     if (error) {
       console.error('Failed to delete request:', error)
       return

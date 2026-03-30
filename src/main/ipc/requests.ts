@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
+import * as gitLocal from '../services/git-local'
+import { buildExport } from './export-import'
 
 const CAMEL_TO_SNAKE: Record<string, string> = {
   name: 'name',
@@ -70,9 +72,39 @@ export function registerRequestHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  ipcMain.handle('postly:requests:delete', async (_, args: { id: string }) => {
+  ipcMain.handle('postly:requests:delete', async (_, args: { id: string; commitMessage?: string; branch?: string }) => {
     try {
+      const request = queryOne<{ group_id: string }>('SELECT group_id FROM requests WHERE id = ?', [args.id])
+      if (!request) return { data: true }
+
+      const group = request ? queryOne<{ collection_id: string }>('SELECT collection_id FROM groups WHERE id = ?', [request.group_id]) : null
+      const collection = group ? queryOne<{ id: string; source: string; source_meta: string | null; integration_id: string | null }>(
+        'SELECT id, source, source_meta, integration_id FROM collections WHERE id = ?', [group.collection_id]
+      ) : null
+
       run('DELETE FROM requests WHERE id = ?', [args.id])
+
+      if (collection?.source === 'git' && args.commitMessage && args.branch) {
+        try {
+          const meta: { integrationId?: string; fileName?: string } = collection.source_meta ? JSON.parse(collection.source_meta) : {}
+          const integrationId = collection.integration_id ?? meta.integrationId
+          const integration = integrationId
+            ? queryOne<{ id: string; repo: string; branch: string | null }>('SELECT id, repo, branch FROM integrations WHERE id = ?', [integrationId])
+            : null
+          if (integration) {
+            const exportData = buildExport([collection.id])
+            const col = exportData.collections[0]
+            const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+            const fileName = meta.fileName ?? `${slug(col?.name ?? 'collection')}.postly.json`
+            const fileContent = JSON.stringify(
+              { $schema: 'postly/v1', exportedAt: new Date().toISOString(), collections: col ? [col] : [] },
+              null, 2
+            )
+            await gitLocal.commitAndPush(integration.id, fileName, fileContent, args.commitMessage, args.branch)
+          }
+        } catch { /* git failure should not block the delete */ }
+      }
+
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })

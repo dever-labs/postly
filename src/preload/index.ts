@@ -20,7 +20,7 @@ const api = {
     get: (data: { id: string }) => ipcRenderer.invoke('postly:requests:get', data),
     create: (data: { groupId: string; name?: string; method?: string }) => ipcRenderer.invoke('postly:requests:create', data),
     update: (data: { id: string; [key: string]: unknown }) => ipcRenderer.invoke('postly:requests:update', data),
-    delete: (data: { id: string }) => ipcRenderer.invoke('postly:requests:delete', data),
+    delete: (data: { id: string; commitMessage?: string; branch?: string }) => ipcRenderer.invoke('postly:requests:delete', data),
     markDirty: (data: { id: string; isDirty: boolean }) => ipcRenderer.invoke('postly:requests:mark-dirty', data),
   },
   http: {

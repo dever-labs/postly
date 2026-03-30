@@ -371,8 +371,11 @@ export function GroupSection({ source, integration, collections, groups, request
     renameGroup,
     load,
   } = useCollectionsStore()
+  const collections = useCollectionsStore((s) => s.collections)
+  const groups = useCollectionsStore((s) => s.groups)
   const addToast = useUIStore((s) => s.addToast)
   const openDeleteCollection = useUIStore((s) => s.openDeleteCollection)
+  const openDeleteRequest = useUIStore((s) => s.openDeleteRequest)
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
@@ -546,7 +549,16 @@ export function GroupSection({ source, integration, collections, groups, request
                           onRenameStart={() => setRenamingGroup(group.id)}
                           onDelete={() => deleteGroup(group.id)}
                           onAiGroup={() => selectItem('ai-group', group.id)}
-                          onDeleteRequest={(reqId) => { deleteRequest(reqId); if (activeRequestId === reqId) clearActiveRequest() }}
+                          onDeleteRequest={(reqId) => {
+                            const reqGroup = groups.find((g) => g.id === group.id)
+                            const col = reqGroup ? collections.find((c) => c.id === reqGroup.collectionId) : null
+                            if (col?.source === 'git') {
+                              openDeleteRequest(reqId)
+                            } else {
+                              deleteRequest(reqId)
+                              if (activeRequestId === reqId) clearActiveRequest()
+                            }
+                          }}
                           onClickRequest={(req) => { clearSelectedItem(); setActiveRequest(req) }}
                         />
                       ))}

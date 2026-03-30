@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { CommitOverlay } from './components/git/CommitOverlay'
 import { DeleteCollectionOverlay } from './components/collections/DeleteCollectionOverlay'
+import { DeleteRequestOverlay } from './components/collections/DeleteRequestOverlay'
 import { Toaster } from './components/ui/Toast'
 import { TooltipProvider } from './components/ui/Tooltip'
 import { useCollectionsStore } from './store/collections'
@@ -24,6 +25,7 @@ export default function App(): React.ReactElement {
         <SettingsModal />
         <CommitOverlay />
         <DeleteCollectionOverlay />
+        <DeleteRequestOverlay />
         <Toaster />
       </div>
     </TooltipProvider>
