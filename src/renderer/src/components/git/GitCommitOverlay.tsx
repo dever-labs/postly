@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { GitBranch, GitCommit, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useCollectionsStore } from '@/store/collections'
+import { useRequestsStore } from '@/store/requests'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useSettingsStore } from '@/store/settings'
 import { useUIStore } from '@/store/ui'
@@ -15,6 +16,9 @@ export function GitCommitOverlay() {
 
   const collections = useCollectionsStore((s) => s.collections)
   const deleteCollection = useCollectionsStore((s) => s.deleteCollection)
+  const clearDirtyForCollection = useCollectionsStore((s) => s.clearDirtyForCollection)
+  const clearDirty = useRequestsStore((s) => s.clearDirty)
+  const activeRequestId = useRequestsStore((s) => s.activeRequestId)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const ai = useSettingsStore((s) => s.ai)
 
@@ -106,6 +110,9 @@ export function GitCommitOverlay() {
         branch: currentBranch,
       })
       if (error) { addToast(`Push failed: ${error}`, 'error'); setSubmitting(false); return }
+      // Clear dirty indicators in both stores
+      clearDirtyForCollection(action.collectionId)
+      if (activeRequestId) clearDirty(activeRequestId)
       addToast(`Committed to ${currentBranch}`, 'success')
     }
 

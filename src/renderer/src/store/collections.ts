@@ -19,6 +19,7 @@ interface CollectionsState {
   deleteRequest: (id: string) => Promise<void>
   markDirty: (requestId: string) => void
   syncRequest: (request: Request) => void
+  clearDirtyForCollection: (collectionId: string) => void
   updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
@@ -185,6 +186,15 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({
       requests: state.requests.map((r) => (r.id === request.id ? { ...r, ...request } : r)),
     }))
+  },
+
+  clearDirtyForCollection: (collectionId: string) => {
+    set((state) => {
+      const groupIds = new Set(state.groups.filter((g) => g.collectionId === collectionId).map((g) => g.id))
+      return {
+        requests: state.requests.map((r) => groupIds.has(r.groupId) ? { ...r, isDirty: false } : r),
+      }
+    })
   },
 
   updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
