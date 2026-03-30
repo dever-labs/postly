@@ -39,17 +39,21 @@ export function CommitOverlay() {
 
   const hasAi = !!(ai?.apiKey?.trim())
 
-  // Load current branch when overlay opens
+  // Load current branch when overlay opens — seed from stored branch, then update from git
   useEffect(() => {
-    if (!integration || !requestId) return
+    if (!requestId) return
     setCommitMessage('')
-    setCurrentBranch('')
-    window.api.git.currentBranch({ integrationId: integration.id }).then(({ data }: { data: string }) => {
-      if (data) setCurrentBranch(data)
-    })
-    // Focus textarea after open
+    // Seed with the stored branch immediately so button is never blocked
+    setCurrentBranch(integration?.branch ?? 'main')
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [requestId, integration])
+
+    if (!integration) return
+    window.api.git.currentBranch({ integrationId: integration.id })
+      .then(({ data }: { data?: string; error?: string }) => {
+        if (data) setCurrentBranch(data)
+      })
+      .catch(() => { /* keep stored branch fallback */ })
+  }, [requestId, integration?.id])
 
   // Subscribe to AI chunks
   useEffect(() => {
@@ -113,7 +117,9 @@ export function CommitOverlay() {
   }
 
   const handleCommit = async () => {
-    if (!commitMessage.trim() || !requestId || !currentBranch) return
+    if (!commitMessage.trim()) { addToast('Please enter a commit message', 'error'); return }
+    if (!requestId) { addToast('No request selected', 'error'); return }
+    if (!currentBranch) { addToast('Could not determine current branch', 'error'); return }
     setCommitting(true)
 
     const content = request
@@ -164,43 +170,41 @@ export function CommitOverlay() {
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xs"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
     >
-      <div className="relative w-full max-w-lg rounded-lg border border-th-border-strong bg-th-surface-raised shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-2.5 border-b border-th-border px-4 py-3">
-          <GitCommit className="h-4 w-4 shrink-0 text-th-text-muted" />
+          <GitCommit className="h-4 w-4 shrink-0 text-th-text-secondary" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-th-text-primary truncate">
+            <div className="text-sm font-semibold text-th-text-primary truncate">
               Commit "{request.name}"
             </div>
             {collection && (
-              <div className="text-xs text-th-text-faint truncate">{collection.name}</div>
+              <div className="text-xs text-th-text-muted truncate">{collection.name}</div>
             )}
           </div>
           <button
             onClick={handleClose}
-            className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-hidden"
+            className="rounded-sm p-1 text-th-text-muted hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-hidden"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Branch badge */}
-        {currentBranch && (
-          <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
-            <GitBranch className="h-3 w-3 text-th-text-faint" />
-            <span className="text-xs text-th-text-faint">Committing to</span>
-            <span className="rounded-full bg-th-surface-hover px-2 py-0.5 text-xs font-mono text-th-text-muted">
-              {currentBranch}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 px-4 pt-3 pb-0">
+          <GitBranch className="h-3 w-3 text-th-text-muted" />
+          <span className="text-xs text-th-text-secondary">Committing to</span>
+          <span className="rounded-full bg-th-surface-raised px-2 py-0.5 text-xs font-mono font-medium text-th-text-primary border border-th-border">
+            {currentBranch || '…'}
+          </span>
+        </div>
 
         {/* Commit message */}
         <div className="p-4">
           <div className="relative">
             <textarea
               ref={textareaRef}
-              className="w-full resize-none rounded-sm border border-th-border bg-th-bg px-3 py-2 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-th-accent focus:outline-hidden"
+              className="w-full resize-none rounded-sm border border-th-border bg-th-bg px-3 py-2 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-accent focus:outline-hidden"
               rows={4}
               placeholder="Commit message…"
               value={commitMessage}
@@ -209,12 +213,12 @@ export function CommitOverlay() {
               disabled={generating}
             />
             {generating && (
-              <div className="absolute bottom-2 right-2 text-xs text-th-text-faint animate-pulse">
+              <div className="absolute bottom-2 right-2 text-xs text-th-text-muted animate-pulse">
                 Generating…
               </div>
             )}
           </div>
-          <p className="mt-1.5 text-xs text-th-text-faint">Ctrl+Enter to commit</p>
+          <p className="mt-1.5 text-xs text-th-text-muted">Ctrl+Enter to commit</p>
         </div>
 
         {/* Actions */}
@@ -238,7 +242,7 @@ export function CommitOverlay() {
           <Button
             size="sm"
             onClick={handleCommit}
-            disabled={committing || !commitMessage.trim() || !currentBranch}
+            disabled={committing || !commitMessage.trim()}
           >
             {committing ? 'Committing…' : 'Commit & Push'}
           </Button>
