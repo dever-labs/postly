@@ -127,35 +127,32 @@ export function EnvironmentEditor() {
   // ── Editor ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg">
-      {/* Header — drag-region; py-4 padding + name area are the drag target */}
-      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
+      {/* Header — drag-region; pt-8 clears title bar height, pr-40 clears window controls (min/max/close ~138px) */}
+      <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border pl-6 pr-48 pt-8 pb-4">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={handleNameBlur}
           onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          className="no-drag bg-transparent text-lg font-semibold text-th-text-primary outline-hidden placeholder-th-text-faint focus:border-b focus:border-blue-500"
+          className="no-drag min-w-0 flex-1 bg-transparent text-lg font-semibold text-th-text-primary outline-hidden placeholder-th-text-faint focus:border-b focus:border-blue-500"
         />
-        <button
-          onClick={handleDelete}
-          className="no-drag rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-hidden"
-        >
-          Delete
-        </button>
-      </div>
-
-      {/* "Set as active" — below header so it's never behind window controls */}
-      {!env.isActive && (
-        <div className="flex shrink-0 items-center gap-3 border-b border-th-border px-6 py-2.5">
-          <span className="text-xs text-th-text-faint">This environment is not active</span>
+        <div className="no-drag flex shrink-0 items-center gap-2">
+          {!env.isActive && (
+            <button
+              onClick={() => setActive(env.id)}
+              className="rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-hidden"
+            >
+              Set as active
+            </button>
+          )}
           <button
-            onClick={() => setActive(env.id)}
-            className="rounded-md border border-th-border-strong px-3 py-1 text-xs text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-hidden"
+            onClick={handleDelete}
+            className="rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-hidden"
           >
-            Set as active
+            Delete
           </button>
         </div>
-      )}
+      </div>
 
       {/* Variables */}
       <div className="flex-1 overflow-y-auto px-6 py-5">

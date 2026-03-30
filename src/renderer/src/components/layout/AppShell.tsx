@@ -112,11 +112,11 @@ export function AppShell() {
             <ImportPage />
           </div>
         ) : selectedItem?.type === 'collection' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
             <CollectionEditor collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'group' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
             <GroupEditor groupId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-collection' ? (
