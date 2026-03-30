@@ -22,6 +22,7 @@ function repoNameFromUrl(raw: string): string {
 
 export function IntegrationSetupPage() {
   const { load: loadIntegrations } = useIntegrationsStore()
+  const integrations = useIntegrationsStore((s) => s.integrations)
   const { load: loadCollections } = useCollectionsStore()
   const collections = useCollectionsStore((s) => s.collections)
   const selectItem = useUIStore((s) => s.selectItem)
@@ -60,27 +61,44 @@ export function IntegrationSetupPage() {
       if (mode === 'git') {
         if (!repoUrl.trim()) { setError('Repository URL is required'); setConnecting(false); return }
 
-        // Create the integration record
-        const { data: createData, error: createErr } = await api.integrations.create({
-          type: 'git',
-          name: repoNameFromUrl(repoUrl),
-          baseUrl: '',
-          repo: repoUrl.trim(),
-          branch: 'main', // will be updated to detected default on connect
-        })
-        if (createErr) { setError(createErr); setConnecting(false); return }
-        const id = (createData as Record<string, unknown>).id as string
+        // Reuse an existing integration for the same repo URL to avoid duplicates
+        const existingIntegration = integrations.find(
+          (i) => i.repo === repoUrl.trim() && i.type === 'git'
+        )
+
+        let id: string
+        if (existingIntegration) {
+          id = existingIntegration.id
+        } else {
+          const { data: createData, error: createErr } = await api.integrations.create({
+            type: 'git',
+            name: repoNameFromUrl(repoUrl),
+            baseUrl: '',
+            repo: repoUrl.trim(),
+            branch: 'main',
+          })
+          if (createErr) { setError(createErr); setConnecting(false); return }
+          id = (createData as Record<string, unknown>).id as string
+        }
         setIntegrationId(id)
 
         // Test connectivity — also detects + stores the default branch
         const { data: connData, error: connErr } = await api.integrations.connect({ id })
-        if (connErr) { setError(connErr); setConnecting(false); return }
+        if (connErr) {
+          // Delete the integration we just created so it doesn't leave orphaned folders
+          if (!existingIntegration) await api.integrations.delete({ id })
+          setIntegrationId('')
+          setError(connErr)
+          setConnecting(false)
+          return
+        }
 
         const u = (connData as Record<string, unknown>)?.connected_user
         try { setConnectedUser(typeof u === 'string' ? JSON.parse(u) : null) } catch { /* ok */ }
 
         // Pre-fill collection name from URL
         setTarget({ mode: 'new', name: repoNameFromUrl(repoUrl) })
+        await loadIntegrations()
         setPhase('collection')
 
       } else {
