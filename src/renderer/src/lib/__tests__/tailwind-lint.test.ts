@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'fs'
+import { readdirSync, readFileSync } from 'fs'
 import { join, extname, relative } from 'path'
 
 const RENDERER_SRC = join(__dirname, '../..')

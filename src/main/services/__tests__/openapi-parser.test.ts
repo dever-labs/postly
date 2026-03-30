@@ -132,21 +132,25 @@ describe('parseOpenApiToRequests — OAS3', () => {
   it('extracts query parameters', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
     const listUsers = requests.find((r) => r.method === 'GET' && r.url.endsWith('/users'))
-    const params = JSON.parse(listUsers!.params) as Array<{ key: string }>
+    if (!listUsers) throw new Error('GET /users request not found')
+    const params = JSON.parse(listUsers.params) as Array<{ key: string }>
     expect(params.map((p) => p.key)).toEqual(['page', 'limit'])
   })
 
   it('extracts header parameters', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
     const listUsers = requests.find((r) => r.method === 'GET' && r.url.endsWith('/users'))
-    const headers = JSON.parse(listUsers!.headers) as Array<{ key: string }>
+    if (!listUsers) throw new Error('GET /users request not found')
+    const headers = JSON.parse(listUsers.headers) as Array<{ key: string }>
     expect(headers.map((h) => h.key)).toEqual(['X-Tenant-Id'])
   })
 
   it('assigns requests to the correct group', async () => {
     const { groups, requests } = await parseOpenApiToRequests({}, 'col-1')
-    const usersGroup = groups.find((g) => g.name === 'Users')!
-    const productsGroup = groups.find((g) => g.name === 'Products')!
+    const usersGroup = groups.find((g) => g.name === 'Users')
+    const productsGroup = groups.find((g) => g.name === 'Products')
+    if (!usersGroup) throw new Error('Users group not found')
+    if (!productsGroup) throw new Error('Products group not found')
     const userRequests = requests.filter((r) => r.groupId === usersGroup.id)
     const productRequests = requests.filter((r) => r.groupId === productsGroup.id)
     expect(userRequests).toHaveLength(4)
@@ -230,7 +234,8 @@ describe('parseOpenApiToRequests — edge cases', () => {
   it('reuses the same group for multiple operations sharing a tag', async () => {
     mockDereference.mockResolvedValue(OAS3_SPEC as never)
     const { groups, requests } = await parseOpenApiToRequests({}, 'col-1')
-    const usersGroup = groups.find((g) => g.name === 'Users')!
+    const usersGroup = groups.find((g) => g.name === 'Users')
+    if (!usersGroup) throw new Error('Users group not found')
     const usersRequests = requests.filter((r) => r.groupId === usersGroup.id)
     // GET /users, POST /users, GET /users/{id}, DELETE /users/{id}
     expect(usersRequests).toHaveLength(4)
