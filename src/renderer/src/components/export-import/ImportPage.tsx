@@ -126,12 +126,6 @@ export function ImportPage() {
             {parsedFile ? 'Configure import sources' : 'Choose a file to import'}
           </h1>
         </div>
-        <button
-          onClick={clearSelectedItem}
-          className="no-drag rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">

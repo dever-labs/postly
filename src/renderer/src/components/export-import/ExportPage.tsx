@@ -1,4 +1,4 @@
-import { Database, Download, FileJson, GitBranch, GitFork, Globe, X } from 'lucide-react'
+import { Database, Download, FileJson, GitBranch, GitFork, Globe } from 'lucide-react'
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { useCollectionsStore } from '@/store/collections'
@@ -115,12 +115,6 @@ export function ExportPage() {
           </div>
           <h1 className="text-sm font-semibold text-th-text-primary">Select collections to export</h1>
         </div>
-        <button
-          onClick={clearSelectedItem}
-          className="no-drag rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
