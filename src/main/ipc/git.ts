@@ -16,14 +16,25 @@ interface IntegrationRow {
 interface RequestRow {
   id: string
   group_id: string
+  name: string
+  method: string
+  url: string
+  params: string
+  headers: string
+  body_type: string
+  body_content: string
+  auth_type: string
+  auth_config: string
+  description: string
   scm_path: string
   scm_sha: string
-  body_content: string
   is_dirty: number
 }
 
 interface GroupRow {
+  id: string
   collection_id: string
+  name: string
 }
 
 interface CollectionRow {
@@ -199,21 +210,41 @@ export function registerGitHandlers(): void {
       const request = queryOne<RequestRow>('SELECT * FROM requests WHERE id = ?', [args.requestId])
       if (!request) return { error: 'Request not found' }
 
-      const scmPath = request.scm_path ?? ''
-      if (!scmPath) return { error: 'Request has no scm_path' }
-
       const { source, sourceMeta, integration } = getSourceMetaForRequest(args.requestId)
       if (!integration) return { error: 'No integration found for this collection' }
 
-      const content = args.content || request.body_content || ''
+      // Auto-generate scm_path for manually-created requests that don't have one yet
+      let scmPath = request.scm_path ?? ''
+      if (!scmPath) {
+        const group = queryOne<GroupRow>('SELECT id, name FROM groups WHERE id = ?', [request.group_id])
+        const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'request'
+        const groupSlug = slug(group?.name ?? 'group')
+        const reqSlug = slug(request.name ?? 'request')
+        scmPath = `requests/${groupSlug}/${reqSlug}.json`
+        run('UPDATE requests SET scm_path = ?, updated_at = ? WHERE id = ?', [scmPath, Date.now(), request.id])
+      }
+
+      // Serialize the full request as file content (fall back to args.content for legacy callers)
+      const fileContent = args.content || JSON.stringify({
+        name: request.name,
+        method: request.method,
+        url: request.url,
+        params: request.params ? JSON.parse(request.params) : [],
+        headers: request.headers ? JSON.parse(request.headers) : [],
+        bodyType: request.body_type,
+        bodyContent: request.body_content,
+        authType: request.auth_type,
+        authConfig: request.auth_config ? JSON.parse(request.auth_config) : {},
+        description: request.description,
+      }, null, 2)
+
       const branch = args.branch
 
       if (source === 'git') {
-        // Create new branch first if needed
         if (args.fromBranch && branch !== args.fromBranch) {
           await gitLocal.createAndPushBranch(integration.id, branch, args.fromBranch)
         }
-        await gitLocal.commitAndPush(integration.id, scmPath, content, args.commitMessage, branch)
+        await gitLocal.commitAndPush(integration.id, scmPath, fileContent, args.commitMessage, branch)
         run('UPDATE requests SET is_dirty = 0, updated_at = ? WHERE id = ?', [Date.now(), args.requestId])
         return { data: true }
       }
@@ -234,12 +265,12 @@ export function registerGitHandlers(): void {
         const [owner, ...repoParts] = (sourceMeta.repo ?? integration.repo).split('/')
         const repo = repoParts.join('/')
         const latestSha = await github.getFileSha(integration.token, owner, repo, scmPath, branch)
-        await github.commitFile(integration.token, owner, repo, scmPath, content, latestSha, args.commitMessage, branch)
+        await github.commitFile(integration.token, owner, repo, scmPath, fileContent, latestSha, args.commitMessage, branch)
         newSha = latestSha
       } else if (source === 'gitlab') {
         const projectId = encodeURIComponent(sourceMeta.projectId ?? integration.repo)
         const latestSha = await gitlab.getFileSha(integration.token, integration.base_url, projectId, scmPath, branch)
-        await gitlab.commitFile(integration.token, integration.base_url, projectId, scmPath, content, latestSha, args.commitMessage, branch)
+        await gitlab.commitFile(integration.token, integration.base_url, projectId, scmPath, fileContent, latestSha, args.commitMessage, branch)
         newSha = latestSha
       }
 
