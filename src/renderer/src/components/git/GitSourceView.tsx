@@ -101,7 +101,6 @@ function RequestCommitRow({
       commitMessage: state.commitMessage,
       branch,
       fromBranch: state.isNewBranch ? state.fromBranch : undefined,
-      content: '', // content resolved on backend from request body_content
     })
 
     setState((s) => ({ ...s, committing: false }))

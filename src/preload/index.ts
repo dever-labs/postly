@@ -150,7 +150,7 @@ const api = {
     switchBranch: (data: { integrationId: string; branch: string }) => ipcRenderer.invoke('postly:git:branch:switch', data),
     sync: (data: { integrationId: string; collectionId?: string; collectionName?: string }) => ipcRenderer.invoke('postly:git:sync', data),
     diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:git:diff', data),
-    commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string; content: string }) => ipcRenderer.invoke('postly:git:commit', data),
+    commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string }) => ipcRenderer.invoke('postly:git:commit', data),
     dirtyRequests: (data: { collectionId: string }) => ipcRenderer.invoke('postly:git:dirty-requests', data),
     import: (data: { integrationId: string; collectionId?: string; collectionName: string }) => ipcRenderer.invoke('postly:git:import', data),
   },

@@ -122,26 +122,10 @@ export function CommitOverlay() {
     if (!currentBranch) { addToast('Could not determine current branch', 'error'); return }
     setCommitting(true)
 
-    const content = request
-      ? JSON.stringify({
-          name: request.name,
-          method: request.method,
-          url: request.url,
-          params: request.params,
-          headers: request.headers,
-          bodyType: request.bodyType,
-          bodyContent: request.bodyContent,
-          authType: request.authType,
-          authConfig: request.authConfig,
-          description: request.description,
-        }, null, 2)
-      : ''
-
     const { error } = await window.api.git.commit({
       requestId,
       commitMessage: commitMessage.trim(),
       branch: currentBranch,
-      content,
     })
 
     setCommitting(false)

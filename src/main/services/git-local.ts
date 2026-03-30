@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
+import type { PostlyExportFile } from '../ipc/export-import'
 
 export function getDataDir(): string {
   return app.getPath('userData')
@@ -213,7 +214,55 @@ export async function discoverAndImport(
   const localPath = getRepoPath(integrationId)
   await cloneOrPull(integrationId, repoUrl, branch)
 
-  // ── 3. Scan for OpenAPI specs and populate the collection ─────────────────
+  // ── 3. Scan for Postly-format files first, then fall back to OpenAPI ─────────
+
+  // Prefer *.postly.json at repo root — the Postly native format
+  const postlyFiles = fs.readdirSync(localPath).filter(f => f.endsWith('.postly.json'))
+  if (postlyFiles.length > 0) {
+    for (const file of postlyFiles) {
+      try {
+        const raw = fs.readFileSync(path.join(localPath, file), 'utf-8')
+        const parsed: PostlyExportFile = JSON.parse(raw)
+        if (!parsed.$schema?.startsWith('postly/') || !Array.isArray(parsed.collections)) continue
+        for (const col of parsed.collections) {
+          run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+          // Update collection name from the file
+          run('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?', [col.name, now, collectionId])
+          for (const [gi, grp] of (col.groups ?? []).entries()) {
+            const grpId = crypto.randomUUID()
+            run(
+              `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, auth_type, auth_config, ssl_verification, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+              [grpId, collectionId, grp.name, grp.description ?? '', gi,
+               grp.auth?.type ?? 'none', JSON.stringify(grp.auth?.config ?? {}),
+               grp.ssl ?? 'inherit', now, now]
+            )
+            for (const [ri, req] of (grp.requests ?? []).entries()) {
+              const reqId = crypto.randomUUID()
+              run(
+                `INSERT INTO requests
+                   (id, group_id, name, method, url, params, headers, body_type, body_content,
+                    auth_type, auth_config, ssl_verification, protocol, protocol_config,
+                    description, scm_path, is_dirty, sort_order, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+                [reqId, grpId, req.name, req.method ?? 'GET', req.url ?? '',
+                 JSON.stringify(req.params ?? []), JSON.stringify(req.headers ?? []),
+                 req.bodyType ?? 'none', req.bodyContent ?? '',
+                 req.auth?.type ?? 'none', JSON.stringify(req.auth?.config ?? {}),
+                 req.ssl ?? 'inherit', req.protocol ?? 'http',
+                 JSON.stringify(req.protocolConfig ?? {}),
+                 req.description ?? '', file, ri, now, now]
+              )
+            }
+          }
+          break // use first collection in the file
+        }
+      } catch { /* skip invalid files */ }
+    }
+    return collectionId
+  }
+
+  // Fall back to OpenAPI spec scanning
   for (const filePath of OPENAPI_CANDIDATES) {
     const fullPath = path.join(localPath, filePath)
     if (!fs.existsSync(fullPath)) continue
@@ -225,7 +274,6 @@ export async function discoverAndImport(
       continue
     }
 
-    // Update source_meta to point at the discovered spec file
     run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify({ integrationId, filePath }), now, collectionId])
 

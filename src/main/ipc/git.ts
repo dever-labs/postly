@@ -3,6 +3,7 @@ import { queryOne, queryAll, run } from '../database'
 import * as github from '../services/github'
 import * as gitlab from '../services/gitlab'
 import * as gitLocal from '../services/git-local'
+import { buildExport } from './export-import'
 
 interface IntegrationRow {
   id: string
@@ -204,7 +205,6 @@ export function registerGitHandlers(): void {
     commitMessage: string
     branch: string
     fromBranch?: string
-    content: string
   }) => {
     try {
       const request = queryOne<RequestRow>('SELECT * FROM requests WHERE id = ?', [args.requestId])
@@ -213,30 +213,23 @@ export function registerGitHandlers(): void {
       const { source, sourceMeta, integration } = getSourceMetaForRequest(args.requestId)
       if (!integration) return { error: 'No integration found for this collection' }
 
-      // Auto-generate scm_path for manually-created requests that don't have one yet
-      let scmPath = request.scm_path ?? ''
-      if (!scmPath) {
-        const group = queryOne<GroupRow>('SELECT id, name FROM groups WHERE id = ?', [request.group_id])
-        const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'request'
-        const groupSlug = slug(group?.name ?? 'group')
-        const reqSlug = slug(request.name ?? 'request')
-        scmPath = `requests/${groupSlug}/${reqSlug}.json`
-        run('UPDATE requests SET scm_path = ?, updated_at = ? WHERE id = ?', [scmPath, Date.now(), request.id])
-      }
+      // Resolve the collection this request belongs to
+      const group = queryOne<GroupRow>('SELECT id, name, collection_id FROM groups WHERE id = ?', [request.group_id])
+      if (!group) return { error: 'Group not found' }
+      const collectionId = group.collection_id
 
-      // Serialize the full request as file content (fall back to args.content for legacy callers)
-      const fileContent = args.content || JSON.stringify({
-        name: request.name,
-        method: request.method,
-        url: request.url,
-        params: request.params ? JSON.parse(request.params) : [],
-        headers: request.headers ? JSON.parse(request.headers) : [],
-        bodyType: request.body_type,
-        bodyContent: request.body_content,
-        authType: request.auth_type,
-        authConfig: request.auth_config ? JSON.parse(request.auth_config) : {},
-        description: request.description,
-      }, null, 2)
+      // Build the full collection in postly/v1 export format — same as File → Export
+      const exportData = buildExport([collectionId])
+      const collectionExport = exportData.collections[0]
+      if (!collectionExport) return { error: 'Collection not found' }
+
+      // File is stored as <collection-slug>.postly.json at the repo root
+      const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+      const scmPath = `${slug(collectionExport.name)}.postly.json`
+      const fileContent = JSON.stringify(
+        { $schema: 'postly/v1', exportedAt: new Date().toISOString(), collections: [collectionExport] },
+        null, 2
+      )
 
       const branch = args.branch
 
@@ -245,7 +238,13 @@ export function registerGitHandlers(): void {
           await gitLocal.createAndPushBranch(integration.id, branch, args.fromBranch)
         }
         await gitLocal.commitAndPush(integration.id, scmPath, fileContent, args.commitMessage, branch)
-        run('UPDATE requests SET is_dirty = 0, updated_at = ? WHERE id = ?', [Date.now(), args.requestId])
+        // Clear dirty flag for all requests in this collection
+        run(
+          `UPDATE requests SET is_dirty = 0, updated_at = ? WHERE group_id IN (
+             SELECT id FROM groups WHERE collection_id = ?
+           )`,
+          [Date.now(), collectionId]
+        )
         return { data: true }
       }
 
