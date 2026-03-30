@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
 import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHubDeviceToken, requestGitLabDeviceCode, pollGitLabDeviceToken } from '../services/scm-oauth'
+import { testConnectivity } from '../services/git-local'
 
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
@@ -58,7 +59,15 @@ export function registerIntegrationHandlers(): void {
       const type = integration.type as string
       let token = '', connectedUserJson = ''
 
-      if (type === 'github') {
+      if (type === 'git') {
+        // Uses system git credentials — test connectivity and detect default branch
+        const { name, defaultBranch } = await testConnectivity(integration.repo as string)
+        connectedUserJson = JSON.stringify({ name, avatarUrl: '' })
+        token = ''
+        // Store the detected default branch so discoverAndImport uses the right one
+        run('UPDATE integrations SET branch = ?, updated_at = ? WHERE id = ?',
+          [defaultBranch, Date.now(), args.id])
+      } else if (type === 'github') {
         const result = await startGitHubOAuth({
           baseUrl: integration.base_url as string,
           clientId: integration.client_id as string,

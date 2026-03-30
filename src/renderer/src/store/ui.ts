@@ -19,6 +19,10 @@ interface ToastItem {
   type: 'success' | 'error' | 'info'
 }
 
+export type GitPendingAction =
+  | { type: 'push'; collectionId: string; title: string; subtitle?: string; onCancel?: () => void | Promise<void> }
+  | { type: 'delete-collection'; collectionId: string; title: string; subtitle?: string; onCancel?: () => void | Promise<void> }
+
 interface UIState {
   theme: Theme
   settingsOpen: boolean
@@ -27,7 +31,8 @@ interface UIState {
   selectedEnvId: string | null
   sidebarWidth: number
   editorHeight: number
-  activeCommitRequestId: string | null
+  pendingGitAction: GitPendingAction | null
+  deletingCollectionId: string | null
   toasts: ToastItem[]
   selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source'; id: string } | null
   toggleTheme: () => void
@@ -38,8 +43,10 @@ interface UIState {
   setSelectedEnvId: (id: string | null) => void
   setSidebarWidth: (w: number) => void
   setEditorHeight: (h: number) => void
-  openCommitPanel: (requestId: string) => void
-  closeCommitPanel: () => void
+  openGitAction: (action: GitPendingAction) => void
+  closeGitAction: () => void
+  openDeleteCollection: (collectionId: string) => void
+  closeDeleteCollection: () => void
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
   selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => void
@@ -54,7 +61,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedEnvId: null,
   sidebarWidth: 280,
   editorHeight: 300,
-  activeCommitRequestId: null,
+  pendingGitAction: null,
+  deletingCollectionId: null,
   toasts: [],
   selectedItem: null,
 
@@ -80,8 +88,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSidebarWidth: (w: number) => set({ sidebarWidth: isNaN(w) ? 280 : w }),
   setEditorHeight: (h: number) => set({ editorHeight: isNaN(h) ? 300 : h }),
 
-  openCommitPanel: (requestId: string) => set({ activeCommitRequestId: requestId }),
-  closeCommitPanel: () => set({ activeCommitRequestId: null }),
+  openGitAction: (action: GitPendingAction) => set({ pendingGitAction: action }),
+  closeGitAction: () => set({ pendingGitAction: null }),
+
+  openDeleteCollection: (collectionId: string) => set({ deletingCollectionId: collectionId }),
+  closeDeleteCollection: () => set({ deletingCollectionId: null }),
 
   addToast: (message: string, type: 'success' | 'error' | 'info') => {
     const id = Math.random().toString(36).slice(2)

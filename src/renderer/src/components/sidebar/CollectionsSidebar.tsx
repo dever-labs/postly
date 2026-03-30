@@ -212,7 +212,7 @@ export function CollectionsSidebar() {
                 </span>
                 <span className="flex flex-col">
                   <span className="text-xs text-th-text-subtle group-hover:text-th-text-secondary">Connect a source</span>
-                  <span className="text-[10px] text-th-text-faint">GitHub · GitLab · Backstage</span>
+                  <span className="text-[10px] text-th-text-faint">Git · Backstage · GitHub · GitLab</span>
                 </span>
               </button>
             </div>

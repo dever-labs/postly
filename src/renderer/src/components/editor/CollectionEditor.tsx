@@ -44,6 +44,7 @@ export function CollectionEditor({ collectionId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectUIItem = useUIStore((s) => s.selectItem)
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -70,6 +71,7 @@ export function CollectionEditor({ collectionId }: Props) {
 
   const integration = collection.integrationId ? integrations.find((i) => i.id === collection.integrationId) : null
   const inheritedFrom = integration?.token ? integration.name : undefined
+  const isGit = ['git', 'github', 'gitlab'].includes(collection.source)
 
   const discard = () => {
     setName(collection.name)
@@ -86,7 +88,11 @@ export function CollectionEditor({ collectionId }: Props) {
     await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification })
     setSaving(false)
     setIsDirty(false)
-    addToast('Collection saved', 'success')
+    if (isGit) {
+      openGitAction({ type: 'push', collectionId, title: `Updated collection '${name.trim()}'` })
+    } else {
+      addToast('Collection saved', 'success')
+    }
   }
 
   const mark = () => setIsDirty(true)
@@ -94,7 +100,7 @@ export function CollectionEditor({ collectionId }: Props) {
   return (
     <div className="bg-th-bg w-full">
       {/* Thin drag strip — window drag target only, no content */}
-      <div className="drag-region h-8 shrink-0" />
+      <div className="drag-region shrink-0 pt-8 pb-4" />
 
       {/* Content */}
       <div className="no-drag px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
@@ -118,20 +124,7 @@ export function CollectionEditor({ collectionId }: Props) {
             value={name}
             onChange={(e) => { setName(e.target.value); mark() }}
           />
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              onClick={async () => {
-                const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
-                if (error) addToast(`Export failed: ${error}`, 'error')
-                else if (data) addToast(`Exported "${name}"`, 'success')
-              }}
-              className="rounded-sm p-0.5 text-th-text-faint hover:text-th-text-primary hover:bg-th-surface-hover transition-colors focus:outline-hidden"
-              title="Export this collection"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-th-text-faint">Collection</p>
+          <p className="mt-1 text-xs text-th-text-muted">Collection</p>
           <AiActionButton
             className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
             onClick={() => selectUIItem('ai-collection', collectionId)}
@@ -177,31 +170,45 @@ export function CollectionEditor({ collectionId }: Props) {
             <div className="rounded-md border border-th-border bg-th-surface px-4 py-3 text-xs flex flex-col gap-1.5 text-th-text-subtle">
               <div className="flex gap-3"><span className="text-th-text-faint w-20">Type</span><span>{collection.source}</span></div>
               {integration && <div className="flex gap-3"><span className="text-th-text-faint w-20">Integration</span><span>{integration.name}</span></div>}
-              {integration && <div className="flex gap-3"><span className="text-th-text-faint w-20">Base URL</span><span className="truncate">{integration.baseUrl}</span></div>}
+              {integration?.repo && <div className="flex gap-3"><span className="text-th-text-faint w-20">Repository</span><span className="truncate">{integration.repo}</span></div>}
             </div>
           </Section>
         )}
 
       </div>
 
-      {/* Sticky save bar */}
-      {isDirty && (
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
-          <button
-            onClick={discard}
-            className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
-          >
-            Discard
-          </button>
-          <button
-            onClick={save}
-            disabled={saving || !name.trim()}
-            className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      )}
+      {/* Bottom action bar — export always visible; save/discard appear when dirty */}
+      <div className="sticky bottom-0 flex items-center gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
+        <button
+          onClick={async () => {
+            const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
+            if (error) addToast(`Export failed: ${error}`, 'error')
+            else if (data) addToast(`Exported "${name}"`, 'success')
+          }}
+          className="flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm text-th-text-muted hover:bg-th-surface-raised hover:text-th-text-primary transition-colors focus:outline-hidden"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export
+        </button>
+        <div className="flex-1" />
+        {isDirty && (
+          <>
+            <button
+              onClick={discard}
+              className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
+            >
+              Discard
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || !name.trim()}
+              className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }

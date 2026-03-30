@@ -1,10 +1,9 @@
 import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
 import { SendButton } from '@/components/editor/SendButton'
-import { CommitPanel } from '@/components/editor/CommitPanel'
 import { ProtocolSelector } from '@/components/editor/ProtocolSelector'
 import { WebSocketView } from '@/components/editor/WebSocketView'
 import { GrpcView } from '@/components/editor/GrpcView'
@@ -56,7 +55,8 @@ export function RequestEditor() {
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
-  const selectItem = useUIStore((s) => s.selectItem)
+  const { selectItem } = useUIStore()
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   // no per-request title state needed — input is always rendered
 
@@ -80,6 +80,32 @@ export function RequestEditor() {
   }
 
   const source = breadcrumb?.sourceType
+
+  const triggerGitSave = () => {
+    if (!editingRequest || !breadcrumb?.collection) return
+    const isGit = ['git', 'github', 'gitlab'].includes(breadcrumb.sourceType)
+    if (isGit) {
+      openGitAction({
+        type: 'push',
+        collectionId: breadcrumb.collection.id,
+        title: `Updated '${editingRequest.name}'`,
+        subtitle: breadcrumb.collection.name,
+      })
+    }
+  }
+
+  // Ctrl+S: save the request, then show commit overlay for git-sourced requests
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
+        e.preventDefault()
+        if (!editingRequest) return
+        saveRequest().then(triggerGitSave)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [editingRequest, saveRequest, breadcrumb, openGitAction])
 
   if (!editingRequest) {
     return (
@@ -165,9 +191,12 @@ export function RequestEditor() {
           <SendButton onClick={sendRequest} isLoading={isLoading} />
         )}
         <button
-          onClick={saveRequest}
-          className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
-          title="Save"
+          onClick={async () => {
+            await saveRequest()
+            triggerGitSave()
+          }}
+          className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
+          title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
         >
           <Save className="h-4 w-4" />
         </button>
@@ -281,13 +310,6 @@ export function RequestEditor() {
           </Tabs>
         )}
       </div>
-
-      {/* Commit panel for SCM-backed requests */}
-      {editingRequest.isDirty && (source === 'github' || source === 'gitlab') && (
-        <CommitPanel requestId={editingRequest.id} source={source} />
-      )}
     </div>
   )
 }
-
-

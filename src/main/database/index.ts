@@ -24,8 +24,13 @@ export async function initDatabase(): Promise<void> {
 
   db.run('PRAGMA foreign_keys = ON')
   runMigrations()
-  // is_dirty is an in-session flag only — reset stale flags from previous sessions
-  db.run('UPDATE requests SET is_dirty = 0')
+  // is_dirty for local requests is an in-session editor flag — reset on startup.
+  // Git-sourced requests keep is_dirty as "uncommitted to git" across restarts.
+  db.run(`UPDATE requests SET is_dirty = 0 WHERE group_id IN (
+    SELECT g.id FROM groups g
+    JOIN collections c ON c.id = g.collection_id
+    WHERE c.source NOT IN ('git', 'github', 'gitlab')
+  )`)
   persistDb()
 }
 

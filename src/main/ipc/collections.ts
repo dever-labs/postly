@@ -1,6 +1,21 @@
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
+import * as gitLocal from '../services/git-local'
+
+interface CollectionRow {
+  id: string
+  name: string
+  source: string
+  source_meta: string | null
+  integration_id: string | null
+}
+
+interface IntegrationRow {
+  id: string
+  repo: string
+  branch: string | null
+}
 
 export function registerCollectionHandlers(): void {
   ipcMain.handle('postly:collections:list', async () => {
@@ -13,21 +28,42 @@ export function registerCollectionHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:collections:create', async (_, args: { name: string; source?: string }) => {
+  ipcMain.handle('postly:collections:create', async (_, args: { name: string; source?: string; integrationId?: string }) => {
     try {
       const id = crypto.randomUUID()
       const now = Date.now()
       const source = args.source ?? 'local'
-      run('INSERT INTO collections (id, name, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [id, args.name, source, now, now])
+      run(
+        'INSERT INTO collections (id, name, source, integration_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [id, args.name, source, args.integrationId ?? null, now, now]
+      )
       return { data: queryOne('SELECT * FROM collections WHERE id = ?', [id]) }
     } catch (err) {
       return { error: String(err) }
     }
   })
 
-  ipcMain.handle('postly:collections:delete', async (_, args: { id: string }) => {
+  ipcMain.handle('postly:collections:delete', async (_, args: { id: string; commitMessage?: string }) => {
     try {
+      const collection = queryOne<CollectionRow>('SELECT * FROM collections WHERE id = ?', [args.id])
+      if (collection?.source === 'git' && collection.integration_id) {
+        try {
+          let meta: { fileName?: string } = {}
+          try { meta = JSON.parse(collection.source_meta ?? '{}') } catch { /* ignore */ }
+          const integration = queryOne<IntegrationRow>(
+            'SELECT id, repo, branch FROM integrations WHERE id = ?',
+            [collection.integration_id]
+          )
+          if (integration && meta.fileName) {
+            await gitLocal.deleteCollectionFile(
+              integration.id,
+              meta.fileName,
+              integration.branch ?? 'main',
+              args.commitMessage ?? `Remove collection: ${collection.name}`
+            )
+          }
+        } catch { /* git failure should not block DB deletion */ }
+      }
       run('DELETE FROM collections WHERE id = ?', [args.id])
       return { data: true }
     } catch (err) {

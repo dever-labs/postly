@@ -3,8 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 const api = {
   collections: {
     list: () => ipcRenderer.invoke('postly:collections:list'),
-    create: (data: { name: string; source?: string }) => ipcRenderer.invoke('postly:collections:create', data),
-    delete: (data: { id: string }) => ipcRenderer.invoke('postly:collections:delete', data),
+    create: (data: { name: string; source?: string; integrationId?: string }) => ipcRenderer.invoke('postly:collections:create', data),
+    delete: (data: { id: string; commitMessage?: string }) => ipcRenderer.invoke('postly:collections:delete', data),
     rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:collections:rename', data),
     update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) =>
       ipcRenderer.invoke('postly:collections:update', data),
@@ -144,13 +144,16 @@ const api = {
     devicePoll: (data: { id: string }) => ipcRenderer.invoke('postly:integrations:device-poll', data),
   },
   git: {
+    currentBranch: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:current-branch', data),
     listBranches: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:branches:list', data),
     createBranch: (data: { integrationId: string; newBranch: string; fromBranch: string }) => ipcRenderer.invoke('postly:git:branch:create', data),
     switchBranch: (data: { integrationId: string; branch: string }) => ipcRenderer.invoke('postly:git:branch:switch', data),
-    sync: (data: { integrationId: string }) => ipcRenderer.invoke('postly:git:sync', data),
+    sync: (data: { integrationId: string; collectionId?: string; collectionName?: string }) => ipcRenderer.invoke('postly:git:sync', data),
     diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:git:diff', data),
-    commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string; content: string }) => ipcRenderer.invoke('postly:git:commit', data),
+    commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string }) => ipcRenderer.invoke('postly:git:commit', data),
+    pushCollection: (data: { collectionId: string; commitMessage: string; branch: string }) => ipcRenderer.invoke('postly:git:push-collection', data),
     dirtyRequests: (data: { collectionId: string }) => ipcRenderer.invoke('postly:git:dirty-requests', data),
+    import: (data: { integrationId: string; collectionId?: string; collectionName: string }) => ipcRenderer.invoke('postly:git:import', data),
   },
   ai: {
     chat: (data: { requestId: string; provider: string; apiKey: string; model: string; messages: unknown[] }) =>

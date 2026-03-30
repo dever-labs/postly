@@ -7,7 +7,7 @@ import { queryAll, run } from '../database'
 
 const SCHEMA = 'postly/v1'
 
-interface ExportRequest {
+export interface ExportRequest {
   name: string
   method: string
   url: string
@@ -22,7 +22,7 @@ interface ExportRequest {
   protocolConfig: Record<string, unknown>
 }
 
-interface ExportGroup {
+export interface ExportGroup {
   name: string
   description: string
   auth: { type: string; config: Record<string, unknown> }
@@ -30,7 +30,7 @@ interface ExportGroup {
   requests: ExportRequest[]
 }
 
-interface ExportCollection {
+export interface ExportCollection {
   name: string
   description: string
   source: string
@@ -46,9 +46,15 @@ export interface PostlyExportFile {
   collections: ExportCollection[]
 }
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+export function tryParse<T>(val: unknown, fallback: T): T {
+  try { return val ? JSON.parse(String(val)) as T : fallback } catch { return fallback }
+}
+
 // ─── Build export object from DB ───────────────────────────────────────────
 
-function buildExport(collectionIds?: string[]): PostlyExportFile {
+export function buildExport(collectionIds?: string[]): PostlyExportFile {
   const rows = collectionIds && collectionIds.length > 0
     ? queryAll(
         `SELECT * FROM collections WHERE id IN (${collectionIds.map(() => '?').join(',')}) ORDER BY created_at ASC`,
@@ -112,7 +118,7 @@ function buildExport(collectionIds?: string[]): PostlyExportFile {
 
 // ─── Insert imported data into DB ──────────────────────────────────────────
 
-function importData(data: PostlyExportFile): number {
+export function importData(data: PostlyExportFile): number {
   const now = Date.now()
   for (const col of data.collections) {
     const colId = crypto.randomUUID()
@@ -153,17 +159,11 @@ function importData(data: PostlyExportFile): number {
   return data.collections.length
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-function tryParse<T>(val: unknown, fallback: T): T {
-  try { return val ? JSON.parse(String(val)) as T : fallback } catch { return fallback }
-}
+// ─── IPC handlers ──────────────────────────────────────────────────────────
 
 function winFromEvent(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender)
 }
-
-// ─── IPC handlers ──────────────────────────────────────────────────────────
 
 export function registerExportImportHandlers(): void {
   /** Export one or more collections to a .postly.json file via save dialog. */

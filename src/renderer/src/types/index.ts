@@ -15,7 +15,7 @@ export type BodyType =
   | 'json'  // legacy alias
   | 'raw'   // legacy alias
 export type AuthType = 'none' | 'inherit' | 'bearer' | 'basic' | 'jwt' | 'oauth2' | 'ntlm'
-export type CollectionSource = 'local' | 'backstage' | 'github' | 'gitlab'
+export type CollectionSource = 'local' | 'backstage' | 'github' | 'gitlab' | 'git'
 export type SslVerification = 'inherit' | 'enabled' | 'disabled'
 
 export interface KeyValuePair {
@@ -42,7 +42,7 @@ export interface Collection {
 
 export interface Integration {
   id: string
-  type: 'github' | 'gitlab' | 'backstage'
+  type: 'github' | 'gitlab' | 'backstage' | 'git'
   name: string
   baseUrl: string
   clientId: string

@@ -12,13 +12,14 @@ interface CollectionsState {
   toggleGroupCollapsed: (groupId: string) => Promise<void>
   toggleSourceHidden: (source: CollectionSource) => void
   setSearchQuery: (q: string) => void
-  createGroup: (collectionId: string, name: string) => Promise<void>
+  createGroup: (collectionId: string, name: string) => Promise<string | null>
   addRequestToCollection: (collectionId: string) => Promise<void>
-  deleteCollection: (id: string) => Promise<void>
+  deleteCollection: (id: string, commitMessage?: string) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
   markDirty: (requestId: string) => void
   syncRequest: (request: Request) => void
+  clearDirtyForCollection: (collectionId: string) => void
   updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
@@ -112,15 +113,16 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     const { data, error } = await api.groups.create({ collectionId, name })
     if (error) {
       console.error('Failed to create group:', error)
-      return
+      return null
     }
     const group = normalizeGroup(data as Record<string, unknown>)
     set((state) => ({ groups: [...state.groups, group] }))
+    return group.id
   },
 
-  deleteCollection: async (id: string) => {
+  deleteCollection: async (id: string, commitMessage?: string) => {
     const api = window.api
-    const { error } = await api.collections.delete({ id })
+    const { error } = await api.collections.delete({ id, commitMessage })
     if (error) { console.error('Failed to delete collection:', error); return }
     set((state) => ({
       collections: state.collections.filter((c) => c.id !== id),
@@ -168,10 +170,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   deleteRequest: async (id: string) => {
     const api = window.api
     const { error } = await api.requests.delete({ id })
-    if (error) {
-      console.error('Failed to delete request:', error)
-      return
-    }
+    if (error) { console.error('Failed to delete request:', error); return }
     set((state) => ({ requests: state.requests.filter((r) => r.id !== id) }))
   },
 
@@ -187,6 +186,15 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     set((state) => ({
       requests: state.requests.map((r) => (r.id === request.id ? { ...r, ...request } : r)),
     }))
+  },
+
+  clearDirtyForCollection: (collectionId: string) => {
+    set((state) => {
+      const groupIds = new Set(state.groups.filter((g) => g.collectionId === collectionId).map((g) => g.id))
+      return {
+        requests: state.requests.map((r) => groupIds.has(r.groupId) ? { ...r, isDirty: false } : r),
+      }
+    })
   },
 
   updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {

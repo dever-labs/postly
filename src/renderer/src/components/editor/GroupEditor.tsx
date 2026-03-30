@@ -45,6 +45,7 @@ export function GroupEditor({ groupId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -95,7 +96,12 @@ export function GroupEditor({ groupId }: Props) {
     await updateGroup(groupId, { name: name.trim(), description, authType, authConfig, sslVerification })
     setSaving(false)
     setIsDirty(false)
-    addToast('Group saved', 'success')
+    const isGit = collection && ['git', 'github', 'gitlab'].includes(collection.source)
+    if (isGit && collection) {
+      openGitAction({ type: 'push', collectionId: collection.id, title: `Updated group '${name.trim()}'`, subtitle: collection.name })
+    } else {
+      addToast('Group saved', 'success')
+    }
   }
 
   const mark = () => setIsDirty(true)
@@ -103,7 +109,7 @@ export function GroupEditor({ groupId }: Props) {
   return (
     <div className="bg-th-bg w-full">
       {/* Thin drag strip — window drag target only, no content */}
-      <div className="drag-region h-8 shrink-0" />
+      <div className="drag-region shrink-0 pt-8 pb-4" />
 
       {/* Content */}
       <div className="no-drag px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
