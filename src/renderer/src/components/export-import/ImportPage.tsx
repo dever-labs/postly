@@ -1,4 +1,4 @@
-import { ChevronRight, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload, X } from 'lucide-react'
+import { Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload, X } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
@@ -134,7 +134,7 @@ export function ImportPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 pb-4">
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="mb-6">
           <input
             ref={fileInputRef}
@@ -143,18 +143,27 @@ export function ImportPage() {
             className="hidden"
             onChange={handleFileChange}
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex w-full items-center gap-3 rounded-lg border border-dashed border-th-border px-4 py-3 text-sm text-th-text-subtle hover:border-th-border-strong hover:bg-th-surface-raised hover:text-th-text-secondary"
-          >
-            <FolderOpen className="h-4 w-4 shrink-0" />
-            {fileName ? (
-              <span className="text-th-text-primary">{fileName}</span>
-            ) : (
-              <span>Browse for a .postly.json file…</span>
-            )}
-            <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
-          </button>
+          {!parsedFile ? (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex w-full flex-col items-center gap-3 rounded-lg border border-dashed border-th-border px-6 py-10 text-center hover:border-th-border-strong hover:bg-th-surface-raised"
+            >
+              <FolderOpen className="h-8 w-8 text-th-text-muted" />
+              <div>
+                <p className="text-sm font-medium text-th-text-secondary">Browse for a .postly.json file</p>
+                <p className="mt-0.5 text-xs text-th-text-subtle">Select a previously exported Postly collection</p>
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex w-full items-center gap-3 rounded-lg border border-th-border px-4 py-3 text-sm hover:border-th-border-strong hover:bg-th-surface-raised"
+            >
+              <FolderOpen className="h-4 w-4 shrink-0 text-th-text-muted" />
+              <span className="flex-1 truncate text-left text-th-text-primary">{fileName}</span>
+              <span className="shrink-0 text-xs text-th-text-subtle">Change file</span>
+            </button>
+          )}
           {parseError && <p className="mt-2 text-xs text-red-400">{parseError}</p>}
         </div>
 
