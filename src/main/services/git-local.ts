@@ -137,17 +137,42 @@ const OPENAPI_CANDIDATES = [
 ]
 
 /** Clone/pull the repo, scan for OpenAPI files, and upsert collections + requests into the DB.
- *  Pass `opts.collectionId` + `opts.collectionName` to import into a specific collection. */
+ *  Pass `opts.collectionId` + `opts.collectionName` to import into a specific collection.
+ *  The collection is always created/found first — even if no specs are discovered. */
 export async function discoverAndImport(
   integrationId: string,
   repoUrl: string,
   branch: string,
   opts?: { collectionId?: string; collectionName?: string }
-): Promise<void> {
+): Promise<string> {
   const localPath = getRepoPath(integrationId)
   await cloneOrPull(integrationId, repoUrl, branch)
 
   const now = Date.now()
+
+  // ── Ensure the collection exists BEFORE scanning ──────────────────────────
+  const findExisting = opts?.collectionId
+    ? queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
+    : queryOne<{ id: string }>(
+        `SELECT id FROM collections WHERE integration_id = ? AND source = 'git'`,
+        [integrationId]
+      )
+
+  let collectionId: string
+  const repoName = opts?.collectionName ?? repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
+
+  if (findExisting) {
+    collectionId = findExisting.id
+    run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+  } else {
+    collectionId = opts?.collectionId ?? crypto.randomUUID()
+    run(
+      `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+      [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
+    )
+  }
+
+  // ── Scan for OpenAPI specs and populate the collection ────────────────────
   for (const filePath of OPENAPI_CANDIDATES) {
     const fullPath = path.join(localPath, filePath)
     if (!fs.existsSync(fullPath)) continue
@@ -159,28 +184,9 @@ export async function discoverAndImport(
       continue
     }
 
-    const sourceMeta = JSON.stringify({ integrationId, filePath })
-
-    // Prefer an explicitly supplied collectionId, then look for one already tied to this integration
-    const existing = opts?.collectionId
-      ? queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
-      : queryOne<{ id: string }>(
-          `SELECT id FROM collections WHERE integration_id = ? AND source = 'git'`,
-          [integrationId]
-        )
-
-    let collectionId: string
-    if (existing) {
-      collectionId = existing.id
-      run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?', [sourceMeta, now, collectionId])
-    } else {
-      collectionId = opts?.collectionId ?? crypto.randomUUID()
-      const repoName = opts?.collectionName ?? repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/')
-      run(
-        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-        [collectionId, repoName, sourceMeta, integrationId, now, now]
-      )
-    }
+    // Update source_meta to point at the discovered spec file
+    run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify({ integrationId, filePath }), now, collectionId])
 
     try {
       const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
@@ -201,4 +207,6 @@ export async function discoverAndImport(
       }
     } catch { /* skip unparseable specs */ }
   }
+
+  return collectionId
 }

@@ -250,14 +250,13 @@ export function registerGitHandlers(): void {
     try {
       const row = queryOne<IntegrationRow>('SELECT * FROM integrations WHERE id = ?', [args.integrationId])
       if (!row) return { error: 'Integration not found' }
-      await gitLocal.discoverAndImport(row.id, row.repo, row.branch ?? 'main', {
+      const collectionId = await gitLocal.discoverAndImport(row.id, row.repo, row.branch ?? 'main', {
         collectionId: args.collectionId,
         collectionName: args.collectionName,
       })
-      // Return the collection that was created/updated
       const collection = queryOne<{ id: string; name: string }>(
-        `SELECT id, name FROM collections WHERE integration_id = ? AND source = 'git'`,
-        [args.integrationId]
+        `SELECT id, name FROM collections WHERE id = ?`,
+        [collectionId]
       )
       return { data: collection }
     } catch (err) { return { error: String(err) } }
