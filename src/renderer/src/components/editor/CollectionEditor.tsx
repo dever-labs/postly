@@ -177,7 +177,8 @@ export function CollectionEditor({ collectionId }: Props) {
             <div className="rounded-md border border-th-border bg-th-surface px-4 py-3 text-xs flex flex-col gap-1.5 text-th-text-subtle">
               <div className="flex gap-3"><span className="text-th-text-faint w-20">Type</span><span>{collection.source}</span></div>
               {integration && <div className="flex gap-3"><span className="text-th-text-faint w-20">Integration</span><span>{integration.name}</span></div>}
-              {integration && <div className="flex gap-3"><span className="text-th-text-faint w-20">Base URL</span><span className="truncate">{integration.baseUrl}</span></div>}
+              {integration?.repo && <div className="flex gap-3"><span className="text-th-text-faint w-20">Repository</span><span className="truncate">{integration.repo}</span></div>}
+              {integration?.baseUrl && <div className="flex gap-3"><span className="text-th-text-faint w-20">Base URL</span><span className="truncate">{integration.baseUrl}</span></div>}
             </div>
           </Section>
         )}
