@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { GrantType, Token } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -115,7 +115,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
 
       {token && (
         <div className={cn(
-          'rounded border px-3 py-2 text-xs',
+          'rounded-sm border px-3 py-2 text-xs',
           isExpired
             ? 'border-rose-700/40 bg-rose-900/10 text-rose-400'
             : 'border-emerald-700/40 bg-emerald-900/10 text-emerald-400'

@@ -171,7 +171,7 @@ export function GitHubSettings() {
                 {settings.orgs.map((org) => (
                   <span
                     key={org}
-                    className="flex items-center gap-1 rounded bg-th-surface-raised px-2 py-0.5 text-xs text-th-text-secondary"
+                    className="flex items-center gap-1 rounded-sm bg-th-surface-raised px-2 py-0.5 text-xs text-th-text-secondary"
                   >
                     {org}
                     <button onClick={() => removeOrg(org)} className="text-th-text-subtle hover:text-th-text-secondary">

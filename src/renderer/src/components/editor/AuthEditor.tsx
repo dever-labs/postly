@@ -39,7 +39,7 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
             key={t.value}
             onClick={() => onChange(t.value, authConfig)}
             className={cn(
-              'rounded px-3 py-1.5 text-xs transition-colors focus:outline-none',
+              'rounded-sm px-3 py-1.5 text-xs transition-colors focus:outline-hidden',
               authType === t.value
                 ? 'bg-th-surface-hover text-th-text-primary'
                 : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'

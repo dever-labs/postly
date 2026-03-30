@@ -33,7 +33,7 @@ function BreadcrumbItem({
   return onClick ? (
     <button
       onClick={onClick}
-      className="no-drag flex items-center gap-1 rounded px-1.5 py-0.5 text-th-text-faint hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-none"
+      className="no-drag flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-th-text-faint hover:bg-th-surface-hover hover:text-th-text-secondary focus:outline-hidden"
     >
       {icon}
       <span>{label}</span>
@@ -134,7 +134,7 @@ export function RequestEditor() {
           </div>
         )}
         <input
-          className="no-drag -mx-1.5 cursor-text rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-th-text-primary placeholder:text-th-text-faint outline-none transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
+          className="no-drag -mx-1.5 cursor-text rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
           placeholder="Request name"
           value={editingRequest.name}
           onChange={(e) => updateField('name', e.target.value)}
@@ -166,7 +166,7 @@ export function RequestEditor() {
         )}
         <button
           onClick={saveRequest}
-          className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+          className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
           title="Save"
         >
           <Save className="h-4 w-4" />

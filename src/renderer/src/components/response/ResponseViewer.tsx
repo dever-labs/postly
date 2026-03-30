@@ -47,7 +47,7 @@ export function ResponseViewer() {
         <button
           onClick={handleCopy}
           className={cn(
-            'flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors focus:outline-none',
+            'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors focus:outline-hidden',
             copied
               ? 'text-emerald-400'
               : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'

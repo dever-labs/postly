@@ -41,7 +41,7 @@ function DragOverlayContent({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded border border-blue-500/50 bg-th-surface-raised px-3 py-1.5 text-sm text-th-text-primary shadow-lg opacity-90">
+    <div className="flex items-center gap-2 rounded-sm border border-blue-500/50 bg-th-surface-raised px-3 py-1.5 text-sm text-th-text-primary shadow-lg opacity-90">
       {badge}
       <span className="truncate max-w-48">{label}</span>
     </div>
@@ -135,7 +135,7 @@ export function CollectionsSidebar() {
           data-testid="tab-apis"
           onClick={() => setSidebarTab('apis')}
           className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
             sidebarTab === 'apis'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -148,7 +148,7 @@ export function CollectionsSidebar() {
           data-testid="tab-environments"
           onClick={() => setSidebarTab('environments')}
           className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-none',
+            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
             sidebarTab === 'environments'
               ? 'border-b-2 border-blue-500 text-th-text-primary'
               : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -205,9 +205,9 @@ export function CollectionsSidebar() {
             <div className="mx-2 mt-2 mb-1">
               <button
                 onClick={() => selectItem('add-integration', '')}
-                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-th-surface-raised focus:outline-none group"
+                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-th-surface-raised focus:outline-hidden group"
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-th-border-strong text-th-text-faint group-hover:border-th-text-muted group-hover:text-th-text-subtle">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-dashed border-th-border-strong text-th-text-faint group-hover:border-th-text-muted group-hover:text-th-text-subtle">
                   <Link className="h-3 w-3" />
                 </span>
                 <span className="flex flex-col">
@@ -224,7 +224,7 @@ export function CollectionsSidebar() {
               <button
                 data-testid="btn-export"
                 onClick={() => selectItem('export-page', '')}
-                className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
                 title="Export collections"
               >
                 <Download className="h-4 w-4" />
@@ -232,7 +232,7 @@ export function CollectionsSidebar() {
               <button
                 data-testid="btn-import"
                 onClick={() => selectItem('import-page', '')}
-                className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
                 title="Import collections"
               >
                 <Upload className="h-4 w-4" />
@@ -240,7 +240,7 @@ export function CollectionsSidebar() {
               <button
                 data-testid="btn-settings"
                 onClick={() => openSettings()}
-                className="ml-auto rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+                className="ml-auto rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
                 title="Settings"
               >
                 <Settings className="h-4 w-4" />

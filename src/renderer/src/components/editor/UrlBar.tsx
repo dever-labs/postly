@@ -16,7 +16,7 @@ export function UrlBar({ value, onChange, onSend }: UrlBarProps) {
       placeholder="https://api.example.com/endpoint"
       spellCheck={false}
       wrapperClassName="flex-1"
-      className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong placeholder:text-th-text-subtle"
+      className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong placeholder:text-th-text-subtle"
     />
   )
 }

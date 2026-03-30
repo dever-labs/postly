@@ -148,11 +148,11 @@ export function MqttView({
         {error && <span className="flex-1 truncate text-xs text-rose-400">{error}</span>}
         <div className="ml-auto">
           {connected ? (
-            <button onClick={disconnect} className="flex items-center gap-1.5 rounded bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 focus:outline-none">
+            <button onClick={disconnect} className="flex items-center gap-1.5 rounded-sm bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 focus:outline-hidden">
               <PlugZap className="h-3.5 w-3.5" /> Disconnect
             </button>
           ) : (
-            <button onClick={() => connect('')} disabled className="flex items-center gap-1.5 rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white focus:outline-none opacity-50 cursor-not-allowed">
+            <button onClick={() => connect('')} disabled className="flex items-center gap-1.5 rounded-sm bg-amber-600 px-3 py-1 text-xs font-medium text-white focus:outline-hidden opacity-50 cursor-not-allowed">
               <Plug className="h-3.5 w-3.5" /> Connect
             </button>
           )}
@@ -176,7 +176,7 @@ export function MqttView({
                   <div className="mb-0.5 text-[11px] text-th-text-faint">{label}</div>
                   <input
                     type={type ?? 'text'}
-                    className="w-full rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+                    className="w-full rounded-sm border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
                     placeholder={placeholder}
                     value={value}
                     onChange={(e) => onConfigChange(key, e.target.value)}
@@ -193,7 +193,7 @@ export function MqttView({
                 <button
                   onClick={() => connect('')}
                   disabled={connecting}
-                  className="mt-1 flex items-center justify-center gap-1.5 rounded bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50 focus:outline-none"
+                  className="mt-1 flex items-center justify-center gap-1.5 rounded-sm bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50 focus:outline-hidden"
                 >
                   <Plug className="h-3.5 w-3.5" /> {connecting ? 'Connecting…' : 'Connect to broker'}
                 </button>
@@ -207,14 +207,14 @@ export function MqttView({
             <div className="flex flex-col gap-1.5">
               <div className="flex gap-1">
                 <input
-                  className="flex-1 rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-none"
+                  className="flex-1 rounded-sm border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-hidden"
                   placeholder="topic/# or sensor/+/data"
                   value={subTopic}
                   onChange={(e) => setSubTopic(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') subscribe() }}
                 />
                 <select
-                  className="rounded border border-th-border bg-th-surface px-1 py-1 text-xs text-th-text-primary focus:outline-none"
+                  className="rounded-sm border border-th-border bg-th-surface px-1 py-1 text-xs text-th-text-primary focus:outline-hidden"
                   value={subQos}
                   onChange={(e) => setSubQos(Number(e.target.value) as 0|1|2)}
                 >
@@ -222,7 +222,7 @@ export function MqttView({
                   <option value={1}>QoS 1</option>
                   <option value={2}>QoS 2</option>
                 </select>
-                <button onClick={subscribe} className="rounded bg-th-surface-raised px-2 py-1 text-th-text-subtle hover:text-th-text-primary focus:outline-none">
+                <button onClick={subscribe} className="rounded-sm bg-th-surface-raised px-2 py-1 text-th-text-subtle hover:text-th-text-primary focus:outline-hidden">
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -230,10 +230,10 @@ export function MqttView({
                 <p className="text-xs text-th-text-faint">No subscriptions</p>
               ) : (
                 subs.map((s) => (
-                  <div key={s.topic} className="flex items-center gap-1 rounded bg-th-surface px-2 py-1">
+                  <div key={s.topic} className="flex items-center gap-1 rounded-sm bg-th-surface px-2 py-1">
                     <span className="flex-1 truncate font-mono text-xs text-th-text-primary">{s.topic}</span>
                     <span className="text-[10px] text-th-text-faint">QoS {s.qos}</span>
-                    <button onClick={() => unsubscribe(s.topic)} className="text-th-text-faint hover:text-rose-400 focus:outline-none">
+                    <button onClick={() => unsubscribe(s.topic)} className="text-th-text-faint hover:text-rose-400 focus:outline-hidden">
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -247,21 +247,21 @@ export function MqttView({
             <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-th-text-subtle mb-2">Publish</summary>
             <div className="flex flex-col gap-1.5">
               <input
-                className="w-full rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-none"
+                className="w-full rounded-sm border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-hidden"
                 placeholder="topic"
                 value={pubTopic}
                 onChange={(e) => setPubTopic(e.target.value)}
               />
               <textarea
                 rows={3}
-                className="w-full resize-y rounded border border-th-border bg-th-surface px-2 py-1 font-mono text-xs text-th-text-primary placeholder-th-text-faint focus:outline-none"
+                className="w-full resize-y rounded-sm border border-th-border bg-th-surface px-2 py-1 font-mono text-xs text-th-text-primary placeholder-th-text-faint focus:outline-hidden"
                 placeholder="payload"
                 value={pubPayload}
                 onChange={(e) => setPubPayload(e.target.value)}
               />
               <div className="flex items-center gap-2">
                 <select
-                  className="rounded border border-th-border bg-th-surface px-1 py-0.5 text-xs text-th-text-primary focus:outline-none"
+                  className="rounded-sm border border-th-border bg-th-surface px-1 py-0.5 text-xs text-th-text-primary focus:outline-hidden"
                   value={pubQos}
                   onChange={(e) => setPubQos(Number(e.target.value) as 0|1|2)}
                 >
@@ -276,7 +276,7 @@ export function MqttView({
                 <button
                   onClick={publish}
                   disabled={!connected || !pubTopic.trim()}
-                  className="ml-auto flex items-center gap-1 rounded bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50 focus:outline-none"
+                  className="ml-auto flex items-center gap-1 rounded-sm bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50 focus:outline-hidden"
                 >
                   <Send className="h-3 w-3" /> Publish
                 </button>
@@ -289,7 +289,7 @@ export function MqttView({
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-th-border px-3 py-1.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Messages</span>
-            <button onClick={() => setMessages([])} className="text-th-text-faint hover:text-th-text-subtle focus:outline-none">
+            <button onClick={() => setMessages([])} className="text-th-text-faint hover:text-th-text-subtle focus:outline-hidden">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -298,7 +298,7 @@ export function MqttView({
               <div className="flex h-full items-center justify-center text-th-text-faint">No messages</div>
             ) : (
               messages.map((m) => (
-                <div key={m.id} className={cn('mb-1 rounded px-2 py-1', m.direction === 'out' ? 'bg-amber-500/5' : 'bg-blue-500/5')}>
+                <div key={m.id} className={cn('mb-1 rounded-sm px-2 py-1', m.direction === 'out' ? 'bg-amber-500/5' : 'bg-blue-500/5')}>
                   <div className="flex items-center gap-2">
                     <span className="text-th-text-faint">{new Date(m.timestamp).toLocaleTimeString()}</span>
                     <span className={cn('font-bold', m.direction === 'out' ? 'text-amber-400' : 'text-blue-400')}>

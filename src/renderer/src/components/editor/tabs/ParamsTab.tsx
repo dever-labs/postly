@@ -49,17 +49,17 @@ export function ParamsTab({ params, onChange }: ParamsTabProps) {
             value={param.key}
             onChange={(v) => updateRow(param.id, 'key', v)}
             placeholder="Key"
-            className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
+            className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong"
           />
           <EnvInput
             value={param.value}
             onChange={(v) => updateRow(param.id, 'value', v)}
             placeholder="Value"
-            className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
+            className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong"
           />
           <button
             onClick={() => deleteRow(param.id)}
-            className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
+            className="flex h-8 w-7 items-center justify-center rounded-sm text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-hidden"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

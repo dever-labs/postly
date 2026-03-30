@@ -23,7 +23,7 @@ export function EnvSuggestions({ filtered, selectedIndex, onSelect, onHover }: E
           onMouseDown={(e) => { e.preventDefault(); onSelect(v.key) }}
           onMouseEnter={() => onHover(i)}
           className={cn(
-            'flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm focus:outline-none',
+            'flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm focus:outline-hidden',
             i === selectedIndex
               ? 'bg-blue-600/20 text-th-text-primary'
               : 'text-th-text-secondary hover:bg-th-surface-hover'

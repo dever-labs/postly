@@ -205,7 +205,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                 </div>
               )}
 
-              {error && <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={clearSelectedItem}>Cancel</Button>
@@ -219,7 +219,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                 {!confirmDelete ? (
                   <button
                     onClick={() => setConfirmDelete(true)}
-                    className="text-xs text-th-text-subtle hover:text-rose-400 transition-colors focus:outline-none"
+                    className="text-xs text-th-text-subtle hover:text-rose-400 transition-colors focus:outline-hidden"
                   >
                     Remove this integration…
                   </button>
@@ -303,7 +303,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
 
               {error && (
                 <div className="flex w-full flex-col gap-3">
-                  <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
+                  <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
                   <Button variant="outline" size="sm" onClick={() => { setError(null); setStep(2) }}>Back</Button>
                 </div>
               )}

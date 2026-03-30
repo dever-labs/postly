@@ -43,7 +43,7 @@ export function AiActionButton({ onClick, label = 'Build with AI', className, va
         disabled={!configured}
         onClick={handleClick}
         className={cn(
-          'flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors',
+          'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors',
           configured
             ? 'text-blue-400 hover:bg-th-surface-hover cursor-pointer'
             : 'text-blue-400/40 cursor-not-allowed',

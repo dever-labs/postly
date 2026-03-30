@@ -73,11 +73,11 @@ function KVEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: (pairs
             onChange={(e) => update(pair.id, 'enabled', e.target.checked)}
             className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
-          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
-          <EnvInput value={pair.value} onChange={(v) => update(pair.id, 'value', v)} placeholder="Value" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
+          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong" />
+          <EnvInput value={pair.value} onChange={(v) => update(pair.id, 'value', v)} placeholder="Value" className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong" />
           <button
             onClick={() => remove(pair.id)}
-            className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
+            className="flex h-8 w-7 items-center justify-center rounded-sm text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-hidden"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -112,10 +112,10 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
             onChange={(e) => update(pair.id, 'enabled', e.target.checked)}
             className="h-4 w-4 cursor-pointer accent-th-text-subtle"
           />
-          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong" />
+          <EnvInput value={pair.key} onChange={(v) => update(pair.id, 'key', v)} placeholder="Key" className="w-full rounded-sm border border-th-border-strong bg-th-surface px-3 py-1.5 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong" />
 
           <div className="flex min-w-0 items-center gap-1">
-            <div className="flex shrink-0 overflow-hidden rounded border border-th-border text-xs">
+            <div className="flex shrink-0 overflow-hidden rounded-sm border border-th-border text-xs">
               {(['text', 'file'] as const).map((ft) => (
                 <button
                   key={ft}
@@ -123,7 +123,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
                     p.id === pair.id ? { ...p, fieldType: ft, value: ft === 'file' ? '' : p.value } : p
                   ))}
                   className={cn(
-                    'px-2 py-1 transition-colors focus:outline-none',
+                    'px-2 py-1 transition-colors focus:outline-hidden',
                     (pair.fieldType ?? 'text') === ft
                       ? 'bg-th-surface-hover text-th-text-primary'
                       : 'text-th-text-faint hover:text-th-text-subtle'
@@ -154,7 +154,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
                 />
                 <button
                   onClick={() => fileRefs.current[pair.id]?.click()}
-                  className="flex min-w-0 flex-1 items-center gap-1.5 truncate rounded border border-th-border px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-sm border border-th-border px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
                 >
                   <span className="truncate">{pair.value ? pair.value.split(/[\\/]/).pop() : 'Choose file\u2026'}</span>
                 </button>
@@ -164,7 +164,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
 
           <button
             onClick={() => remove(pair.id)}
-            className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
+            className="flex h-8 w-7 items-center justify-center rounded-sm text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-hidden"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -280,7 +280,7 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
             key={t.value}
             onClick={() => handleTopTabChange(t.value)}
             className={cn(
-              'px-3 py-1.5 text-xs transition-colors focus:outline-none',
+              'px-3 py-1.5 text-xs transition-colors focus:outline-hidden',
               topTab === t.value
                 ? 'border-b-2 border-th-text-primary text-th-text-primary'
                 : 'text-th-text-subtle hover:text-th-text-secondary'
@@ -298,7 +298,7 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
               key={r.value}
               onClick={() => onTypeChange(r.value)}
               className={cn(
-                'px-2.5 py-1 text-xs transition-colors focus:outline-none',
+                'px-2.5 py-1 text-xs transition-colors focus:outline-hidden',
                 rawSubtype === r.value
                   ? 'text-th-text-primary underline underline-offset-2'
                   : 'text-th-text-faint hover:text-th-text-subtle'
@@ -354,7 +354,7 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
             }} />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 rounded border border-dashed border-th-border py-6 text-sm text-th-text-subtle hover:border-th-border-strong hover:text-th-text-secondary"
+              className="flex items-center justify-center gap-2 rounded-sm border border-dashed border-th-border py-6 text-sm text-th-text-subtle hover:border-th-border-strong hover:text-th-text-secondary"
             >
               <Upload className="h-4 w-4" />
               {bodyContent ? bodyContent.split(/[\\/]/).pop() : 'Select file\u2026'}

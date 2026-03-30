@@ -52,12 +52,12 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
 
   return (
     <div className="relative">
-      {insertLine === 'above' && <div className="mx-1 h-0.5 rounded bg-blue-500" />}
+      {insertLine === 'above' && <div className="mx-1 h-0.5 rounded-sm bg-blue-500" />}
       <div
         ref={setNodeRef}
         style={style}
       className={cn(
-        'group relative flex items-center gap-1 px-2 py-0.5 text-sm cursor-pointer rounded',
+        'group relative flex items-center gap-1 px-2 py-0.5 text-sm cursor-pointer rounded-sm',
         isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
       )}
       onClick={() => !renaming && onClick()}
@@ -65,7 +65,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       <button
         {...listeners}
         {...attributes}
-        className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover:opacity-100 active:cursor-grabbing"
+        className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover:opacity-100 active:cursor-grabbing"
         onClick={(e) => e.stopPropagation()}
       >
         <GripVertical className="h-3.5 w-3.5" />
@@ -81,7 +81,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       {renaming ? (
         <input
           autoFocus
-          className="flex-1 rounded bg-th-surface-hover px-1.5 py-0.5 text-sm text-th-text-primary focus:outline-none"
+          className="flex-1 rounded-sm bg-th-surface-hover px-1.5 py-0.5 text-sm text-th-text-primary focus:outline-hidden"
           value={nameValue}
           onChange={(e) => setNameValue(e.target.value)}
           onBlur={handleRename}
@@ -100,7 +100,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       )}
 
       <button
-        className="shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-th-surface-hover focus:outline-none"
+        className="shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-th-surface-hover focus:outline-hidden"
         onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
@@ -109,7 +109,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-sm border border-th-border-strong bg-th-surface-raised shadow-lg">
             <AiActionButton
               variant="menu-item"
               label="Review with AI"
@@ -132,7 +132,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
         </>
       )}
       </div>
-      {insertLine === 'below' && <div className="mx-1 h-0.5 rounded bg-blue-500" />}
+      {insertLine === 'below' && <div className="mx-1 h-0.5 rounded-sm bg-blue-500" />}
     </div>
   )
 }

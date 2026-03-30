@@ -19,7 +19,7 @@ function InlineInput({ onConfirm, onCancel }: { onConfirm: (v: string) => void; 
           if (e.key === 'Escape') onCancel()
         }}
         placeholder="Environment name…"
-        className="flex-1 rounded bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-none ring-1 ring-blue-500/50"
+        className="flex-1 rounded-sm bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-hidden ring-1 ring-blue-500/50"
       />
       <button onClick={() => { if (val.trim()) onConfirm(val.trim()); else onCancel() }} className="text-green-400 hover:text-green-300">
         <Check className="h-3.5 w-3.5" />
@@ -56,7 +56,7 @@ export function EnvironmentsPanel() {
             <div
               key={env.id}
               className={cn(
-                'group/env mx-1 flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm transition-colors',
+                'group/env mx-1 flex cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors',
                 isSelected ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/50 hover:text-th-text-primary'
               )}
               onClick={() => setSelectedEnvId(env.id)}
@@ -67,7 +67,7 @@ export function EnvironmentsPanel() {
               <button
                 onClick={(e) => { e.stopPropagation(); setActive(env.id) }}
                 title={isActive ? 'Active' : 'Set as active'}
-                className="shrink-0 focus:outline-none"
+                className="shrink-0 focus:outline-hidden"
               >
                 <div className={cn(
                   'h-2 w-2 rounded-full border transition-colors',
@@ -79,7 +79,7 @@ export function EnvironmentsPanel() {
 
               <button
                 onClick={(e) => { e.stopPropagation(); if (isSelected) setSelectedEnvId(null); deleteEnvironment(env.id) }}
-                className="shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-rose-400 focus:outline-none group-hover/env:opacity-100"
+                className="shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-rose-400 focus:outline-hidden group-hover/env:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -95,7 +95,7 @@ export function EnvironmentsPanel() {
       <div className="shrink-0 border-t border-th-border px-2 py-2">
         <button
           onClick={() => setCreating(true)}
-          className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-sm text-th-text-muted hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-none"
+          className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-sm text-th-text-muted hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
         >
           <Plus className="h-3.5 w-3.5" /> New Environment
         </button>

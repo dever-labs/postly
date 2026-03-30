@@ -83,7 +83,7 @@ export function ExportPage() {
         </div>
         <button
           onClick={clearSelectedItem}
-          className="no-drag rounded p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
+          className="no-drag rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
         >
           <X className="h-4 w-4" />
         </button>
@@ -103,7 +103,7 @@ export function ExportPage() {
                 <div key={src} className="flex flex-col gap-0.5">
                   <button
                     onClick={() => toggleSource(cols)}
-                    className="flex items-center gap-2 rounded px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-th-text-subtle hover:bg-th-surface-raised"
+                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-th-text-subtle hover:bg-th-surface-raised"
                   >
                     <span className={allSelected || someSelected ? 'text-blue-500' : 'text-th-text-faint'}>
                       {allSelected ? (
@@ -123,7 +123,7 @@ export function ExportPage() {
                     <button
                       key={col.id}
                       onClick={() => toggleCollection(col.id)}
-                      className="flex items-center gap-3 rounded px-3 py-2 hover:bg-th-surface-raised"
+                      className="flex items-center gap-3 rounded-sm px-3 py-2 hover:bg-th-surface-raised"
                     >
                       <span className={selected.has(col.id) ? 'text-blue-500' : 'text-th-text-faint'}>
                         {selected.has(col.id) ? (

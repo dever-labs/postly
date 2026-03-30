@@ -13,7 +13,7 @@ export function SendButton({ onClick, isLoading }: SendButtonProps) {
       onClick={onClick}
       disabled={isLoading}
       className={cn(
-        'flex h-8 shrink-0 items-center gap-2 rounded px-4 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-1 focus:ring-blue-400',
+        'flex h-8 shrink-0 items-center gap-2 rounded-sm px-4 text-sm font-medium text-white transition-colors focus:outline-hidden focus:ring-1 focus:ring-blue-400',
         isLoading ? 'cursor-not-allowed bg-blue-700 opacity-80' : 'bg-blue-600 hover:bg-blue-500'
       )}
     >

@@ -97,7 +97,7 @@ export function GrpcView({
           <div className="flex items-center gap-2">
             <label className="flex cursor-pointer items-center gap-2 text-xs text-th-text-subtle">
               <input type="checkbox" checked={useTls} onChange={(e) => onUseTlsChange(e.target.checked)}
-                className="rounded" />
+                className="rounded-sm" />
               Use TLS
             </label>
           </div>
@@ -109,14 +109,14 @@ export function GrpcView({
               <button
                 onClick={loadProto}
                 disabled={loadingProto || !protoContent.trim()}
-                className="flex items-center gap-1 rounded bg-th-surface-raised px-2 py-0.5 text-xs text-th-text-subtle hover:text-th-text-primary disabled:opacity-50 focus:outline-none"
+                className="flex items-center gap-1 rounded-sm bg-th-surface-raised px-2 py-0.5 text-xs text-th-text-subtle hover:text-th-text-primary disabled:opacity-50 focus:outline-hidden"
               >
                 <RefreshCw className={cn('h-3 w-3', loadingProto && 'animate-spin')} />
                 {loadingProto ? 'Loading…' : 'Load Proto'}
               </button>
             </div>
             <textarea
-              className="h-36 w-full resize-y rounded border border-th-border bg-th-surface px-3 py-2 font-mono text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+              className="h-36 w-full resize-y rounded-sm border border-th-border bg-th-surface px-3 py-2 font-mono text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
               placeholder={'syntax = "proto3";\nservice Greeter {\n  rpc SayHello (HelloRequest) returns (HelloReply);\n}'}
               value={protoContent}
               onChange={(e) => onProtoChange(e.target.value)}
@@ -130,7 +130,7 @@ export function GrpcView({
             <div>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Service</div>
               <select
-                className="w-full rounded border border-th-border bg-th-surface px-2 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-none"
+                className="w-full rounded-sm border border-th-border bg-th-surface px-2 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-hidden"
                 value={serviceName}
                 onChange={(e) => { onServiceChange(e.target.value); onMethodChange('') }}
               >
@@ -141,7 +141,7 @@ export function GrpcView({
             <div>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Method</div>
               <select
-                className="w-full rounded border border-th-border bg-th-surface px-2 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-none"
+                className="w-full rounded-sm border border-th-border bg-th-surface px-2 py-1.5 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-hidden"
                 value={methodName}
                 onChange={(e) => onMethodChange(e.target.value)}
                 disabled={!serviceName}
@@ -162,7 +162,7 @@ export function GrpcView({
               Request Message <span className="font-normal normal-case text-th-text-faint">(JSON)</span>
             </div>
             <textarea
-              className="h-32 w-full resize-y rounded border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+              className="h-32 w-full resize-y rounded-sm border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
               placeholder={'{\n  "name": "world"\n}'}
               value={requestBody}
               onChange={(e) => onRequestBodyChange(e.target.value)}
@@ -177,24 +177,24 @@ export function GrpcView({
               {metadata.map((m, i) => (
                 <div key={m.id} className="flex gap-1">
                   <input
-                    className="flex-1 rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-none"
+                    className="flex-1 rounded-sm border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-hidden"
                     placeholder="key"
                     value={m.key}
                     onChange={(e) => { const next = [...metadata]; next[i] = { ...m, key: e.target.value }; onMetadataChange(next) }}
                   />
                   <input
-                    className="flex-1 rounded border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-none"
+                    className="flex-1 rounded-sm border border-th-border bg-th-surface px-2 py-1 text-xs text-th-text-primary placeholder-th-text-faint focus:outline-hidden"
                     placeholder="value"
                     value={m.value}
                     onChange={(e) => { const next = [...metadata]; next[i] = { ...m, value: e.target.value }; onMetadataChange(next) }}
                   />
                   <button
                     onClick={() => onMetadataChange(metadata.filter((_, j) => j !== i))}
-                    className="rounded px-1 text-th-text-faint hover:text-rose-400 focus:outline-none"
+                    className="rounded-sm px-1 text-th-text-faint hover:text-rose-400 focus:outline-hidden"
                   >×</button>
                 </div>
               ))}
-              <button onClick={addMetaRow} className="mt-0.5 text-left text-xs text-th-text-faint hover:text-th-text-subtle focus:outline-none">
+              <button onClick={addMetaRow} className="mt-0.5 text-left text-xs text-th-text-faint hover:text-th-text-subtle focus:outline-hidden">
                 + Add metadata
               </button>
             </div>
@@ -203,7 +203,7 @@ export function GrpcView({
           <button
             onClick={invoke}
             disabled={invoking || !serverUrl.trim() || !serviceName || !methodName}
-            className="flex items-center justify-center gap-2 rounded bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50 focus:outline-none"
+            className="flex items-center justify-center gap-2 rounded-sm bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-500 disabled:opacity-50 focus:outline-hidden"
           >
             <Play className="h-3.5 w-3.5" />
             {invoking ? 'Invoking…' : 'Invoke'}

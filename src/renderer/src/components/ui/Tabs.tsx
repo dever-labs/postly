@@ -24,7 +24,7 @@ export const TabsTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       'px-3 py-2 text-sm text-th-text-muted transition-colors hover:text-th-text-primary',
-      'border-b-2 border-transparent focus:outline-none',
+      'border-b-2 border-transparent focus:outline-hidden',
       'data-[state=active]:border-th-text-primary data-[state=active]:text-th-text-primary',
       className
     )}
@@ -39,7 +39,7 @@ export const TabsContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
-    className={cn('focus:outline-none', className)}
+    className={cn('focus:outline-hidden', className)}
     {...props}
   />
 ))

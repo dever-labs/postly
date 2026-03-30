@@ -26,7 +26,7 @@ export function SslEditor({ value, onChange, canInherit = true, inheritedFrom }:
             key={opt.value}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'rounded px-3 py-1.5 text-xs transition-colors focus:outline-none',
+              'rounded-sm px-3 py-1.5 text-xs transition-colors focus:outline-hidden',
               value === opt.value
                 ? 'bg-th-surface-hover text-th-text-primary'
                 : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'

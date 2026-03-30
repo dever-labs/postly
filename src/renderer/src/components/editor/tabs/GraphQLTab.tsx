@@ -23,14 +23,14 @@ export function GraphQLTab({
         <div className="mb-1.5 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Query</span>
           <input
-            className="w-48 rounded border border-th-border bg-th-surface px-2 py-0.5 text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+            className="w-48 rounded-sm border border-th-border bg-th-surface px-2 py-0.5 text-xs text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
             placeholder="Operation name (optional)"
             value={operationName}
             onChange={(e) => onOperationNameChange(e.target.value)}
           />
         </div>
         <textarea
-          className="h-48 w-full resize-y rounded border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+          className="h-48 w-full resize-y rounded-sm border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
           placeholder={'query {\n  # your query here\n}'}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
@@ -43,7 +43,7 @@ export function GraphQLTab({
           Variables <span className="font-normal normal-case text-th-text-faint">(JSON)</span>
         </div>
         <textarea
-          className="h-28 w-full resize-y rounded border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+          className="h-28 w-full resize-y rounded-sm border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
           placeholder={'{\n  "id": "123"\n}'}
           value={variables}
           onChange={(e) => onVariablesChange(e.target.value)}

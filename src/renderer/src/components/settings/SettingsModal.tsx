@@ -28,7 +28,7 @@ export function SettingsModal() {
   if (!settingsOpen) return null
 
   return (
-    <div data-testid="settings-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div data-testid="settings-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
       <div className="fixed left-1/2 top-1/2 flex h-[600px] max-h-[90vh] w-[800px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-th-border bg-th-surface shadow-2xl">
         {/* Left sidebar */}
         <div className="flex w-48 shrink-0 flex-col border-r border-th-border">
@@ -41,7 +41,7 @@ export function SettingsModal() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'rounded px-3 py-2 text-left text-sm transition-colors focus:outline-none',
+                  'rounded-sm px-3 py-2 text-left text-sm transition-colors focus:outline-hidden',
                   activeTab === tab.id
                     ? 'bg-th-surface-raised text-th-text-primary'
                     : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
@@ -57,7 +57,7 @@ export function SettingsModal() {
         <div className="relative flex flex-1 flex-col overflow-hidden">
           <button
             onClick={closeSettings}
-            className="absolute right-3 top-3 z-10 rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none"
+            className="absolute right-3 top-3 z-10 rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

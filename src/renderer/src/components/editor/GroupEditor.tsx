@@ -116,7 +116,7 @@ export function GroupEditor({ groupId }: Props) {
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
                 <button
                   onClick={() => selectItem('collection', collection.id)}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-none"
+                  className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-medium text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-hidden"
                 >
                   <FolderOpen className="h-3.5 w-3.5 shrink-0" />
                   {collection.name}
@@ -130,7 +130,7 @@ export function GroupEditor({ groupId }: Props) {
             </span>
           </div>
           <input
-            className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-none transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
+            className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Group name"
             value={name}
             onChange={(e) => { setName(e.target.value); mark() }}
@@ -145,7 +145,7 @@ export function GroupEditor({ groupId }: Props) {
         {/* Description */}
         <Section title="Description">
           <textarea
-            className="w-full resize-none rounded-md border border-th-border bg-th-surface px-3 py-2.5 text-sm text-th-text-secondary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none leading-relaxed"
+            className="w-full resize-none rounded-md border border-th-border bg-th-surface px-3 py-2.5 text-sm text-th-text-secondary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden leading-relaxed"
             placeholder="Describe what this group contains, e.g. which service or feature area."
             rows={4}
             value={description}
@@ -183,17 +183,17 @@ export function GroupEditor({ groupId }: Props) {
 
       {/* Sticky save bar */}
       {isDirty && (
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-sm">
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
           <button
             onClick={discard}
-            className="rounded px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-none"
+            className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
           >
             Discard
           </button>
           <button
             onClick={save}
             disabled={saving || !name.trim()}
-            className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-none"
+            className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>

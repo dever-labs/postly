@@ -235,7 +235,7 @@ export function AiChatPanel({ context, groupId }: Props) {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className={cn(
-                            'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shrink-0',
+                            'rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase shrink-0',
                             ep.protocol === 'http'
                               ? ep.method === 'GET' ? 'bg-emerald-900/40 text-emerald-400'
                               : ep.method === 'POST' ? 'bg-blue-900/40 text-blue-400'
@@ -255,7 +255,7 @@ export function AiChatPanel({ context, groupId }: Props) {
                         onClick={() => addEndpoint(msgIdx, epIdx, ep)}
                         disabled={isAdded}
                         className={cn(
-                          'shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none',
+                          'shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-hidden',
                           isAdded ? 'bg-emerald-900/30 text-emerald-500 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-500'
                         )}
                       >
@@ -281,13 +281,13 @@ export function AiChatPanel({ context, groupId }: Props) {
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
             placeholder={context.type === 'request' ? 'Ask for a review or request changes…' : 'Describe the endpoints you need…'}
             rows={2}
-            className="flex-1 resize-none rounded-lg border border-th-border bg-th-surface px-4 py-2.5 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+            className="flex-1 resize-none rounded-lg border border-th-border bg-th-surface px-4 py-2.5 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-blue-500/50 focus:outline-hidden focus:ring-1 focus:ring-blue-500/30"
           />
           <button
             onClick={streaming ? cancel : send}
             disabled={!streaming && !input.trim()}
             className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-none',
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-hidden',
               streaming ? 'bg-rose-600 text-white hover:bg-rose-500' : 'bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40'
             )}
           >

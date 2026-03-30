@@ -24,20 +24,20 @@ function VarRow({
         value={varItem.key}
         onChange={(e) => onChange({ ...varItem, key: e.target.value })}
         placeholder="VARIABLE_NAME"
-        className="rounded-md border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint outline-none focus:border-th-border-strong focus:outline-none"
+        className="rounded-md border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint outline-hidden focus:border-th-border-strong focus:outline-hidden"
       />
       <input
         type={varItem.isSecret && !reveal ? 'password' : 'text'}
         value={varItem.value}
         onChange={(e) => onChange({ ...varItem, value: e.target.value })}
         placeholder="value"
-        className="rounded-md border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint outline-none focus:border-th-border-strong focus:outline-none"
+        className="rounded-md border border-th-border bg-th-surface px-3 py-2 font-mono text-sm text-th-text-primary placeholder-th-text-faint outline-hidden focus:border-th-border-strong focus:outline-hidden"
       />
       <button
         onClick={() => varItem.isSecret ? setReveal((r) => !r) : onChange({ ...varItem, isSecret: true })}
         title={varItem.isSecret ? (reveal ? 'Hide value' : 'Reveal value') : 'Mark as secret'}
         className={cn(
-          'flex h-9 w-9 items-center justify-center rounded-md border transition-colors focus:outline-none',
+          'flex h-9 w-9 items-center justify-center rounded-md border transition-colors focus:outline-hidden',
           varItem.isSecret
             ? 'border-amber-700/50 bg-amber-900/20 text-amber-400 hover:bg-amber-900/40'
             : 'border-th-border bg-th-surface text-th-text-faint hover:text-th-text-muted'
@@ -47,7 +47,7 @@ function VarRow({
       </button>
       <button
         onClick={onDelete}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-th-border bg-th-surface text-th-text-faint transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-none"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-th-border bg-th-surface text-th-text-faint transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-hidden"
         title="Delete variable"
       >
         <Trash2 className="h-4 w-4" />
@@ -134,11 +134,11 @@ export function EnvironmentEditor() {
           onChange={(e) => setName(e.target.value)}
           onBlur={handleNameBlur}
           onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          className="no-drag bg-transparent text-lg font-semibold text-th-text-primary outline-none placeholder-th-text-faint focus:border-b focus:border-blue-500"
+          className="no-drag bg-transparent text-lg font-semibold text-th-text-primary outline-hidden placeholder-th-text-faint focus:border-b focus:border-blue-500"
         />
         <button
           onClick={handleDelete}
-          className="no-drag rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-none"
+          className="no-drag rounded-md border border-th-border-strong px-3 py-1.5 text-sm text-th-text-subtle transition-colors hover:border-rose-700/50 hover:bg-rose-900/20 hover:text-rose-400 focus:outline-hidden"
         >
           Delete
         </button>
@@ -150,7 +150,7 @@ export function EnvironmentEditor() {
           <span className="text-xs text-th-text-faint">This environment is not active</span>
           <button
             onClick={() => setActive(env.id)}
-            className="rounded-md border border-th-border-strong px-3 py-1 text-xs text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-none"
+            className="rounded-md border border-th-border-strong px-3 py-1 text-xs text-th-text-muted transition-colors hover:border-emerald-700/60 hover:bg-emerald-900/20 hover:text-emerald-400 focus:outline-hidden"
           >
             Set as active
           </button>
@@ -166,7 +166,7 @@ export function EnvironmentEditor() {
               value={varSearch}
               onChange={(e) => setVarSearch(e.target.value)}
               placeholder="Search variables…"
-              className="w-full rounded border border-th-border-strong bg-th-surface py-1.5 pl-8 pr-3 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-th-border-strong focus:outline-none focus:ring-1 focus:ring-th-border-strong"
+              className="w-full rounded-sm border border-th-border-strong bg-th-surface py-1.5 pl-8 pr-3 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-th-border-strong focus:outline-hidden focus:ring-1 focus:ring-th-border-strong"
             />
           </div>
           <span className="shrink-0 text-xs text-th-text-faint">{localVars.length} variable{localVars.length !== 1 ? 's' : ''}</span>
@@ -202,7 +202,7 @@ export function EnvironmentEditor() {
 
         <button
           onClick={handleAddVar}
-          className="mt-4 flex items-center gap-2 rounded-md border border-dashed border-th-border-strong px-4 py-2.5 text-sm text-th-text-subtle transition-colors hover:border-th-text-muted hover:text-th-text-secondary focus:outline-none"
+          className="mt-4 flex items-center gap-2 rounded-md border border-dashed border-th-border-strong px-4 py-2.5 text-sm text-th-text-subtle transition-colors hover:border-th-text-muted hover:text-th-text-secondary focus:outline-hidden"
         >
           <Plus className="h-4 w-4" /> Add variable
         </button>
@@ -210,7 +210,7 @@ export function EnvironmentEditor() {
         <button
           onClick={handleSave}
           className={cn(
-            'mt-2 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-none',
+            'mt-2 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
             saved
               ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
               : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'

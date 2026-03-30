@@ -108,7 +108,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={() => setMessages([])}
-            className="rounded p-1 text-th-text-faint hover:text-th-text-subtle focus:outline-none"
+            className="rounded-sm p-1 text-th-text-faint hover:text-th-text-subtle focus:outline-hidden"
             title="Clear messages"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -116,7 +116,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
           {connected ? (
             <button
               onClick={disconnect}
-              className="flex items-center gap-1.5 rounded bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 focus:outline-none"
+              className="flex items-center gap-1.5 rounded-sm bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 focus:outline-hidden"
             >
               <PlugZap className="h-3.5 w-3.5" /> Disconnect
             </button>
@@ -124,7 +124,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
             <button
               onClick={connect}
               disabled={connecting || !url.trim()}
-              className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-none"
+              className="flex items-center gap-1.5 rounded-sm bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
             >
               <Plug className="h-3.5 w-3.5" /> Connect
             </button>
@@ -143,7 +143,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
             <div
               key={m.id}
               className={cn(
-                'mb-1 flex gap-2 rounded px-2 py-1',
+                'mb-1 flex gap-2 rounded-sm px-2 py-1',
                 m.direction === 'in' ? 'bg-blue-500/5 text-blue-300' : 'bg-emerald-500/5 text-emerald-300'
               )}
             >
@@ -163,7 +163,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
       <div className="flex items-center gap-2 border-t border-th-border px-2 py-2">
         <textarea
           rows={1}
-          className="flex-1 resize-none rounded border border-th-border bg-th-surface px-3 py-1.5 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+          className="flex-1 resize-none rounded-sm border border-th-border bg-th-surface px-3 py-1.5 font-mono text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
           placeholder={connected ? 'Type a message…' : 'Connect first'}
           value={sendText}
           disabled={!connected}
@@ -173,7 +173,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
         <button
           onClick={send}
           disabled={!connected || !sendText.trim()}
-          className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-none"
+          className="flex items-center gap-1 rounded-sm bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
         >
           <Send className="h-3.5 w-3.5" />
         </button>

@@ -126,7 +126,7 @@ export function ImportPage() {
         </div>
         <button
           onClick={clearSelectedItem}
-          className="no-drag rounded p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
+          className="no-drag rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary"
         >
           <X className="h-4 w-4" />
         </button>

@@ -53,7 +53,7 @@ export function EnvironmentsSettings() {
         {environments.map((env) => (
           <div
             key={env.id}
-            className="flex items-center gap-2 rounded border border-th-border px-3 py-2 cursor-pointer hover:border-th-border-strong transition-colors"
+            className="flex items-center gap-2 rounded-sm border border-th-border px-3 py-2 cursor-pointer hover:border-th-border-strong transition-colors"
             onDoubleClick={() => setActive(env.id)}
             title={env.isActive ? 'Active environment' : 'Click to select · Double-click to activate'}
           >
@@ -124,14 +124,14 @@ export function EnvironmentsSettings() {
                 />
                 <button
                   onClick={() => upsertVar(v.envId, v.key, v.value, !v.isSecret, v.id)}
-                  className={`flex h-8 w-8 items-center justify-center rounded hover:bg-th-surface-raised focus:outline-none ${v.isSecret ? 'text-amber-400' : 'text-th-text-faint'}`}
+                  className={`flex h-8 w-8 items-center justify-center rounded-sm hover:bg-th-surface-raised focus:outline-hidden ${v.isSecret ? 'text-amber-400' : 'text-th-text-faint'}`}
                   title={v.isSecret ? 'Secret (click to reveal)' : 'Not secret'}
                 >
                   {v.isSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
                 <button
                   onClick={() => deleteVar(v.id)}
-                  className="flex h-8 w-7 items-center justify-center rounded text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-none"
+                  className="flex h-8 w-7 items-center justify-center rounded-sm text-th-text-faint hover:bg-th-surface-raised hover:text-rose-400 focus:outline-hidden"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

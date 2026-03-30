@@ -32,7 +32,7 @@ export function AuthConfigEditor({ authType, authConfig, onChange, inheritedFrom
             key={t.value}
             onClick={() => onChange(t.value, authConfig)}
             className={cn(
-              'rounded px-3 py-1.5 text-xs transition-colors focus:outline-none',
+              'rounded-sm px-3 py-1.5 text-xs transition-colors focus:outline-hidden',
               authType === t.value
                 ? 'bg-th-surface-hover text-th-text-primary'
                 : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'
@@ -63,7 +63,7 @@ export function AuthConfigEditor({ authType, authConfig, onChange, inheritedFrom
             placeholder="Bearer token… (supports {{ENV_VAR}})"
             value={authConfig.token ?? ''}
             onChange={(e) => onChange(authType, { ...authConfig, token: e.target.value })}
-            className="w-full rounded border border-th-border bg-th-surface px-3 py-2 text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-none"
+            className="w-full rounded-sm border border-th-border bg-th-surface px-3 py-2 text-sm text-th-text-primary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
           />
         </div>
       )}

@@ -149,7 +149,7 @@ export function IntegrationSetupPage() {
                 <button
                   key={type}
                   onClick={() => handleTypeSelect(type)}
-                  className="flex items-center gap-4 rounded-lg border border-th-border-strong bg-th-surface-raised/50 px-4 py-3 text-left transition-colors hover:border-th-text-muted hover:bg-th-surface-raised focus:outline-none"
+                  className="flex items-center gap-4 rounded-lg border border-th-border-strong bg-th-surface-raised/50 px-4 py-3 text-left transition-colors hover:border-th-text-muted hover:bg-th-surface-raised focus:outline-hidden"
                 >
                   <span className="text-th-text-secondary">{TYPE_ICONS[type]}</span>
                   <div>
@@ -219,7 +219,7 @@ export function IntegrationSetupPage() {
                 </div>
               )}
 
-              {error && <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 
               <div className="flex justify-between gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={() => setStep(1)}>Back</Button>
@@ -289,7 +289,7 @@ export function IntegrationSetupPage() {
 
               {error && (
                 <div className="flex w-full flex-col gap-3">
-                  <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
+                  <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
                   <Button variant="outline" size="sm" onClick={() => { setError(null); setStep(2) }}>Back</Button>
                 </div>
               )}

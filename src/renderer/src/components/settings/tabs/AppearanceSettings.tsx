@@ -45,7 +45,7 @@ export function AppearanceSettings() {
               key={id}
               onClick={() => handleSelect(id)}
               className={cn(
-                'flex flex-col items-center gap-2.5 rounded-lg border px-4 py-4 text-center transition-colors focus:outline-none',
+                'flex flex-col items-center gap-2.5 rounded-lg border px-4 py-4 text-center transition-colors focus:outline-hidden',
                 activeId === id
                   ? 'border-blue-500 bg-blue-500/10 text-th-text-primary'
                   : 'border-th-border bg-th-surface-raised text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary'

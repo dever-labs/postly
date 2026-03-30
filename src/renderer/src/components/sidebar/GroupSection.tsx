@@ -60,7 +60,7 @@ function InlineInput({ placeholder, onConfirm, onCancel, indent = 'pl-4' }: Inli
           if (e.key === 'Escape') onCancel()
         }}
         placeholder={placeholder}
-        className="flex-1 rounded bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-none ring-1 ring-blue-500/50"
+        className="flex-1 rounded-sm bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-hidden ring-1 ring-blue-500/50"
       />
       <button onClick={() => { if (val.trim()) onConfirm(val.trim()); else onCancel() }} className="text-green-400 hover:text-green-300"><Check className="h-3.5 w-3.5" /></button>
       <button onClick={onCancel} className="text-th-text-subtle hover:text-th-text-secondary"><X className="h-3.5 w-3.5" /></button>
@@ -91,14 +91,14 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
+        'group relative flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
         isActive ? 'bg-th-surface-hover text-th-text-primary' : 'hover:bg-th-surface-raised/60'
       )}
     >
       <button
         {...listeners}
         {...attributes}
-        className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover:opacity-100 active:cursor-grabbing"
+        className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover:opacity-100 active:cursor-grabbing"
         onClick={(e) => e.stopPropagation()}
       >
         <GripVertical className="h-3.5 w-3.5" />
@@ -107,7 +107,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       {/* Chevron — expand/collapse only */}
       <button
         onClick={(e) => { e.stopPropagation(); onToggle() }}
-        className="shrink-0 rounded p-0.5 focus:outline-none"
+        className="shrink-0 rounded-sm p-0.5 focus:outline-hidden"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       </button>
@@ -116,7 +116,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       <button
         onClick={onSelect}
         className={cn(
-          'flex flex-1 truncate rounded px-1 py-1 text-left text-sm font-semibold focus:outline-none',
+          'flex flex-1 truncate rounded-sm px-1 py-1 text-left text-sm font-semibold focus:outline-hidden',
           isActive ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary'
         )}
       >
@@ -128,21 +128,21 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
         <button
           title="Add request"
           onClick={(e) => { e.stopPropagation(); onAddRequest() }}
-          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
+          className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
         <button
           title="Add group"
           onClick={(e) => { e.stopPropagation(); onAddGroup() }}
-          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
+          className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden"
         >
           <FolderOpen className="h-3.5 w-3.5" />
         </button>
         <button
           title="More"
           onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
-          className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none"
+          className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
@@ -151,7 +151,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-sm border border-th-border-strong bg-th-surface-raised shadow-lg">
             <AiActionButton
               variant="menu-item"
               onClick={() => { setMenuOpen(false); onAi() }}
@@ -260,21 +260,21 @@ function SortableGroupRow({
           />
         ) : (
           <div className={cn(
-            'group/grp relative flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
+            'group/grp relative flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
             selectedItem?.type === 'group' && selectedItem.id === group.id
               ? 'bg-th-surface-hover text-th-text-primary'
               : 'hover:bg-th-surface-raised/60'
           )}>
             <button
               {...listeners} {...attributes}
-              className="cursor-grab shrink-0 rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/grp:opacity-100 active:cursor-grabbing"
+              className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/grp:opacity-100 active:cursor-grabbing"
               onClick={(e) => e.stopPropagation()}
             >
               <GripVertical className="h-3.5 w-3.5" />
             </button>
 
             <Collapsible.Trigger asChild>
-              <button className="shrink-0 rounded p-0.5 focus:outline-none" onClick={(e) => e.stopPropagation()}>
+              <button className="shrink-0 rounded-sm p-0.5 focus:outline-hidden" onClick={(e) => e.stopPropagation()}>
                 {group.collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             </Collapsible.Trigger>
@@ -282,7 +282,7 @@ function SortableGroupRow({
             <button
               onClick={onSelect}
               className={cn(
-                'flex flex-1 items-center gap-1.5 truncate rounded py-1 text-left text-sm font-semibold focus:outline-none',
+                'flex flex-1 items-center gap-1.5 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden',
                 selectedItem?.type === 'group' && selectedItem.id === group.id
                   ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary',
                 group.hidden && 'opacity-50'
@@ -293,10 +293,10 @@ function SortableGroupRow({
             </button>
 
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/grp:opacity-100">
-              <button title="Add request" onClick={onAddRequest} className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none">
+              <button title="Add request" onClick={onAddRequest} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
                 <Plus className="h-3.5 w-3.5" />
               </button>
-              <button title="More" onClick={(e) => { e.stopPropagation(); onMenuToggle() }} className="rounded p-0.5 hover:bg-th-surface-hover focus:outline-none">
+              <button title="More" onClick={(e) => { e.stopPropagation(); onMenuToggle() }} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -304,7 +304,7 @@ function SortableGroupRow({
             {groupMenuOpen === group.id && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded border border-th-border-strong bg-th-surface-raised shadow-lg">
+                <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-sm border border-th-border-strong bg-th-surface-raised shadow-lg">
                   <AiActionButton variant="menu-item" onClick={() => { onMenuClose(); onAiGroup() }} />
                   <div className="border-t border-th-border mx-2" />
                   <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
@@ -322,9 +322,9 @@ function SortableGroupRow({
         )}
 
         <Collapsible.Content>
-          <div className={cn('pl-1 rounded transition-colors', isGroupDropTarget && 'ring-1 ring-blue-500/40 bg-blue-500/5')}>
+          <div className={cn('pl-1 rounded-sm transition-colors', isGroupDropTarget && 'ring-1 ring-blue-500/40 bg-blue-500/5')}>
             {filteredReqs.length === 0 && !searchQuery && (
-              <div className="mx-2 my-1.5 rounded border border-dashed border-th-border px-2 py-2 text-center">
+              <div className="mx-2 my-1.5 rounded-sm border border-dashed border-th-border px-2 py-2 text-center">
                 <p className="text-xs text-th-text-faint">No endpoints defined</p>
                 <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
               </div>
@@ -409,9 +409,9 @@ export function GroupSection({ source, integration, collections, groups, request
   return (
     <Collapsible.Root open={sourceOpen} onOpenChange={setSourceOpen} className="mb-1">
       {/* Source header */}
-      <div className="group/header flex items-center gap-1 rounded px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
+      <div className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
         <Collapsible.Trigger asChild>
-          <button className="shrink-0 rounded p-0.5 focus:outline-none">
+          <button className="shrink-0 rounded-sm p-0.5 focus:outline-hidden">
             {sourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         </Collapsible.Trigger>
@@ -422,7 +422,7 @@ export function GroupSection({ source, integration, collections, groups, request
 
         <button
           onClick={() => setSourceOpen((o) => !o)}
-          className="flex flex-1 items-center gap-1 truncate rounded py-1 text-left text-sm font-semibold focus:outline-none"
+          className="flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden"
         >
           <span className="truncate">{integration ? integration.name : capitalize(source)}</span>
           <Badge variant="grey" className="ml-0.5">{totalRequests.length}</Badge>
@@ -433,7 +433,7 @@ export function GroupSection({ source, integration, collections, groups, request
             {(integration.status === 'error' || integration.status === 'disconnected') && (
               <button
                 onClick={() => integrationsStore.connect(integration.id)}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-400 hover:bg-th-surface-raised hover:text-amber-300 focus:outline-none"
+                className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-amber-400 hover:bg-th-surface-raised hover:text-amber-300 focus:outline-hidden"
                 title="Reconnect"
               >
                 <AlertCircle className="h-3 w-3" />
@@ -442,14 +442,14 @@ export function GroupSection({ source, integration, collections, groups, request
             )}
             <button
               onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
-              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
+              className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100"
               title="Add collection"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => selectItem('edit-integration', integration.id)}
-              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
+              className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100"
               title="Edit integration"
             >
               <Settings className="h-3.5 w-3.5" />
@@ -459,14 +459,14 @@ export function GroupSection({ source, integration, collections, groups, request
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
-              className="rounded p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-none group-hover/header:opacity-100"
+              className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100"
               title="Add collection"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={() => toggleSourceHidden(source)}
-              className="rounded p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-none"
+              className="rounded-sm p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-hidden"
               title={isSourceHidden ? 'Show source' : 'Hide source'}
             >
               {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -478,7 +478,7 @@ export function GroupSection({ source, integration, collections, groups, request
       <Collapsible.Content>
         <div className={cn(isSourceHidden && 'opacity-40')}>
           {sourceCollections.length === 0 && !addingCollection && (
-            <div className="mx-3 my-2 rounded border border-dashed border-th-border px-3 py-3 text-center">
+            <div className="mx-3 my-2 rounded-sm border border-dashed border-th-border px-3 py-3 text-center">
               <p className="text-xs text-th-text-faint">No collections yet</p>
               <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
             </div>
@@ -555,7 +555,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     )}
 
                     {!searchQuery && collectionGroups.length === 0 && addingGroupTo !== collection.id && (
-                      <div className="mx-2 my-1.5 rounded border border-dashed border-th-border px-2 py-2 text-center">
+                      <div className="mx-2 my-1.5 rounded-sm border border-dashed border-th-border px-2 py-2 text-center">
                         <p className="text-xs text-th-text-faint">No groups defined</p>
                         <p className="mt-0.5 text-xs text-th-text-muted">Use + to add one</p>
                       </div>

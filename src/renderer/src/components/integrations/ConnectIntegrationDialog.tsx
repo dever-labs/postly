@@ -145,7 +145,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
       <div className="relative w-full max-w-md rounded-xl border border-th-border bg-th-surface shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-th-border px-5 py-4">
@@ -161,7 +161,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
                 : 'Connecting…'}
             </p>
           </div>
-          <button onClick={onClose} className="rounded p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-none">
+          <button onClick={onClose} className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -174,7 +174,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
                 <button
                   key={type}
                   onClick={() => handleTypeSelect(type)}
-                  className="flex items-center gap-4 rounded-lg border border-th-border-strong bg-th-surface-raised/50 px-4 py-3 text-left transition-colors hover:border-th-text-muted hover:bg-th-surface-raised focus:outline-none"
+                  className="flex items-center gap-4 rounded-lg border border-th-border-strong bg-th-surface-raised/50 px-4 py-3 text-left transition-colors hover:border-th-text-muted hover:bg-th-surface-raised focus:outline-hidden"
                 >
                   <span className="text-th-text-secondary">{TYPE_ICONS[type]}</span>
                   <div>
@@ -244,7 +244,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
                 </div>
               )}
 
-              {error && <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 
               <div className="flex justify-between gap-2 pt-1">
                 {!editIntegration && <Button variant="ghost" size="sm" onClick={() => setStep(1)}>Back</Button>}
@@ -314,7 +314,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
 
               {error && (
                 <div className="flex w-full flex-col gap-3">
-                  <p className="rounded bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
+                  <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
                   <Button variant="outline" size="sm" onClick={() => { setError(null); setStep(2) }}>Back</Button>
                 </div>
               )}

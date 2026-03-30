@@ -25,7 +25,7 @@ export function ResponseStatus({ response }: ResponseStatusProps) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className={cn('rounded px-2 py-0.5 text-xs font-medium', statusVariant)}>
+      <span className={cn('rounded-sm px-2 py-0.5 text-xs font-medium', statusVariant)}>
         {status} {response.statusText}
       </span>
       <span className="text-xs text-th-text-subtle">{response.duration} ms</span>

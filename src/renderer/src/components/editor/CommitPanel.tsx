@@ -143,7 +143,7 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
         </div>
 
         {showDiff && diff && (
-          <div className="rounded border border-th-border overflow-hidden">
+          <div className="rounded-sm border border-th-border overflow-hidden">
             <DiffEditor
               height="200px"
               language="json"
