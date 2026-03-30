@@ -103,7 +103,7 @@ export function GroupEditor({ groupId }: Props) {
   return (
     <div className="bg-th-bg w-full">
       {/* Thin drag strip — window drag target only, no content */}
-      <div className="drag-region h-8 shrink-0" />
+      <div className="drag-region shrink-0 pt-8 pb-4" />
 
       {/* Content */}
       <div className="no-drag px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
