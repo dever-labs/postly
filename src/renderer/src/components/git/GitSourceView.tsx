@@ -223,11 +223,12 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
 
-  const collections = useCollectionsStore((s) => s.collections.filter((c) => c.integrationId === integrationId))
-  const { load: loadCollections } = useCollectionsStore()
+  const allCollections = useCollectionsStore((s) => s.collections)
+  const collections = allCollections.filter((c) => c.integrationId === integrationId)
+  const loadCollections = useCollectionsStore((s) => s.load)
 
   const integrations = useIntegrationsStore((s) => s.integrations)
-  const { update: updateIntegration } = useIntegrationsStore()
+  const updateIntegration = useIntegrationsStore((s) => s.update)
 
   const integration = integrations.find((i) => i.id === integrationId) ?? null
 
