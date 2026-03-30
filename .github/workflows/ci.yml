@@ -46,6 +46,23 @@ jobs:
       - name: Run tests
         run: npm test
 
+  lockfile:
+    name: Lock File Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Verify package-lock.json is in sync with package.json
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          git diff --exit-code package-lock.json || \
+            (echo "::error::package-lock.json is out of sync — run 'npm install' and commit the updated lock file" && exit 1)
+
   build:
     name: Build · ${{ matrix.os }}
     needs: [lint-and-typecheck]
@@ -66,6 +83,28 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify CSS build output
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          node -e "
+            const fs = require('fs'), path = require('path');
+            const dir = 'out/renderer/assets';
+            const files = fs.readdirSync(dir).filter(f => f.endsWith('.css'));
+            if (!files.length) { console.error('No CSS files found in ' + dir); process.exit(1); }
+            const css = files.map(f => fs.readFileSync(path.join(dir, f), 'utf-8')).join('');
+            const size = Buffer.byteLength(css);
+            console.log('CSS output size:', size, 'bytes');
+            if (size < 20000) {
+              console.error('CSS is too small (' + size + ' bytes) — Tailwind utilities are likely not being generated');
+              process.exit(1);
+            }
+            if (!css.includes('th-surface')) {
+              console.error('Custom Tailwind theme colors missing from CSS — tailwind.config.js may not be loaded');
+              process.exit(1);
+            }
+            console.log('CSS output OK');
+          "
 
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
