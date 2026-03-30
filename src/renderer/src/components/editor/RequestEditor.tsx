@@ -55,7 +55,8 @@ export function RequestEditor() {
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
-  const { selectItem, openCommitPanel } = useUIStore()
+  const { selectItem } = useUIStore()
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   // no per-request title state needed — input is always rendered
 
@@ -80,21 +81,31 @@ export function RequestEditor() {
 
   const source = breadcrumb?.sourceType
 
+  const triggerGitSave = () => {
+    if (!editingRequest || !breadcrumb?.collection) return
+    const isGit = ['git', 'github', 'gitlab'].includes(breadcrumb.sourceType)
+    if (isGit) {
+      openGitAction({
+        type: 'push',
+        collectionId: breadcrumb.collection.id,
+        title: `Updated '${editingRequest.name}'`,
+        subtitle: breadcrumb.collection.name,
+      })
+    }
+  }
+
   // Ctrl+S: save the request, then show commit overlay for git-sourced requests
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
         e.preventDefault()
         if (!editingRequest) return
-        saveRequest().then(() => {
-          const isGit = ['git', 'github', 'gitlab'].includes(breadcrumb?.sourceType ?? '')
-          if (isGit) openCommitPanel(editingRequest.id)
-        })
+        saveRequest().then(triggerGitSave)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editingRequest, saveRequest, breadcrumb, openCommitPanel])
+  }, [editingRequest, saveRequest, breadcrumb, openGitAction])
 
   if (!editingRequest) {
     return (
@@ -182,9 +193,7 @@ export function RequestEditor() {
         <button
           onClick={async () => {
             await saveRequest()
-            if (['git', 'github', 'gitlab'].includes(source ?? '')) {
-              openCommitPanel(editingRequest.id)
-            }
+            triggerGitSave()
           }}
           className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
           title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}

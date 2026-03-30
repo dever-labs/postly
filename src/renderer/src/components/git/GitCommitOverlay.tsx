@@ -1,103 +1,77 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { GitCommit, Sparkles, X, GitBranch } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { GitBranch, GitCommit, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { useUIStore } from '@/store/ui'
-import { useRequestsStore } from '@/store/requests'
 import { useCollectionsStore } from '@/store/collections'
-import { useSettingsStore } from '@/store/settings'
 import { useIntegrationsStore } from '@/store/integrations'
+import { useSettingsStore } from '@/store/settings'
+import { useUIStore } from '@/store/ui'
 
-const AI_SESSION_ID = 'commit-overlay-ai'
+const AI_SESSION_ID = 'git-commit-overlay-ai'
 
-export function CommitOverlay() {
-  const { activeCommitRequestId, closeCommitPanel, addToast } = useUIStore()
-  const { requests: allRequests } = useCollectionsStore()
-  const groups = useCollectionsStore((s) => s.groups)
+export function GitCommitOverlay() {
+  const action = useUIStore((s) => s.pendingGitAction)
+  const closeGitAction = useUIStore((s) => s.closeGitAction)
+  const addToast = useUIStore((s) => s.addToast)
+
   const collections = useCollectionsStore((s) => s.collections)
+  const deleteCollection = useCollectionsStore((s) => s.deleteCollection)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const ai = useSettingsStore((s) => s.ai)
-  const clearDirty = useRequestsStore((s) => s.clearDirty)
-  const editingRequest = useRequestsStore((s) => s.editingRequest)
 
   const [commitMessage, setCommitMessage] = useState('')
   const [currentBranch, setCurrentBranch] = useState('')
-  const [committing, setCommitting] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const streamingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const requestId = activeCommitRequestId
-  const request = requestId
-    ? (editingRequest?.id === requestId ? editingRequest : allRequests.find((r) => r.id === requestId)) ?? null
-    : null
-
-  const group = request ? groups.find((g) => g.id === request.groupId) : null
-  const collection = group ? collections.find((c) => c.id === group.collectionId) : null
+  const collection = action ? collections.find((c) => c.id === action.collectionId) ?? null : null
   const integration = collection?.integrationId
     ? integrations.find((i) => i.id === collection.integrationId) ?? null
     : null
 
+  const isDelete = action?.type === 'delete-collection'
   const hasAi = !!(ai?.apiKey?.trim())
 
-  // Load current branch when overlay opens — seed from stored branch, then update from git
   useEffect(() => {
-    if (!requestId) return
+    if (!action) return
     setCommitMessage('')
-    // Seed with the stored branch immediately so button is never blocked
     setCurrentBranch(integration?.branch ?? 'main')
     setTimeout(() => textareaRef.current?.focus(), 50)
-
     if (!integration) return
     window.api.git.currentBranch({ integrationId: integration.id })
-      .then(({ data }: { data?: string; error?: string }) => {
-        if (data) setCurrentBranch(data)
-      })
-      .catch(() => { /* keep stored branch fallback */ })
-  }, [requestId, integration?.id])
+      .then(({ data }: { data?: string }) => { if (data) setCurrentBranch(data) })
+      .catch(() => {})
+  }, [action?.collectionId, integration?.id])
 
   // Subscribe to AI chunks
   useEffect(() => {
-    const unsub = window.api.ai.onChunk((payload: { requestId: string; text: string; done: boolean; error?: string }) => {
+    const unsub = window.api.ai.onChunk((payload: { requestId: string; text: string; done: boolean }) => {
       if (payload.requestId !== AI_SESSION_ID) return
-      if (payload.done) {
-        streamingRef.current = false
-        setGenerating(false)
-        return
-      }
+      if (payload.done) { streamingRef.current = false; setGenerating(false); return }
       setCommitMessage((prev) => prev + payload.text)
     })
     return () => { unsub() }
   }, [])
 
   const handleClose = useCallback(() => {
-    if (streamingRef.current) {
-      window.api.ai.cancel({ requestId: AI_SESSION_ID })
-    }
-    closeCommitPanel()
-  }, [closeCommitPanel])
+    if (streamingRef.current) window.api.ai.cancel({ requestId: AI_SESSION_ID })
+    closeGitAction()
+  }, [closeGitAction])
 
-  // Escape to close
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
-    }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [handleClose])
 
+  if (!action) return null
+
   const handleGenerateWithAi = async () => {
-    if (!request || !hasAi || generating) return
+    if (!hasAi || generating) return
     setCommitMessage('')
     setGenerating(true)
     streamingRef.current = true
-
-    const requestContext = [
-      `Request name: ${request.name}`,
-      `Method: ${request.method ?? 'GET'}`,
-      `URL: ${request.url ?? ''}`,
-      request.description ? `Description: ${request.description}` : null,
-    ].filter(Boolean).join('\n')
-
     await window.api.ai.chat({
       requestId: AI_SESSION_ID,
       provider: ai.provider,
@@ -110,44 +84,37 @@ export function CommitOverlay() {
         },
         {
           role: 'user',
-          content: `Generate a git commit message for this API request change:\n\n${requestContext}`,
+          content: `Generate a git commit message for this change:\n\n${action.title}`,
         },
       ],
     })
   }
 
-  const handleCommit = async () => {
+  const handleSubmit = async () => {
     if (!commitMessage.trim()) { addToast('Please enter a commit message', 'error'); return }
-    if (!requestId) { addToast('No request selected', 'error'); return }
     if (!currentBranch) { addToast('Could not determine current branch', 'error'); return }
-    setCommitting(true)
+    setSubmitting(true)
 
-    const { error } = await window.api.git.commit({
-      requestId,
-      commitMessage: commitMessage.trim(),
-      branch: currentBranch,
-    })
-
-    setCommitting(false)
-    if (error) {
-      addToast(`Commit failed: ${error}`, 'error')
+    if (isDelete) {
+      await deleteCollection(action.collectionId, commitMessage.trim())
+      addToast(`Deleted and pushed to ${currentBranch}`, 'success')
     } else {
+      const { error } = await window.api.git.pushCollection({
+        collectionId: action.collectionId,
+        commitMessage: commitMessage.trim(),
+        branch: currentBranch,
+      })
+      if (error) { addToast(`Push failed: ${error}`, 'error'); setSubmitting(false); return }
       addToast(`Committed to ${currentBranch}`, 'success')
-      // Clear the dirty flag in both DB (done by IPC) and in-memory stores
-      if (requestId) clearDirty(requestId)
-      closeCommitPanel()
     }
+
+    setSubmitting(false)
+    closeGitAction()
   }
 
-  // Ctrl+Enter to commit
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleCommit()
-    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit() }
   }
-
-  if (!activeCommitRequestId || !request) return null
 
   return (
     <div
@@ -159,19 +126,11 @@ export function CommitOverlay() {
         <div className="flex items-center gap-2.5 border-b border-th-border px-4 py-3">
           <GitCommit className="h-4 w-4 shrink-0 text-th-text-secondary" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-th-text-primary truncate">
-              Commit "{request.name}"
-            </div>
-            {collection && (
-              <div className="text-xs text-th-text-muted truncate">{collection.name}</div>
+            <div className="text-sm font-semibold text-th-text-primary truncate">{action.title}</div>
+            {action.subtitle && (
+              <div className="text-xs text-th-text-muted truncate">{action.subtitle}</div>
             )}
           </div>
-          <button
-            onClick={handleClose}
-            className="rounded-sm p-1 text-th-text-muted hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-hidden"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         {/* Branch badge */}
@@ -194,41 +153,32 @@ export function CommitOverlay() {
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={generating}
+              disabled={generating || submitting}
             />
             {generating && (
-              <div className="absolute bottom-2 right-2 text-xs text-th-text-muted animate-pulse">
-                Generating…
-              </div>
+              <div className="absolute bottom-2 right-2 text-xs text-th-text-muted animate-pulse">Generating…</div>
             )}
           </div>
-          <p className="mt-1.5 text-xs text-th-text-muted">Ctrl+Enter to commit</p>
+          <p className="mt-1.5 text-xs text-th-text-muted">Ctrl+Enter to confirm</p>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2 border-t border-th-border px-4 py-3">
           {hasAi && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleGenerateWithAi}
-              disabled={generating || committing}
-              className="gap-1.5"
-            >
+            <Button variant="ghost" size="sm" onClick={handleGenerateWithAi} disabled={generating || submitting} className="gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
               {generating ? 'Generating…' : 'Generate with AI'}
             </Button>
           )}
           <div className="flex-1" />
-          <Button variant="ghost" size="sm" onClick={handleClose} disabled={committing}>
-            Cancel
-          </Button>
+          <Button variant="ghost" size="sm" onClick={handleClose} disabled={submitting}>Cancel</Button>
           <Button
             size="sm"
-            onClick={handleCommit}
-            disabled={committing || !commitMessage.trim()}
+            onClick={handleSubmit}
+            disabled={submitting || !commitMessage.trim()}
+            className={isDelete ? 'bg-rose-600 hover:bg-rose-500 border-transparent text-white' : ''}
           >
-            {committing ? 'Committing…' : 'Commit & Push'}
+            {submitting ? (isDelete ? 'Deleting…' : 'Pushing…') : isDelete ? 'Delete & Push' : 'Commit & Push'}
           </Button>
         </div>
       </div>

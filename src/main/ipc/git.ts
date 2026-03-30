@@ -323,4 +323,52 @@ export function registerGitHandlers(): void {
       return { data: rows }
     } catch (err) { return { error: String(err) } }
   })
+
+  // ── Push collection — re-export and commit + push ───────────────────────────
+
+  ipcMain.handle('postly:git:push-collection', async (_, args: {
+    collectionId: string
+    commitMessage: string
+    branch: string
+  }) => {
+    try {
+      const collection = queryOne<{ id: string; name: string; source: string; source_meta: string | null; integration_id: string | null }>(
+        'SELECT id, name, source, source_meta, integration_id FROM collections WHERE id = ?',
+        [args.collectionId]
+      )
+      if (!collection) return { error: 'Collection not found' }
+
+      const meta: { integrationId?: string; fileName?: string } = collection.source_meta
+        ? JSON.parse(collection.source_meta) : {}
+      const integrationId = collection.integration_id ?? meta.integrationId
+      if (!integrationId) return { error: 'No integration linked to this collection' }
+
+      const integration = queryOne<IntegrationRow>('SELECT * FROM integrations WHERE id = ?', [integrationId])
+      if (!integration) return { error: 'Integration not found' }
+
+      const exportData = buildExport([args.collectionId])
+      const col = exportData.collections[0]
+      const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+      const fileName = meta.fileName ?? `${slug(col?.name ?? collection.name)}.postly.json`
+      const fileContent = JSON.stringify(
+        { $schema: 'postly/v1', exportedAt: new Date().toISOString(), collections: col ? [col] : [] },
+        null, 2
+      )
+
+      await gitLocal.commitAndPush(integration.id, fileName, fileContent, args.commitMessage, args.branch)
+
+      // Persist the fileName in source_meta so future syncs can match
+      if (!meta.fileName) {
+        run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
+          [JSON.stringify({ ...meta, integrationId, fileName }), Date.now(), args.collectionId])
+      }
+
+      // Clear dirty flags for all requests in this collection
+      run(`UPDATE requests SET is_dirty = 0, updated_at = ? WHERE group_id IN (
+             SELECT id FROM groups WHERE collection_id = ?
+           )`, [Date.now(), args.collectionId])
+
+      return { data: true }
+    } catch (err) { return { error: String(err) } }
+  })
 }

@@ -373,7 +373,7 @@ export function GroupSection({ source, integration, collections, groups, request
   } = useCollectionsStore()
   const addToast = useUIStore((s) => s.addToast)
   const openDeleteCollection = useUIStore((s) => s.openDeleteCollection)
-  const openDeleteRequest = useUIStore((s) => s.openDeleteRequest)
+  const openGitAction = useUIStore((s) => s.openGitAction)
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
@@ -503,7 +503,13 @@ export function GroupSection({ source, integration, collections, groups, request
                 {renamingCollection === collection.id ? (
                   <InlineInput
                     placeholder={collection.name}
-                    onConfirm={(name) => { renameCollection(collection.id, name); setRenamingCollection(null) }}
+                    onConfirm={(name) => {
+                      renameCollection(collection.id, name)
+                      setRenamingCollection(null)
+                      if (['git', 'github', 'gitlab'].includes(collection.source)) {
+                        openGitAction({ type: 'push', collectionId: collection.id, title: `Renamed collection to '${name}'` })
+                      }
+                    }}
                     onCancel={() => setRenamingCollection(null)}
                     indent="pl-3"
                   />
@@ -515,10 +521,23 @@ export function GroupSection({ source, integration, collections, groups, request
                     isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
                     onToggle={() => toggleCollection(collection.id)}
                     onSelect={() => selectItem('collection', collection.id)}
-                    onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
+                    onAddRequest={() => {
+                      setOpenCollections((p) => new Set([...p, collection.id]))
+                      addRequestToCollection(collection.id).then(() => {
+                        if (['git', 'github', 'gitlab'].includes(collection.source)) {
+                          openGitAction({ type: 'push', collectionId: collection.id, title: 'Created endpoint', subtitle: collection.name })
+                        }
+                      })
+                    }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
-                    onDelete={() => openDeleteCollection(collection.id)}
+                    onDelete={() => {
+                      if (['git', 'github', 'gitlab'].includes(collection.source)) {
+                        openGitAction({ type: 'delete-collection', collectionId: collection.id, title: `Delete collection '${collection.name}'` })
+                      } else {
+                        openDeleteCollection(collection.id)
+                      }
+                    }}
                     onAi={() => selectItem('ai-collection', collection.id)}
                   />
                 )}
@@ -538,24 +557,44 @@ export function GroupSection({ source, integration, collections, groups, request
                           activeRequestId={activeRequestId}
                           dragActiveId={dragActiveId}
                           dragOverId={dragOverId}
-                          onRenameConfirm={(name) => { renameGroup(group.id, name); setRenamingGroup(null) }}
+                          onRenameConfirm={(name) => {
+                            renameGroup(group.id, name)
+                            setRenamingGroup(null)
+                            const col = collections.find((c) => c.id === group.collectionId)
+                            if (col && ['git', 'github', 'gitlab'].includes(col.source)) {
+                              openGitAction({ type: 'push', collectionId: col.id, title: `Renamed group to '${name}'`, subtitle: col.name })
+                            }
+                          }}
                           onRenameCancel={() => setRenamingGroup(null)}
                           onSelect={() => selectItem('group', group.id)}
-                          onAddRequest={() => createLocalRequest(group.id)}
+                          onAddRequest={() => {
+                            const col = collections.find((c) => c.id === group.collectionId)
+                            createLocalRequest(group.id).then(() => {
+                              if (col && ['git', 'github', 'gitlab'].includes(col.source)) {
+                                openGitAction({ type: 'push', collectionId: col.id, title: 'Created endpoint', subtitle: col.name })
+                              }
+                            })
+                          }}
                           onMenuToggle={() => setGroupMenuOpen(groupMenuOpen === group.id ? null : group.id)}
                           onMenuClose={() => setGroupMenuOpen(null)}
                           onRenameStart={() => setRenamingGroup(group.id)}
-                          onDelete={() => deleteGroup(group.id)}
+                          onDelete={() => {
+                            const col = collections.find((c) => c.id === group.collectionId)
+                            deleteGroup(group.id).then(() => {
+                              if (col && ['git', 'github', 'gitlab'].includes(col.source)) {
+                                openGitAction({ type: 'push', collectionId: col.id, title: `Deleted group '${group.name}'`, subtitle: col.name })
+                              }
+                            })
+                          }}
                           onAiGroup={() => selectItem('ai-group', group.id)}
                           onDeleteRequest={(reqId) => {
-                            const reqGroup = groups.find((g) => g.id === group.id)
-                            const col = reqGroup ? collections.find((c) => c.id === reqGroup.collectionId) : null
-                            if (col?.source === 'git') {
-                              openDeleteRequest(reqId)
-                            } else {
-                              deleteRequest(reqId)
+                            const col = collections.find((c) => c.id === group.collectionId)
+                            deleteRequest(reqId).then(() => {
                               if (activeRequestId === reqId) clearActiveRequest()
-                            }
+                              if (col && ['git', 'github', 'gitlab'].includes(col.source)) {
+                                openGitAction({ type: 'push', collectionId: col.id, title: 'Deleted endpoint', subtitle: col.name })
+                              }
+                            })
                           }}
                           onClickRequest={(req) => { clearSelectedItem(); setActiveRequest(req) }}
                         />
@@ -565,7 +604,14 @@ export function GroupSection({ source, integration, collections, groups, request
                     {!searchQuery && addingGroupTo === collection.id && (
                       <InlineInput
                         placeholder="Group name…"
-                        onConfirm={(name) => { createGroup(collection.id, name); setAddingGroupTo(null) }}
+                        onConfirm={(name) => {
+                          createGroup(collection.id, name).then(() => {
+                            if (['git', 'github', 'gitlab'].includes(collection.source)) {
+                              openGitAction({ type: 'push', collectionId: collection.id, title: `Created group '${name}'`, subtitle: collection.name })
+                            }
+                          })
+                          setAddingGroupTo(null)
+                        }}
                         onCancel={() => setAddingGroupTo(null)}
                         indent="pl-2"
                       />
@@ -591,9 +637,14 @@ export function GroupSection({ source, integration, collections, groups, request
                 setAddingCollection(false)
                 const payload: { name: string; source: string; integrationId?: string } = { name, source }
                 if (integration) payload.integrationId = integration.id
-                const { error } = await window.api.collections.create(payload)
+                const { error, data } = await window.api.collections.create(payload)
                 if (error) addToast('Failed to create collection', 'error')
-                else load()
+                else {
+                  await load()
+                  if (['git', 'github', 'gitlab'].includes(source) && data?.id) {
+                    openGitAction({ type: 'push', collectionId: data.id, title: `Created collection '${name}'` })
+                  }
+                }
               }}
               onCancel={() => setAddingCollection(false)}
               indent="pl-2"

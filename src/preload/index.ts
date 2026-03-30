@@ -20,7 +20,7 @@ const api = {
     get: (data: { id: string }) => ipcRenderer.invoke('postly:requests:get', data),
     create: (data: { groupId: string; name?: string; method?: string }) => ipcRenderer.invoke('postly:requests:create', data),
     update: (data: { id: string; [key: string]: unknown }) => ipcRenderer.invoke('postly:requests:update', data),
-    delete: (data: { id: string; commitMessage?: string; branch?: string }) => ipcRenderer.invoke('postly:requests:delete', data),
+    delete: (data: { id: string }) => ipcRenderer.invoke('postly:requests:delete', data),
     markDirty: (data: { id: string; isDirty: boolean }) => ipcRenderer.invoke('postly:requests:mark-dirty', data),
   },
   http: {
@@ -151,6 +151,7 @@ const api = {
     sync: (data: { integrationId: string; collectionId?: string; collectionName?: string }) => ipcRenderer.invoke('postly:git:sync', data),
     diff: (data: { requestId: string }) => ipcRenderer.invoke('postly:git:diff', data),
     commit: (data: { requestId: string; commitMessage: string; branch: string; fromBranch?: string }) => ipcRenderer.invoke('postly:git:commit', data),
+    pushCollection: (data: { collectionId: string; commitMessage: string; branch: string }) => ipcRenderer.invoke('postly:git:push-collection', data),
     dirtyRequests: (data: { collectionId: string }) => ipcRenderer.invoke('postly:git:dirty-requests', data),
     import: (data: { integrationId: string; collectionId?: string; collectionName: string }) => ipcRenderer.invoke('postly:git:import', data),
   },

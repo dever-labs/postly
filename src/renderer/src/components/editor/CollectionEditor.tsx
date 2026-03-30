@@ -44,6 +44,7 @@ export function CollectionEditor({ collectionId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectUIItem = useUIStore((s) => s.selectItem)
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -70,6 +71,7 @@ export function CollectionEditor({ collectionId }: Props) {
 
   const integration = collection.integrationId ? integrations.find((i) => i.id === collection.integrationId) : null
   const inheritedFrom = integration?.token ? integration.name : undefined
+  const isGit = ['git', 'github', 'gitlab'].includes(collection.source)
 
   const discard = () => {
     setName(collection.name)
@@ -86,7 +88,11 @@ export function CollectionEditor({ collectionId }: Props) {
     await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification })
     setSaving(false)
     setIsDirty(false)
-    addToast('Collection saved', 'success')
+    if (isGit) {
+      openGitAction({ type: 'push', collectionId, title: `Updated collection '${name.trim()}'` })
+    } else {
+      addToast('Collection saved', 'success')
+    }
   }
 
   const mark = () => setIsDirty(true)

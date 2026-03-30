@@ -45,6 +45,7 @@ export function GroupEditor({ groupId }: Props) {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
+  const openGitAction = useUIStore((s) => s.openGitAction)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -95,7 +96,12 @@ export function GroupEditor({ groupId }: Props) {
     await updateGroup(groupId, { name: name.trim(), description, authType, authConfig, sslVerification })
     setSaving(false)
     setIsDirty(false)
-    addToast('Group saved', 'success')
+    const isGit = collection && ['git', 'github', 'gitlab'].includes(collection.source)
+    if (isGit && collection) {
+      openGitAction({ type: 'push', collectionId: collection.id, title: `Updated group '${name.trim()}'`, subtitle: collection.name })
+    } else {
+      addToast('Group saved', 'success')
+    }
   }
 
   const mark = () => setIsDirty(true)
