@@ -26,7 +26,7 @@ const SOURCE_ORDER: CollectionSource[] = ['local', 'github', 'gitlab', 'backstag
 function Checkbox({ checked, indeterminate }: { checked: boolean; indeterminate?: boolean }) {
   return (
     <span
-      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
         checked || indeterminate
           ? 'border-th-accent bg-th-accent text-white'
           : 'border-th-border bg-th-bg text-transparent'

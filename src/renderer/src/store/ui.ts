@@ -28,6 +28,7 @@ interface UIState {
   sidebarWidth: number
   editorHeight: number
   activeCommitRequestId: string | null
+  deletingCollectionId: string | null
   toasts: ToastItem[]
   selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source'; id: string } | null
   toggleTheme: () => void
@@ -40,6 +41,8 @@ interface UIState {
   setEditorHeight: (h: number) => void
   openCommitPanel: (requestId: string) => void
   closeCommitPanel: () => void
+  openDeleteCollection: (collectionId: string) => void
+  closeDeleteCollection: () => void
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
   selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => void
@@ -55,6 +58,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   sidebarWidth: 280,
   editorHeight: 300,
   activeCommitRequestId: null,
+  deletingCollectionId: null,
   toasts: [],
   selectedItem: null,
 
@@ -82,6 +86,8 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   openCommitPanel: (requestId: string) => set({ activeCommitRequestId: requestId }),
   closeCommitPanel: () => set({ activeCommitRequestId: null }),
+  openDeleteCollection: (collectionId: string) => set({ deletingCollectionId: collectionId }),
+  closeDeleteCollection: () => set({ deletingCollectionId: null }),
 
   addToast: (message: string, type: 'success' | 'error' | 'info') => {
     const id = Math.random().toString(36).slice(2)

@@ -358,8 +358,6 @@ export function GroupSection({ source, integration, collections, groups, request
   const [addingGroupTo, setAddingGroupTo] = useState<string | null>(null)
   const [renamingCollection, setRenamingCollection] = useState<string | null>(null)
   const [addingCollection, setAddingCollection] = useState(false)
-  const [deletingCollection, setDeletingCollection] = useState<Collection | null>(null)
-  const [deleteCommitMessage, setDeleteCommitMessage] = useState('')
 
   const {
     toggleSourceHidden,
@@ -367,7 +365,6 @@ export function GroupSection({ source, integration, collections, groups, request
     deleteRequest,
     createGroup,
     addRequestToCollection,
-    deleteCollection,
     renameCollection,
     createLocalRequest,
     deleteGroup,
@@ -375,6 +372,7 @@ export function GroupSection({ source, integration, collections, groups, request
     load,
   } = useCollectionsStore()
   const addToast = useUIStore((s) => s.addToast)
+  const openDeleteCollection = useUIStore((s) => s.openDeleteCollection)
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
@@ -409,68 +407,7 @@ export function GroupSection({ source, integration, collections, groups, request
     })
   }, [sourceCollections.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleConfirmDelete = async () => {
-    if (!deletingCollection) return
-    await deleteCollection(deletingCollection.id, deleteCommitMessage.trim() || undefined)
-    setDeletingCollection(null)
-  }
-
-  const isGitCollection = deletingCollection?.source === 'git'
-
   return (
-    <>
-      {/* Delete confirmation / commit dialog */}
-      {deletingCollection && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xs"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeletingCollection(null) }}
-        >
-          <div className="w-full max-w-sm rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
-            <div className="border-b border-th-border px-4 py-3">
-              <div className="text-sm font-semibold text-th-text-primary">Delete collection</div>
-              <div className="text-xs text-th-text-muted mt-0.5 truncate">{deletingCollection.name}</div>
-            </div>
-            <div className="p-4">
-              {isGitCollection ? (
-                <>
-                  <p className="text-sm text-th-text-secondary mb-3">
-                    This will delete the collection file from the repository and push the change.
-                  </p>
-                  <textarea
-                    autoFocus
-                    className="w-full resize-none rounded-sm border border-th-border bg-th-bg px-3 py-2 text-sm text-th-text-primary placeholder:text-th-text-subtle focus:border-th-accent focus:outline-hidden"
-                    rows={3}
-                    placeholder="Commit message…"
-                    value={deleteCommitMessage}
-                    onChange={(e) => setDeleteCommitMessage(e.target.value)}
-                    onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleConfirmDelete() } }}
-                  />
-                  <p className="mt-1.5 text-xs text-th-text-muted">Ctrl+Enter to confirm</p>
-                </>
-              ) : (
-                <p className="text-sm text-th-text-secondary">
-                  Are you sure you want to delete <span className="font-medium text-th-text-primary">{deletingCollection.name}</span>? This cannot be undone.
-                </p>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-th-border px-4 py-3">
-              <button
-                className="rounded-sm px-3 py-1.5 text-sm text-th-text-secondary hover:bg-th-surface-hover focus:outline-hidden"
-                onClick={() => setDeletingCollection(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-sm bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 focus:outline-hidden disabled:opacity-50"
-                onClick={handleConfirmDelete}
-                disabled={isGitCollection && !deleteCommitMessage.trim()}
-              >
-                {isGitCollection ? 'Delete & Push' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     <Collapsible.Root open={sourceOpen} onOpenChange={setSourceOpen} className="mb-1">
       {/* Source header */}
       <div className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
@@ -580,7 +517,7 @@ export function GroupSection({ source, integration, collections, groups, request
                     onAddRequest={() => { setOpenCollections((p) => new Set([...p, collection.id])); addRequestToCollection(collection.id) }}
                     onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
                     onRename={() => setRenamingCollection(collection.id)}
-                    onDelete={() => { setDeletingCollection(collection); setDeleteCommitMessage('') }}
+                    onDelete={() => openDeleteCollection(collection.id)}
                     onAi={() => selectItem('ai-collection', collection.id)}
                   />
                 )}
@@ -655,6 +592,5 @@ export function GroupSection({ source, integration, collections, groups, request
         </div>
       </Collapsible.Content>
     </Collapsible.Root>
-    </>
   )
 }

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { CommitOverlay } from './components/git/CommitOverlay'
+import { DeleteCollectionOverlay } from './components/collections/DeleteCollectionOverlay'
 import { Toaster } from './components/ui/Toast'
 import { TooltipProvider } from './components/ui/Tooltip'
 import { useCollectionsStore } from './store/collections'
@@ -22,6 +23,7 @@ export default function App(): React.ReactElement {
         <AppShell />
         <SettingsModal />
         <CommitOverlay />
+        <DeleteCollectionOverlay />
         <Toaster />
       </div>
     </TooltipProvider>
