@@ -109,7 +109,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       </div>
       <div>
         <label className="mb-1 block text-xs text-th-text-subtle">Scopes</label>
-        <Input placeholder="read write (space-separated)" value={authConfig.scopes ?? ''} onChange={(e) => set('scopes', e.target.value)} />
+        <Input placeholder="openid profile (space-separated, defaults to openid)" value={authConfig.scopes ?? ''} onChange={(e) => set('scopes', e.target.value)} />
       </div>
 
       <div className="flex items-center gap-2 pt-1">
