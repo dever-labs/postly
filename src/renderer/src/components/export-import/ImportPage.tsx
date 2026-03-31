@@ -211,25 +211,23 @@ export function ImportPage() {
                 </div>
               </div>
             ))}
+
+            <div className="mt-6 border-t border-th-border pt-6 flex items-center gap-3">
+              <Button onClick={handleImport} disabled={importing} className="gap-2">
+                <Upload className="h-4 w-4" />
+                {importing
+                  ? 'Importing…'
+                  : `Import ${parsedFile.collections.length} collection${parsedFile.collections.length !== 1 ? 's' : ''}`}
+              </Button>
+              <button
+                onClick={clearSelectedItem}
+                className="text-sm text-th-text-subtle hover:text-th-text-secondary"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="shrink-0 border-t border-th-border px-8 py-4 flex items-center gap-3">
-        {parsedFile && (
-          <Button onClick={handleImport} disabled={importing} className="gap-2">
-            <Upload className="h-4 w-4" />
-            {importing
-              ? 'Importing…'
-              : `Import ${parsedFile.collections.length} collection${parsedFile.collections.length !== 1 ? 's' : ''}`}
-          </Button>
-        )}
-        <button
-          onClick={clearSelectedItem}
-          className="text-sm text-th-text-subtle hover:text-th-text-secondary"
-        >
-          Cancel
-        </button>
       </div>
     </div>
   )
