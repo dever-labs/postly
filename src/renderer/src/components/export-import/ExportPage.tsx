@@ -183,23 +183,24 @@ export function ExportPage() {
                 </div>
               )
             })}
+
+            {/* Export action — intentionally at the bottom of the scroll area */}
+            <div className="mt-6 border-t border-th-border pt-6 flex items-center gap-3">
+              <Button onClick={handleExport} disabled={selected.size === 0 || exporting} className="gap-2">
+                <Download className="h-4 w-4" />
+                {exporting
+                  ? 'Exporting…'
+                  : `Export ${selected.size} collection${selected.size !== 1 ? 's' : ''}`}
+              </Button>
+              <button
+                onClick={clearSelectedItem}
+                className="text-sm text-th-text-subtle hover:text-th-text-secondary"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="shrink-0 border-t border-th-border px-8 py-4 flex items-center gap-3">
-        <Button onClick={handleExport} disabled={selected.size === 0 || exporting} className="gap-2">
-          <Download className="h-4 w-4" />
-          {exporting
-            ? 'Exporting…'
-            : `Export ${selected.size} collection${selected.size !== 1 ? 's' : ''}`}
-        </Button>
-        <button
-          onClick={clearSelectedItem}
-          className="text-sm text-th-text-subtle hover:text-th-text-secondary"
-        >
-          Cancel
-        </button>
       </div>
     </div>
   )
