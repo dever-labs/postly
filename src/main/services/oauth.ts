@@ -86,11 +86,14 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
     autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true }
   })
+  // Register listener BEFORE loadURL so the redirect is caught even if
+  // Keycloak completes it instantly (e.g. an existing session).
+  const redirectPromise = waitForRedirect(redirectUri, win)
   win.loadURL(authUrl.toString())
 
   let code: string
   try {
-    const result = await waitForRedirect(redirectUri, win)
+    const result = await redirectPromise
     if (result.state !== state) throw new Error('OAuth state mismatch')
     code = result.code
   } finally {

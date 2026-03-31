@@ -3,7 +3,7 @@ import type { GrantType, Token } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
-import { X } from 'lucide-react'
+import { Eye, EyeOff, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface OAuthPanelProps {
@@ -28,6 +28,8 @@ function buildInlineConfig(authConfig: Record<string, string>) {
 export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
   const [token, setToken] = useState<Token | null>(null)
   const [authorizing, setAuthorizing] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [showToken, setShowToken] = useState(false)
 
   const set = (field: string, value: string) => onConfigChange({ ...authConfig, [field]: value })
   const hasMinConfig = !!(authConfig.clientId && authConfig.tokenUrl)
@@ -38,22 +40,30 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
     const config = buildInlineConfig(authConfig)
     window.api.oauth.inline.getToken(config).then(({ data }: { data: Token | null }) => {
       setToken(data ?? null)
+      setShowToken(false)
     })
+    setAuthError(null)
   }, [authConfig, hasMinConfig])
 
   const handleAuthorize = async () => {
     if (!hasMinConfig) return
     setAuthorizing(true)
+    setAuthError(null)
     const config = buildInlineConfig(authConfig)
     const { data, error } = await window.api.oauth.inline.authorize(config)
     setAuthorizing(false)
-    if (data) setToken(data)
-    if (error) console.error('OAuth error:', error)
+    if (data) {
+      setToken(data)
+      setShowToken(false)
+    }
+    if (error) setAuthError(String(error))
   }
 
   const handleClearToken = async () => {
     await window.api.oauth.inline.clearToken(buildInlineConfig(authConfig))
     setToken(null)
+    setShowToken(false)
+    setAuthError(null)
   }
 
   const isExpired = token?.expiresAt ? token.expiresAt < Date.now() : false
@@ -113,15 +123,36 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
         )}
       </div>
 
+      {authError && (
+        <p className="rounded-sm border border-rose-700/40 bg-rose-900/10 px-3 py-2 text-xs text-rose-400">
+          {authError}
+        </p>
+      )}
+
       {token && (
         <div className={cn(
-          'rounded-sm border px-3 py-2 text-xs',
+          'flex flex-col gap-1.5 rounded-sm border px-3 py-2 text-xs',
           isExpired
             ? 'border-rose-700/40 bg-rose-900/10 text-rose-400'
             : 'border-emerald-700/40 bg-emerald-900/10 text-emerald-400'
         )}>
-          {isExpired ? 'Token expired' : 'Token active'}
-          {token.expiresAt && ` - expires ${new Date(token.expiresAt).toLocaleString()}`}
+          <div>
+            {isExpired ? 'Token expired' : 'Token active'}
+            {token.expiresAt && ` · expires ${new Date(token.expiresAt).toLocaleString()}`}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <code className="flex-1 select-all truncate font-mono text-[10px] opacity-80">
+              {showToken ? token.accessToken : '••••••••••••••••••••••••'}
+            </code>
+            <button
+              type="button"
+              onClick={() => setShowToken((v) => !v)}
+              className="shrink-0 opacity-60 hover:opacity-100"
+              title={showToken ? 'Hide token' : 'Reveal token'}
+            >
+              {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
       )}
 
