@@ -106,7 +106,7 @@ export function ExportPage() {
   const someSelected = selected.size > 0 && !allSelected
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col overflow-y-auto">
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
@@ -117,7 +117,7 @@ export function ExportPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="px-8 py-6">
         {collections.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <FileJson className="h-8 w-8 text-th-text-muted" />
