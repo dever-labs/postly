@@ -181,7 +181,10 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
             {isExpired ? '⚠ Token expired' : '✓ Token active'}
             {token.expiresAt && (
               <span className="ml-2 font-normal opacity-70">
-                {isExpired ? 'expired' : 'expires'} {new Date(token.expiresAt).toLocaleString()}
+                {isExpired ? 'expired' : 'expires'} {new Date(token.expiresAt).toLocaleString(undefined, {
+                  day: 'numeric', month: 'short', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit'
+                })}
               </span>
             )}
           </div>
