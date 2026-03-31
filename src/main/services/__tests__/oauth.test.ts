@@ -100,6 +100,17 @@ function startFakeIdp(tokenResponse?: Record<string, unknown>): Promise<FakeIdp>
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Allocates a free OS port without holding it open. */
+function allocPort(): Promise<number> {
+  return new Promise((resolve) => {
+    const srv = http.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address() as AddressInfo
+      srv.close(() => resolve(port))
+    })
+  })
+}
+
 function makeConfig(overrides: Partial<OAuthConfig> = {}): OAuthConfig {
   return {
     id: 'test-config',
@@ -174,13 +185,27 @@ describe('OAuth integration', () => {
 
   describe('authorizeAuthCode', () => {
     let idp: FakeIdp
-    beforeEach(async () => { idp = await startFakeIdp() })
+    let callbackPort: number
+
+    beforeEach(async () => {
+      idp = await startFakeIdp()
+      // Allocate a real free port; authorizeAuthCode will listen on the port
+      // extracted from config.redirectUri, so it must be a bindable port.
+      callbackPort = await allocPort()
+    })
     afterEach(() => idp.stop())
 
+    function cfg(overrides: Partial<OAuthConfig> = {}): OAuthConfig {
+      return makeConfig({
+        tokenUrl: idp.tokenUrl,
+        authUrl: idp.authUrl,
+        redirectUri: `http://localhost:${callbackPort}/callback`,
+        ...overrides,
+      })
+    }
+
     it('completes the full authorization code flow and returns a token', async () => {
-      const token = await authorizeAuthCode(
-        makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }),
-      )
+      const token = await authorizeAuthCode(cfg())
 
       expect(token.accessToken).toBe('test_access_token')
       expect(token.tokenType).toBe('Bearer')
@@ -188,7 +213,7 @@ describe('OAuth integration', () => {
     })
 
     it('sends the authorization code and PKCE verifier to the token endpoint', async () => {
-      await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }))
+      await authorizeAuthCode(cfg())
 
       const params = new URLSearchParams(idp.requests()[0])
       expect(params.get('grant_type')).toBe('authorization_code')
@@ -199,24 +224,22 @@ describe('OAuth integration', () => {
       expect(params.get('code_verifier')).toBeTruthy()
     })
 
-    it('uses a dynamic localhost redirect_uri instead of the hard-coded port', async () => {
-      await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }))
+    it('uses the configured redirectUri verbatim in both the auth request and token exchange', async () => {
+      await authorizeAuthCode(cfg())
 
       const params = new URLSearchParams(idp.requests()[0])
-      // The port should be dynamic (not hard-coded 9876)
-      expect(params.get('redirect_uri')).toMatch(/^http:\/\/localhost:\d+\/callback$/)
-      expect(params.get('redirect_uri')).not.toBe('http://localhost:9876/callback')
+      expect(params.get('redirect_uri')).toBe(`http://localhost:${callbackPort}/callback`)
     })
 
     it('closes the browser window after the authorization callback is received', async () => {
-      await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }))
+      await authorizeAuthCode(cfg())
 
       const win = vi.mocked(BrowserWindow).mock.results[0].value
       expect(win.close).toHaveBeenCalledOnce()
     })
 
     it('saves the token to the database', async () => {
-      await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }))
+      await authorizeAuthCode(cfg())
 
       expect(vi.mocked(run)).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO tokens'),
@@ -240,9 +263,7 @@ describe('OAuth integration', () => {
         }
       })
 
-      await expect(
-        authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl })),
-      ).rejects.toThrow('Authorization window closed')
+      await expect(authorizeAuthCode(cfg())).rejects.toThrow('Authorization window closed')
     })
   })
 
@@ -250,7 +271,11 @@ describe('OAuth integration', () => {
 
   describe('authorizeInline', () => {
     let idp: FakeIdp
-    beforeEach(async () => { idp = await startFakeIdp() })
+    let callbackPort: number
+    beforeEach(async () => {
+      idp = await startFakeIdp()
+      callbackPort = await allocPort()
+    })
     afterEach(() => idp.stop())
 
     it('uses client credentials grant and returns a token', async () => {
@@ -265,7 +290,12 @@ describe('OAuth integration', () => {
 
     it('uses authorization code grant, completes the flow, and closes the window', async () => {
       const token = await authorizeInline(
-        makeConfig({ grantType: 'authorization_code', tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }),
+        makeConfig({
+          grantType: 'authorization_code',
+          tokenUrl: idp.tokenUrl,
+          authUrl: idp.authUrl,
+          redirectUri: `http://localhost:${callbackPort}/callback`,
+        }),
       )
 
       expect(token.accessToken).toBe('test_access_token')

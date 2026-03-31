@@ -68,8 +68,12 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
-  const port = await getFreePort()
-  const redirectUri = `http://localhost:${port}/callback`
+
+  // Use the registered redirectUri verbatim so the provider accepts the request.
+  // Derive the listening port from it; fall back to a free port if none is set.
+  const redirectUri = config.redirectUri
+  const uriPort = new URL(redirectUri).port
+  const port = uriPort ? parseInt(uriPort, 10) : await getFreePort()
 
   const authUrl = new URL(config.authUrl ?? '')
   authUrl.searchParams.set('response_type', 'code')
