@@ -45,7 +45,7 @@ function Checkbox({ checked, indeterminate }: { checked: boolean; indeterminate?
 
 export function ExportPage() {
   const collections = useCollectionsStore((s) => s.collections)
-  const { clearSelectedItem, addToast } = useUIStore()
+  const { addToast } = useUIStore()
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(collections.map((c) => c.id)))
   const [exporting, setExporting] = useState(false)
@@ -97,7 +97,6 @@ export function ExportPage() {
     }
     if (data) {
       addToast(`Exported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
-      clearSelectedItem()
     }
   }
 
@@ -106,7 +105,7 @@ export function ExportPage() {
   const someSelected = selected.size > 0 && !allSelected
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col">
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
@@ -117,7 +116,7 @@ export function ExportPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="px-8 py-6">
         {collections.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <FileJson className="h-8 w-8 text-th-text-muted" />
@@ -183,23 +182,18 @@ export function ExportPage() {
                 </div>
               )
             })}
+
+            {/* Export action — intentionally at the bottom of the scroll area */}
+            <div className="mt-6 border-t border-th-border pt-6 flex items-center gap-3">
+              <Button onClick={handleExport} disabled={selected.size === 0 || exporting} className="gap-2">
+                <Download className="h-4 w-4" />
+                {exporting
+                  ? 'Exporting…'
+                  : `Export ${selected.size} collection${selected.size !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="shrink-0 border-t border-th-border px-8 py-4 flex items-center gap-3">
-        <Button onClick={handleExport} disabled={selected.size === 0 || exporting} className="gap-2">
-          <Download className="h-4 w-4" />
-          {exporting
-            ? 'Exporting…'
-            : `Export ${selected.size} collection${selected.size !== 1 ? 's' : ''}`}
-        </Button>
-        <button
-          onClick={clearSelectedItem}
-          className="text-sm text-th-text-subtle hover:text-th-text-secondary"
-        >
-          Cancel
-        </button>
       </div>
     </div>
   )

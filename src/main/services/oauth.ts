@@ -1,5 +1,4 @@
 import { BrowserWindow } from 'electron'
-import http from 'http'
 import crypto from 'crypto'
 import axios from 'axios'
 import { queryOne, run } from '../database'
@@ -27,6 +26,37 @@ export interface Token {
   createdAt: number
 }
 
+/**
+ * Waits for the OAuth provider to redirect the BrowserWindow back to the
+ * registered redirect URI, intercepting the navigation event before Electron
+ * tries to load the URL. This works for any URI scheme (http, https, custom)
+ * without requiring a local HTTP server.
+ */
+async function waitForRedirect(
+  redirectUri: string,
+  win: BrowserWindow,
+): Promise<{ code: string; state: string }> {
+  const { origin: expectedOrigin } = new URL(redirectUri)
+
+  return new Promise((resolve, reject) => {
+    const tryCapture = (event: Electron.Event, url: string) => {
+      try {
+        const { origin, searchParams } = new URL(url)
+        if (origin !== expectedOrigin) return
+        const code = searchParams.get('code')
+        if (!code) return
+        event.preventDefault()
+        resolve({ code, state: searchParams.get('state') ?? '' })
+      } catch { /* ignore unparseable URLs */ }
+    }
+
+    win.webContents.on('will-redirect', tryCapture)
+    win.webContents.on('will-navigate', tryCapture)
+    win.on('closed', () => reject(new Error('Authorization window closed')))
+    setTimeout(() => reject(new Error('OAuth authorization timed out')), 5 * 60 * 1000)
+  })
+}
+
 export function generateCodeVerifier(): string {
   return crypto.randomBytes(96).toString('base64url').slice(0, 128)
 }
@@ -35,72 +65,72 @@ export function generateCodeChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url')
 }
 
+/**
+ * POSTs to a token endpoint and returns the parsed response body.
+ * Re-throws with the provider's error_description included so callers can
+ * surface a meaningful message instead of the generic AxiosError string.
+ */
+async function postTokenRequest(url: string, params: URLSearchParams): Promise<Record<string, unknown>> {
+  try {
+    const response = await axios.post(url, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+    return response.data as Record<string, unknown>
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response) {
+      const body = err.response.data as Record<string, string> | null
+      const detail = body?.error_description ?? body?.error ?? JSON.stringify(body)
+      throw new Error(`Token endpoint returned ${err.response.status}: ${detail}`, { cause: err })
+    }
+    throw err
+  }
+}
+
 export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
+  const redirectUri = config.redirectUri
 
   const authUrl = new URL(config.authUrl ?? '')
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('client_id', config.clientId)
-  authUrl.searchParams.set('redirect_uri', config.redirectUri)
+  authUrl.searchParams.set('redirect_uri', redirectUri)
   authUrl.searchParams.set('scope', config.scopes)
   authUrl.searchParams.set('state', state)
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
 
-  const code = await new Promise<string>((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://localhost:9876')
-      const returnedCode = url.searchParams.get('code')
-      const returnedState = url.searchParams.get('state')
-
-      res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end('<html><body><h2>Authorization complete. You can close this window.</h2></body></html>')
-
-      server.close()
-
-      if (returnedState !== state) {
-        reject(new Error('OAuth state mismatch'))
-        return
-      }
-      if (!returnedCode) {
-        reject(new Error('No authorization code received'))
-        return
-      }
-      resolve(returnedCode)
-    })
-
-    server.listen(9876, () => {
-      const win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        webPreferences: { nodeIntegration: false, contextIsolation: true }
-      })
-      win.loadURL(authUrl.toString())
-      win.on('closed', () => {
-        server.close()
-        reject(new Error('Authorization window closed'))
-      })
-    })
-
-    server.on('error', reject)
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    autoHideMenuBar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
   })
+  // Register listener BEFORE loadURL so the redirect is caught even if
+  // Keycloak completes it instantly (e.g. an existing session).
+  const redirectPromise = waitForRedirect(redirectUri, win)
+  win.loadURL(authUrl.toString())
+
+  let code: string
+  try {
+    const result = await redirectPromise
+    if (result.state !== state) throw new Error('OAuth state mismatch')
+    code = result.code
+  } finally {
+    if (!win.isDestroyed()) win.close()
+  }
 
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: config.redirectUri,
+    redirect_uri: redirectUri,
     client_id: config.clientId,
     code_verifier: verifier
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 export async function clientCredentials(config: OAuthConfig): Promise<Token> {
@@ -111,11 +141,7 @@ export async function clientCredentials(config: OAuthConfig): Promise<Token> {
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 export async function refreshTokenGrant(token: Token, config: OAuthConfig): Promise<Token> {
@@ -126,12 +152,8 @@ export async function refreshTokenGrant(token: Token, config: OAuthConfig): Prom
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
   run('DELETE FROM tokens WHERE oauth_config_id = ?', [config.id])
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token {

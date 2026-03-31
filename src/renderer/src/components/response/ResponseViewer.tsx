@@ -4,6 +4,7 @@ import { ResponseStatus } from '@/components/response/ResponseStatus'
 import { PrettyTab } from '@/components/response/tabs/PrettyTab'
 import { RawTab } from '@/components/response/tabs/RawTab'
 import { PreviewTab } from '@/components/response/tabs/PreviewTab'
+import { ConsoleTab } from '@/components/response/tabs/ConsoleTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
 import { cn } from '@/lib/utils'
@@ -38,6 +39,8 @@ export function ResponseViewer() {
   }
 
   const contentType = response.headers['content-type'] ?? response.headers['Content-Type'] ?? ''
+  const logs = response.logs ?? []
+  const alertCount = logs.filter((e) => e.level === 'warn' || e.level === 'error').length
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
@@ -66,6 +69,19 @@ export function ResponseViewer() {
             <TabsTrigger value="raw">Raw</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
             <TabsTrigger value="headers">Headers</TabsTrigger>
+            <TabsTrigger value="console" className="flex items-center gap-1.5">
+              Console
+              {alertCount > 0 && (
+                <span className={cn(
+                  'rounded-sm px-1 py-0.5 text-[9px] font-bold',
+                  logs.some((e) => e.level === 'error')
+                    ? 'bg-rose-900/50 text-rose-400'
+                    : 'bg-amber-900/50 text-amber-400'
+                )}>
+                  {alertCount}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="pretty" className="flex-1 overflow-hidden">
@@ -97,6 +113,10 @@ export function ResponseViewer() {
                 ))}
               </tbody>
             </table>
+          </TabsContent>
+
+          <TabsContent value="console" className="flex-1 overflow-hidden">
+            <ConsoleTab logs={logs} />
           </TabsContent>
         </Tabs>
       </div>

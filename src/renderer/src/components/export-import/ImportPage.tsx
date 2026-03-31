@@ -115,7 +115,7 @@ export function ImportPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col">
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
@@ -128,7 +128,7 @@ export function ImportPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="px-8 py-6">
         <div className="mb-6">
           <input
             ref={fileInputRef}
@@ -211,25 +211,23 @@ export function ImportPage() {
                 </div>
               </div>
             ))}
+
+            <div className="mt-6 border-t border-th-border pt-6 flex items-center gap-3">
+              <Button onClick={handleImport} disabled={importing} className="gap-2">
+                <Upload className="h-4 w-4" />
+                {importing
+                  ? 'Importing…'
+                  : `Import ${parsedFile.collections.length} collection${parsedFile.collections.length !== 1 ? 's' : ''}`}
+              </Button>
+              <button
+                onClick={clearSelectedItem}
+                className="text-sm text-th-text-subtle hover:text-th-text-secondary"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
-      </div>
-
-      <div className="shrink-0 border-t border-th-border px-8 py-4 flex items-center gap-3">
-        {parsedFile && (
-          <Button onClick={handleImport} disabled={importing} className="gap-2">
-            <Upload className="h-4 w-4" />
-            {importing
-              ? 'Importing…'
-              : `Import ${parsedFile.collections.length} collection${parsedFile.collections.length !== 1 ? 's' : ''}`}
-          </Button>
-        )}
-        <button
-          onClick={clearSelectedItem}
-          className="text-sm text-th-text-subtle hover:text-th-text-secondary"
-        >
-          Cancel
-        </button>
       </div>
     </div>
   )
