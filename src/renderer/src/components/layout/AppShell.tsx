@@ -107,11 +107,11 @@ export function AppShell() {
             <IntegrationEditPage integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'export-page' ? (
-          <div className="no-drag flex flex-1 overflow-hidden">
+          <div className="no-drag flex flex-1 overflow-y-auto">
             <ExportPage />
           </div>
         ) : selectedItem?.type === 'import-page' ? (
-          <div className="no-drag flex flex-1 overflow-hidden">
+          <div className="no-drag flex flex-1 overflow-y-auto">
             <ImportPage />
           </div>
         ) : selectedItem?.type === 'git-source' ? (

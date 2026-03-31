@@ -175,40 +175,42 @@ export function CollectionEditor({ collectionId }: Props) {
           </Section>
         )}
 
+        {/* Export */}
+        <Section title="Export">
+          <p className="mb-3 text-xs text-th-text-faint">Download this collection as a JSON file you can share or back up.</p>
+          <button
+            onClick={async () => {
+              const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
+              if (error) addToast(`Export failed: ${error}`, 'error')
+              else if (data) addToast(`Exported "${name}"`, 'success')
+            }}
+            className="flex items-center gap-1.5 rounded-sm border border-th-border bg-th-surface px-3 py-1.5 text-sm text-th-text-secondary hover:bg-th-surface-raised hover:text-th-text-primary transition-colors focus:outline-hidden"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export collection
+          </button>
+        </Section>
+
       </div>
 
-      {/* Bottom action bar — export always visible; save/discard appear when dirty */}
-      <div className="sticky bottom-0 flex items-center gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
-        <button
-          onClick={async () => {
-            const { data, error } = await window.api.exportImport.export({ collectionIds: [collectionId] })
-            if (error) addToast(`Export failed: ${error}`, 'error')
-            else if (data) addToast(`Exported "${name}"`, 'success')
-          }}
-          className="flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm text-th-text-muted hover:bg-th-surface-raised hover:text-th-text-primary transition-colors focus:outline-hidden"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export
-        </button>
-        <div className="flex-1" />
-        {isDirty && (
-          <>
-            <button
-              onClick={discard}
-              className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
-            >
-              Discard
-            </button>
-            <button
-              onClick={save}
-              disabled={saving || !name.trim()}
-              className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </>
-        )}
-      </div>
+      {/* Sticky save bar */}
+      {isDirty && (
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
+          <button
+            onClick={discard}
+            className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
+          >
+            Discard
+          </button>
+          <button
+            onClick={save}
+            disabled={saving || !name.trim()}
+            className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

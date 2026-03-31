@@ -115,7 +115,7 @@ export function ImportPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto">
+    <div className="flex flex-1 flex-col">
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag flex flex-col gap-0.5">
           <div className="flex items-center gap-1.5 text-xs text-th-text-subtle">
