@@ -1,5 +1,4 @@
 import { BrowserWindow } from 'electron'
-import http from 'http'
 import crypto from 'crypto'
 import axios from 'axios'
 import { queryOne, run } from '../database'
@@ -27,32 +26,34 @@ export interface Token {
   createdAt: number
 }
 
-async function getFreePort(): Promise<number> {
-  return new Promise((resolve) => {
-    const srv = http.createServer()
-    srv.listen(0, '127.0.0.1', () => {
-      const addr = srv.address() as { port: number }
-      srv.close(() => resolve(addr.port))
-    })
-  })
-}
+/**
+ * Waits for the OAuth provider to redirect the BrowserWindow back to the
+ * registered redirect URI, intercepting the navigation event before Electron
+ * tries to load the URL. This works for any URI scheme (http, https, custom)
+ * without requiring a local HTTP server.
+ */
+async function waitForRedirect(
+  redirectUri: string,
+  win: BrowserWindow,
+): Promise<{ code: string; state: string }> {
+  const { origin: expectedOrigin } = new URL(redirectUri)
 
-async function waitForCallback(port: number, win: BrowserWindow): Promise<{ code: string; state: string }> {
   return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url ?? '/', `http://localhost:${port}`)
-      const code = url.searchParams.get('code')
-      const state = url.searchParams.get('state')
-      res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end('<html><body><h2>Authorization complete. You can close this window.</h2></body></html>')
-      server.close()
-      if (code) resolve({ code, state: state ?? '' })
-      else reject(new Error('No authorization code in callback'))
-    })
-    server.listen(port, '127.0.0.1')
-    server.on('error', reject)
-    win.on('closed', () => { server.close(); reject(new Error('Authorization window closed')) })
-    setTimeout(() => { server.close(); reject(new Error('OAuth authorization timed out')) }, 5 * 60 * 1000)
+    const tryCapture = (event: Electron.Event, url: string) => {
+      try {
+        const { origin, searchParams } = new URL(url)
+        if (origin !== expectedOrigin) return
+        const code = searchParams.get('code')
+        if (!code) return
+        event.preventDefault()
+        resolve({ code, state: searchParams.get('state') ?? '' })
+      } catch { /* ignore unparseable URLs */ }
+    }
+
+    win.webContents.on('will-redirect', tryCapture)
+    win.webContents.on('will-navigate', tryCapture)
+    win.on('closed', () => reject(new Error('Authorization window closed')))
+    setTimeout(() => reject(new Error('OAuth authorization timed out')), 5 * 60 * 1000)
   })
 }
 
@@ -68,12 +69,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
-
-  // Use the registered redirectUri verbatim so the provider accepts the request.
-  // Derive the listening port from it; fall back to a free port if none is set.
   const redirectUri = config.redirectUri
-  const uriPort = new URL(redirectUri).port
-  const port = uriPort ? parseInt(uriPort, 10) : await getFreePort()
 
   const authUrl = new URL(config.authUrl ?? '')
   authUrl.searchParams.set('response_type', 'code')
@@ -94,7 +90,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
 
   let code: string
   try {
-    const result = await waitForCallback(port, win)
+    const result = await waitForRedirect(redirectUri, win)
     if (result.state !== state) throw new Error('OAuth state mismatch')
     code = result.code
   } finally {

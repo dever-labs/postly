@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import http from 'http'
 import type { AddressInfo } from 'net'
+import http from 'http'
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -11,15 +11,16 @@ vi.mock('../../database', () => ({
 
 /**
  * Fake BrowserWindow: when loadURL is called, parse the redirect_uri and state
- * from the auth URL, then simulate the OAuth provider redirecting back to the
- * callback server after a short delay.
+ * from the auth URL, then simulate the OAuth provider redirecting back by firing
+ * a `will-redirect` event on webContents after a short delay.
  *
  * Must use a regular `function` (not an arrow function) so the mock can be
  * called with `new` as a constructor.
  */
 vi.mock('electron', () => {
   const BrowserWindowMock = vi.fn().mockImplementation(function () {
-    const listeners: Record<string, Array<() => void>> = {}
+    const wcListeners: Record<string, Array<(event: { preventDefault: () => void }, url: string) => void>> = {}
+    const winListeners: Record<string, Array<() => void>> = {}
     return {
       loadURL: vi.fn().mockImplementation((url: string) => {
         const authUrl = new URL(url)
@@ -29,14 +30,21 @@ vi.mock('electron', () => {
         const callbackUrl = new URL(redirectUri)
         callbackUrl.searchParams.set('code', 'fake_auth_code')
         if (state) callbackUrl.searchParams.set('state', state)
-        // Delay so the waitForCallback HTTP server has time to start listening
+        // Simulate the OAuth provider's 302 redirect back to the redirect_uri
         setTimeout(() => {
-          const req = http.get(callbackUrl.toString(), (res) => res.resume())
-          req.on('error', () => {})
+          const event = { preventDefault: vi.fn() }
+          wcListeners['will-redirect']?.forEach((fn) => fn(event, callbackUrl.toString()))
         }, 50)
       }),
+      webContents: {
+        on: vi.fn().mockImplementation(
+          (event: string, handler: (evt: { preventDefault: () => void }, url: string) => void) => {
+            ;(wcListeners[event] ??= []).push(handler)
+          },
+        ),
+      },
       on: vi.fn().mockImplementation((event: string, handler: () => void) => {
-        ;(listeners[event] ??= []).push(handler)
+        ;(winListeners[event] ??= []).push(handler)
       }),
       isDestroyed: vi.fn().mockReturnValue(false),
       close: vi.fn(),
@@ -99,17 +107,6 @@ function startFakeIdp(tokenResponse?: Record<string, unknown>): Promise<FakeIdp>
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Allocates a free OS port without holding it open. */
-function allocPort(): Promise<number> {
-  return new Promise((resolve) => {
-    const srv = http.createServer()
-    srv.listen(0, '127.0.0.1', () => {
-      const { port } = srv.address() as AddressInfo
-      srv.close(() => resolve(port))
-    })
-  })
-}
 
 function makeConfig(overrides: Partial<OAuthConfig> = {}): OAuthConfig {
   return {
@@ -185,23 +182,11 @@ describe('OAuth integration', () => {
 
   describe('authorizeAuthCode', () => {
     let idp: FakeIdp
-    let callbackPort: number
-
-    beforeEach(async () => {
-      idp = await startFakeIdp()
-      // Allocate a real free port; authorizeAuthCode will listen on the port
-      // extracted from config.redirectUri, so it must be a bindable port.
-      callbackPort = await allocPort()
-    })
+    beforeEach(async () => { idp = await startFakeIdp() })
     afterEach(() => idp.stop())
 
     function cfg(overrides: Partial<OAuthConfig> = {}): OAuthConfig {
-      return makeConfig({
-        tokenUrl: idp.tokenUrl,
-        authUrl: idp.authUrl,
-        redirectUri: `http://localhost:${callbackPort}/callback`,
-        ...overrides,
-      })
+      return makeConfig({ tokenUrl: idp.tokenUrl, authUrl: idp.authUrl, ...overrides })
     }
 
     it('completes the full authorization code flow and returns a token', async () => {
@@ -228,7 +213,7 @@ describe('OAuth integration', () => {
       await authorizeAuthCode(cfg())
 
       const params = new URLSearchParams(idp.requests()[0])
-      expect(params.get('redirect_uri')).toBe(`http://localhost:${callbackPort}/callback`)
+      expect(params.get('redirect_uri')).toBe('http://localhost:9876/callback')
     })
 
     it('closes the browser window after the authorization callback is received', async () => {
@@ -249,14 +234,15 @@ describe('OAuth integration', () => {
 
     it('rejects and closes the window when the user closes it early', async () => {
       vi.mocked(BrowserWindow).mockImplementationOnce(function () {
-        const listeners: Record<string, Array<() => void>> = {}
+        const winListeners: Record<string, Array<() => void>> = {}
         return {
           loadURL: vi.fn().mockImplementation(() => {
             // Simulate the user closing the window instead of completing auth
-            setTimeout(() => listeners['closed']?.forEach((fn) => fn()), 20)
+            setTimeout(() => winListeners['closed']?.forEach((fn) => fn()), 20)
           }),
+          webContents: { on: vi.fn() },
           on: vi.fn().mockImplementation((event: string, handler: () => void) => {
-            ;(listeners[event] ??= []).push(handler)
+            ;(winListeners[event] ??= []).push(handler)
           }),
           isDestroyed: vi.fn().mockReturnValue(true),
           close: vi.fn(),
@@ -271,11 +257,7 @@ describe('OAuth integration', () => {
 
   describe('authorizeInline', () => {
     let idp: FakeIdp
-    let callbackPort: number
-    beforeEach(async () => {
-      idp = await startFakeIdp()
-      callbackPort = await allocPort()
-    })
+    beforeEach(async () => { idp = await startFakeIdp() })
     afterEach(() => idp.stop())
 
     it('uses client credentials grant and returns a token', async () => {
@@ -290,12 +272,7 @@ describe('OAuth integration', () => {
 
     it('uses authorization code grant, completes the flow, and closes the window', async () => {
       const token = await authorizeInline(
-        makeConfig({
-          grantType: 'authorization_code',
-          tokenUrl: idp.tokenUrl,
-          authUrl: idp.authUrl,
-          redirectUri: `http://localhost:${callbackPort}/callback`,
-        }),
+        makeConfig({ grantType: 'authorization_code', tokenUrl: idp.tokenUrl, authUrl: idp.authUrl }),
       )
 
       expect(token.accessToken).toBe('test_access_token')
