@@ -96,7 +96,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('client_id', config.clientId)
   authUrl.searchParams.set('redirect_uri', redirectUri)
-  authUrl.searchParams.set('scope', config.scopes || 'openid')
+  authUrl.searchParams.set('scope', config.scopes)
   authUrl.searchParams.set('state', state)
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
@@ -137,7 +137,7 @@ export async function clientCredentials(config: OAuthConfig): Promise<Token> {
   const params = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: config.clientId,
-    scope: config.scopes || 'openid'
+    scope: config.scopes
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 

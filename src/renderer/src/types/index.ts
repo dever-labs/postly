@@ -118,6 +118,12 @@ export interface OAuthConfig {
   redirectUri: string
 }
 
+export interface LogEntry {
+  level: 'info' | 'warn' | 'error'
+  message: string
+  detail?: string
+}
+
 export interface Token {
   id: string
   oauthConfigId: string
@@ -148,6 +154,7 @@ export interface HttpResponse {
   body: string
   duration: number
   size: number
+  logs?: LogEntry[]
 }
 
 export interface BackstageSettings {

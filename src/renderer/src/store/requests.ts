@@ -90,7 +90,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     httpRequest.params = kvpToRecord(editingRequest.params)
 
     try {
-      const { data, error } = await window.api.http.execute(httpRequest)
+      const { data, error, logs } = await window.api.http.execute(httpRequest) as { data?: HttpResponse; error?: string; logs?: HttpResponse['logs'] }
       if (error) {
         const errorResponse: HttpResponse = {
           status: 0,
@@ -99,6 +99,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
           body: String(error),
           duration: 0,
           size: 0,
+          logs,
         }
         set({ response: errorResponse, isLoading: false })
         return

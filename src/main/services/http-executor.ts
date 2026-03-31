@@ -1,5 +1,14 @@
 import axios, { AxiosRequestConfig } from 'axios'
 
+type LogLevel = 'info' | 'warn' | 'error'
+export interface LogEntry { level: LogLevel; message: string; detail?: string }
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export interface HttpRequest {
   method: string
   url: string
@@ -23,9 +32,15 @@ export interface HttpResponse {
 
 export async function executeRequest(
   req: HttpRequest,
-  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number } = {}
+  options: {
+    sslVerification?: boolean
+    followRedirects?: boolean
+    timeout?: number
+    onLog?: (entry: LogEntry) => void
+  } = {}
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000 } = options
+  const { sslVerification = true, followRedirects = true, timeout = 30000, onLog } = options
+  const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 
   const headers: Record<string, string> = { ...req.headers }
@@ -44,6 +59,7 @@ export async function executeRequest(
 
   // NTLM — handled separately, bypasses axios
   if (req.authType === 'ntlm') {
+    log('info', `→ ${req.method.toUpperCase()} ${req.url} (NTLM)`)
     return await executeNtlmRequest(req, headers, options)
   }
 
@@ -147,6 +163,8 @@ export async function executeRequest(
     httpsAgent: sslVerification ? undefined : new (require('https').Agent)({ rejectUnauthorized: false })
   }
 
+  log('info', `→ ${req.method.toUpperCase()} ${req.url}`)
+
   try {
     const response = await axios(config)
     const duration = Date.now() - start
@@ -160,17 +178,23 @@ export async function executeRequest(
       responseHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
     }
 
+    const size = Buffer.byteLength(body, 'utf8')
+    const statusLine = `← ${response.status} ${response.statusText} (${duration}ms, ${formatBytes(size)})`
+    if (response.status >= 400) log('warn', statusLine)
+    else log('info', statusLine)
+
     return {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders,
       body,
       duration,
-      size: Buffer.byteLength(body, 'utf8')
+      size
     }
   } catch (err: unknown) {
     const duration = Date.now() - start
     const message = err instanceof Error ? err.message : String(err)
+    log('error', `Request failed: ${message}`)
     return {
       status: 0,
       statusText: message,
@@ -185,9 +209,10 @@ export async function executeRequest(
 async function executeNtlmRequest(
   req: HttpRequest,
   headers: Record<string, string>,
-  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number }
+  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number; onLog?: (entry: LogEntry) => void }
 ): Promise<HttpResponse> {
   const start = Date.now()
+  const log = (level: LogLevel, message: string) => options.onLog?.({ level, message })
   const httpntlm = require('httpntlm') as Record<string, (opts: Record<string, unknown>, cb: (err: Error | null, res: { statusCode: number; headers: Record<string, string>; body: string }) => void) => void>
   const method = req.method.toLowerCase()
   const fn = httpntlm[method] ?? httpntlm['get']
@@ -208,17 +233,22 @@ async function executeNtlmRequest(
       const duration = Date.now() - start
       if (err) {
         const msg = err.message
+        log('error', `NTLM request failed: ${msg}`)
         resolve({ status: 0, statusText: msg, headers: {}, body: msg, duration, size: Buffer.byteLength(msg, 'utf8') })
         return
       }
       const body = res.body ?? ''
+      const size = Buffer.byteLength(body, 'utf8')
+      const statusLine = `← ${res.statusCode} (${duration}ms, ${formatBytes(size)})`
+      if (res.statusCode >= 400) log('warn', statusLine)
+      else log('info', statusLine)
       resolve({
         status: res.statusCode,
         statusText: '',
         headers: res.headers ?? {},
         body,
         duration,
-        size: Buffer.byteLength(body, 'utf8')
+        size
       })
     })
   })

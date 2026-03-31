@@ -1,10 +1,18 @@
 import { ipcMain } from 'electron'
 import { queryAll, queryOne } from '../database'
-import { executeRequest, HttpRequest } from '../services/http-executor'
+import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
+
+type LogLevel = 'info' | 'warn' | 'error'
 
 function interpolateEnvVars(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => vars[key.trim()] ?? `{{${key}}}`)
+}
+
+function countInterpolations(text: string, vars: Record<string, string>): number {
+  let n = 0
+  text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => { if (vars[key.trim()] !== undefined) n++; return '' })
+  return n
 }
 
 function safeParseJSON<T>(value: unknown, fallback: T): T {
@@ -15,20 +23,44 @@ function safeParseJSON<T>(value: unknown, fallback: T): T {
   return fallback
 }
 
+function formatExpiry(expiresAt: number | undefined): string {
+  if (!expiresAt) return 'no expiry info'
+  const diffMs = expiresAt - Date.now()
+  if (diffMs <= 0) return 'expired'
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 60) return `expires in ${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `expires in ${hours}h ${mins % 60}m`
+  return `expires in ${Math.floor(hours / 24)}d`
+}
+
 export function registerHttpHandlers(): void {
   ipcMain.handle('postly:http:execute', async (_, req: HttpRequest) => {
+    const logs: LogEntry[] = []
+    const log = (level: LogLevel, message: string, detail?: string) => logs.push({ level, message, detail })
+
     try {
-      const activeEnv = queryOne<{ id: string }>('SELECT id FROM environments WHERE is_active = 1 LIMIT 1')
+      // ── Environment ──────────────────────────────────────────────────────────
+      const activeEnv = queryOne<{ id: string; name: string }>(
+        'SELECT id, name FROM environments WHERE is_active = 1 LIMIT 1'
+      )
       const envVars: Record<string, string> = {}
       if (activeEnv) {
-        for (const v of queryAll<{ key: string; value: string }>('SELECT key, value FROM env_vars WHERE env_id = ?', [activeEnv.id])) {
+        for (const v of queryAll<{ key: string; value: string }>(
+          'SELECT key, value FROM env_vars WHERE env_id = ?', [activeEnv.id]
+        )) {
           envVars[v.key] = v.value
         }
+        const count = Object.keys(envVars).length
+        log('info', `Environment: "${activeEnv.name}" (${count} variable${count !== 1 ? 's' : ''})`)
+      } else {
+        log('info', 'No active environment')
       }
 
-      // Resolve auth inheritance — treat 'inherit' and 'none' at request level as "walk up"
+      // ── Auth resolution ───────────────────────────────────────────────────────
       let resolvedAuthType = req.authType
       let resolvedAuthConfig = req.authConfig
+      let authSource = 'request'
 
       const shouldInherit = (t: string) => t === 'inherit' || !t
 
@@ -37,6 +69,7 @@ export function registerHttpHandlers(): void {
         if (group?.auth_type && !shouldInherit(group.auth_type as string)) {
           resolvedAuthType = group.auth_type as string
           resolvedAuthConfig = safeParseJSON(group.auth_config as string, {})
+          authSource = `group "${group.name as string}"`
         } else {
           const collection = group?.collection_id
             ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
@@ -44,23 +77,29 @@ export function registerHttpHandlers(): void {
           if (collection?.auth_type && !shouldInherit(collection.auth_type as string)) {
             resolvedAuthType = collection.auth_type as string
             resolvedAuthConfig = safeParseJSON(collection.auth_config as string, {})
+            authSource = `collection "${collection.name as string}"`
           } else if (collection?.integration_id) {
             const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [collection.integration_id])
             if (integration?.token) {
               resolvedAuthType = 'bearer'
               resolvedAuthConfig = { token: integration.token as string }
+              authSource = `integration "${integration.name as string}"`
             }
           }
         }
       }
 
-      // Fallback: if still inherit/none after walking, send unauthenticated
       if (shouldInherit(resolvedAuthType)) {
         resolvedAuthType = 'none'
         resolvedAuthConfig = {}
+        log('info', 'Auth: none')
+      } else if (authSource === 'request') {
+        log('info', `Auth: ${resolvedAuthType}`)
+      } else {
+        log('info', `Auth: ${resolvedAuthType} (inherited from ${authSource})`)
       }
 
-      // OAuth 2.0 — resolve token automatically from inline config
+      // ── OAuth 2.0 token resolution ────────────────────────────────────────────
       if (resolvedAuthType === 'oauth2') {
         const cfg = {
           id: '',
@@ -74,19 +113,35 @@ export function registerHttpHandlers(): void {
           redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
         }
         if (!cfg.clientId || !cfg.tokenUrl) {
-          return { error: 'OAuth 2.0: clientId and tokenUrl are required.' }
+          log('error', 'OAuth 2.0: clientId and tokenUrl are required')
+          return { error: 'OAuth 2.0: clientId and tokenUrl are required.', logs }
         }
         let token = await getValidTokenForConfig(cfg)
-        if (!token) {
-          try { token = await authorizeInline(cfg) }
-          catch (e) { return { error: `OAuth authorization failed: ${String(e)}` } }
+        if (token) {
+          log('info', `OAuth: using cached token (${formatExpiry(token.expiresAt ?? undefined)})`)
+        } else {
+          log('info', 'OAuth: no cached token — starting authorization flow')
+          try { token = await authorizeInline(cfg) } catch (e) {
+            log('error', `OAuth authorization failed: ${String(e)}`)
+            return { error: `OAuth authorization failed: ${String(e)}`, logs }
+          }
+          if (token) log('info', `OAuth: new token obtained (${formatExpiry(token.expiresAt ?? undefined)})`)
         }
         if (token) {
           resolvedAuthType = 'bearer'
           resolvedAuthConfig = { token: token.accessToken }
         } else {
-          return { error: 'OAuth: no valid token. Please authorize in the Auth tab.' }
+          log('error', 'OAuth: no valid token — please authorize in the Auth tab')
+          return { error: 'OAuth: no valid token. Please authorize in the Auth tab.', logs }
         }
+      }
+
+      // ── Environment variable interpolation ───────────────────────────────────
+      const urlCount = countInterpolations(req.url, envVars)
+      const headerCount = Object.values(req.headers).reduce((s, v) => s + countInterpolations(v, envVars), 0)
+      const totalCount = urlCount + headerCount
+      if (totalCount > 0) {
+        log('info', `Interpolated ${totalCount} environment variable${totalCount !== 1 ? 's' : ''}`)
       }
 
       const interpolatedReq: HttpRequest = {
@@ -99,6 +154,7 @@ export function registerHttpHandlers(): void {
         )
       }
 
+      // ── Settings ─────────────────────────────────────────────────────────────
       const settingsRow = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
       let sslVerification = true, followRedirects = true, timeout = 30000
       if (settingsRow) {
@@ -110,29 +166,40 @@ export function registerHttpHandlers(): void {
         } catch { /* use defaults */ }
       }
 
-      // Resolve SSL verification inheritance — walk request → group → collection, then fall back to global setting
+      // ── SSL resolution ────────────────────────────────────────────────────────
       const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
       let resolvedSsl: string | undefined = req.sslVerification
+      let sslSource = 'global setting'
       if (shouldInheritSsl(resolvedSsl) && req.groupId) {
         const group = queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
         if (group?.ssl_verification && !shouldInheritSsl(group.ssl_verification as string)) {
           resolvedSsl = group.ssl_verification as string
+          sslSource = `group "${group.name as string}"`
         } else {
           const collection = group?.collection_id
             ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
             : null
           if (collection?.ssl_verification && !shouldInheritSsl(collection.ssl_verification as string)) {
             resolvedSsl = collection.ssl_verification as string
+            sslSource = `collection "${collection.name as string}"`
           }
         }
       }
-      // If resolved to an explicit value, override the global setting
       if (resolvedSsl === 'enabled') sslVerification = true
-      else if (resolvedSsl === 'disabled') sslVerification = false
+      else if (resolvedSsl === 'disabled') { sslVerification = false; sslSource = resolvedSsl === req.sslVerification ? 'request' : sslSource }
 
-      return { data: await executeRequest(interpolatedReq, { sslVerification, followRedirects, timeout }) }
+      if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
+      if (!followRedirects) log('info', 'Following redirects: disabled')
+
+      // ── Execute ───────────────────────────────────────────────────────────────
+      const response = await executeRequest(interpolatedReq, {
+        sslVerification, followRedirects, timeout,
+        onLog: (entry) => log(entry.level, entry.message, entry.detail)
+      })
+      return { data: { ...response, logs } }
     } catch (err) {
-      return { error: String(err) }
+      log('error', `Unexpected error: ${String(err)}`)
+      return { error: String(err), logs }
     }
   })
 }
