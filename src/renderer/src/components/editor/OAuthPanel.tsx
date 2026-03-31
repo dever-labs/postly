@@ -49,9 +49,9 @@ function TokenField({ label, value, masked }: { label: string; value: string; ma
   const display = masked && !visible ? '••••••••••••••••••••••••' : value
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] opacity-60">{label}</span>
+      <span className="text-xs opacity-60">{label}</span>
       <div className="flex items-center gap-1.5">
-        <code className="flex-1 select-all truncate font-mono text-[10px] opacity-90">{display}</code>
+        <code className="flex-1 select-all truncate font-mono text-xs opacity-90">{display}</code>
         {masked && (
           <button
             type="button"
@@ -186,7 +186,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
             )}
           </div>
           {token.scope && (
-            <div className="text-[10px] text-th-text-subtle">Scopes: {token.scope}</div>
+            <div className="text-xs text-th-text-subtle">Scopes: {token.scope}</div>
           )}
           <TokenField label="Access Token" value={token.accessToken} masked />
           {token.refreshToken && (
