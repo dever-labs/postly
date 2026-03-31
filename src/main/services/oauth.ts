@@ -27,6 +27,35 @@ export interface Token {
   createdAt: number
 }
 
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve) => {
+    const srv = http.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as { port: number }
+      srv.close(() => resolve(addr.port))
+    })
+  })
+}
+
+async function waitForCallback(port: number, win: BrowserWindow): Promise<{ code: string; state: string }> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? '/', `http://localhost:${port}`)
+      const code = url.searchParams.get('code')
+      const state = url.searchParams.get('state')
+      res.writeHead(200, { 'Content-Type': 'text/html' })
+      res.end('<html><body><h2>Authorization complete. You can close this window.</h2></body></html>')
+      server.close()
+      if (code) resolve({ code, state: state ?? '' })
+      else reject(new Error('No authorization code in callback'))
+    })
+    server.listen(port, '127.0.0.1')
+    server.on('error', reject)
+    win.on('closed', () => { server.close(); reject(new Error('Authorization window closed')) })
+    setTimeout(() => { server.close(); reject(new Error('OAuth authorization timed out')) }, 5 * 60 * 1000)
+  })
+}
+
 export function generateCodeVerifier(): string {
   return crypto.randomBytes(96).toString('base64url').slice(0, 128)
 }
@@ -39,58 +68,39 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
+  const port = await getFreePort()
+  const redirectUri = `http://localhost:${port}/callback`
 
   const authUrl = new URL(config.authUrl ?? '')
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('client_id', config.clientId)
-  authUrl.searchParams.set('redirect_uri', config.redirectUri)
+  authUrl.searchParams.set('redirect_uri', redirectUri)
   authUrl.searchParams.set('scope', config.scopes)
   authUrl.searchParams.set('state', state)
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
 
-  const code = await new Promise<string>((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://localhost:9876')
-      const returnedCode = url.searchParams.get('code')
-      const returnedState = url.searchParams.get('state')
-
-      res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end('<html><body><h2>Authorization complete. You can close this window.</h2></body></html>')
-
-      server.close()
-
-      if (returnedState !== state) {
-        reject(new Error('OAuth state mismatch'))
-        return
-      }
-      if (!returnedCode) {
-        reject(new Error('No authorization code received'))
-        return
-      }
-      resolve(returnedCode)
-    })
-
-    server.listen(9876, () => {
-      const win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        webPreferences: { nodeIntegration: false, contextIsolation: true }
-      })
-      win.loadURL(authUrl.toString())
-      win.on('closed', () => {
-        server.close()
-        reject(new Error('Authorization window closed'))
-      })
-    })
-
-    server.on('error', reject)
+  const win = new BrowserWindow({
+    width: 800,
+    height: 600,
+    autoHideMenuBar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
   })
+  win.loadURL(authUrl.toString())
+
+  let code: string
+  try {
+    const result = await waitForCallback(port, win)
+    if (result.state !== state) throw new Error('OAuth state mismatch')
+    code = result.code
+  } finally {
+    if (!win.isDestroyed()) win.close()
+  }
 
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: config.redirectUri,
+    redirect_uri: redirectUri,
     client_id: config.clientId,
     code_verifier: verifier
   })
