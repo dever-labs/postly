@@ -45,7 +45,7 @@ function Checkbox({ checked, indeterminate }: { checked: boolean; indeterminate?
 
 export function ExportPage() {
   const collections = useCollectionsStore((s) => s.collections)
-  const { clearSelectedItem, addToast } = useUIStore()
+  const { addToast } = useUIStore()
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set(collections.map((c) => c.id)))
   const [exporting, setExporting] = useState(false)
@@ -97,7 +97,6 @@ export function ExportPage() {
     }
     if (data) {
       addToast(`Exported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
-      clearSelectedItem()
     }
   }
 
@@ -192,12 +191,6 @@ export function ExportPage() {
                   ? 'Exporting…'
                   : `Export ${selected.size} collection${selected.size !== 1 ? 's' : ''}`}
               </Button>
-              <button
-                onClick={clearSelectedItem}
-                className="text-sm text-th-text-subtle hover:text-th-text-secondary"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}
