@@ -65,6 +65,27 @@ export function generateCodeChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url')
 }
 
+/**
+ * POSTs to a token endpoint and returns the parsed response body.
+ * Re-throws with the provider's error_description included so callers can
+ * surface a meaningful message instead of the generic AxiosError string.
+ */
+async function postTokenRequest(url: string, params: URLSearchParams): Promise<Record<string, unknown>> {
+  try {
+    const response = await axios.post(url, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+    return response.data as Record<string, unknown>
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response) {
+      const body = err.response.data as Record<string, string> | null
+      const detail = body?.error_description ?? body?.error ?? JSON.stringify(body)
+      throw new Error(`Token endpoint returned ${err.response.status}: ${detail}`, { cause: err })
+    }
+    throw err
+  }
+}
+
 export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
@@ -109,11 +130,7 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 export async function clientCredentials(config: OAuthConfig): Promise<Token> {
@@ -124,11 +141,7 @@ export async function clientCredentials(config: OAuthConfig): Promise<Token> {
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 export async function refreshTokenGrant(token: Token, config: OAuthConfig): Promise<Token> {
@@ -139,12 +152,8 @@ export async function refreshTokenGrant(token: Token, config: OAuthConfig): Prom
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  const response = await axios.post(config.tokenUrl, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
-
   run('DELETE FROM tokens WHERE oauth_config_id = ?', [config.id])
-  return saveToken(config.id, response.data)
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
 }
 
 function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token {
