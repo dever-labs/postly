@@ -78,7 +78,8 @@ postly/
 | `npm run dist:win` | Package for Windows (all arches) |
 | `npm run dist:mac` | Package for macOS (x64 + arm64) |
 | `npm run dist:linux` | Package for Linux (x64 + arm64) |
-| `npm test` | Run tests with Vitest |
+| `npm test` | Run unit tests with Vitest |
+| `npm run test:e2e` | Run Playwright E2E tests (requires `npm run build` first) |
 | `npm run lint` | Lint TypeScript source |
 
 ---

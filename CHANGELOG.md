@@ -4,6 +4,29 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-03-31
+
+### Added
+
+- **OAuth 2.0 Authorization Code flow** — full end-to-end PKCE flow using Electron window interception (`will-redirect`); window opens, captures the auth code, exchanges it for tokens, and closes automatically. No localhost HTTP server required.
+- **OAuth token card** — active/expired status badge, formatted expiry date, granted scopes, masked access and refresh tokens with reveal and one-click copy.
+- **Console tab** — every HTTP response now includes a Console tab with structured log entries (INFO / WARN / ERROR) showing environment resolution, auth source, OAuth token state, SSL settings, and request/response summary.
+- **OAuth error messages** — token endpoint errors (e.g. invalid client, bad scopes) now surface the human-readable `error_description` from the provider instead of a raw Axios error.
+- **Scopes validation** — OAuth panels require the scopes field to be filled in; an inline error is shown instead of silently defaulting.
+- **Integration tests** — OAuth service covered by 17 tests against a fake IDP; HTTP IPC handler covered by 25 unit tests; Playwright E2E tests for the request editor.
+
+### Changed
+
+- **Collection page — Export** moved from a sticky footer button into a proper scrollable section, consistent with the rest of the editor.
+- **OAuth token font size** increased for readability.
+- **Token expiry date** formatted as `1 Apr 2026, 00:30` instead of a locale-dependent string.
+
+### Removed
+
+- **Husky git hooks** — removed broken pre-commit hook setup.
+
+---
+
 ## [0.1.0] — 2026-03-29
 
 ### Added

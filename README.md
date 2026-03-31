@@ -50,6 +50,7 @@ Collections from each source appear as separate groups in the sidebar. Changes c
 - Secret variable masking
 
 ### Quality of Life
+- **Console tab** on every response — structured log of auth source, environment resolution, OAuth token state, SSL settings, and request/response summary
 - Per-entity SSL verification (inherit / enabled / disabled)
 - Resizable sidebar and response panel
 - Search and filter across all collections
