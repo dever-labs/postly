@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { executeRequest, HttpRequest } from '../http-executor'
+import { executeRequest, HttpRequest, LogEntry } from '../http-executor'
 
 vi.mock('axios', () => ({
   default: vi.fn()
@@ -271,5 +271,50 @@ describe('executeRequest — response handling', () => {
     mockAxios.mockResolvedValue(makeAxiosResponse())
     const res = await executeRequest(makeReq())
     expect(res.duration).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('executeRequest — onLog callback', () => {
+  it('logs → METHOD URL before the request', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse())
+    const logs: LogEntry[] = []
+    await executeRequest(makeReq({ method: 'POST', url: 'https://api.test.com/items' }), {
+      onLog: (e) => logs.push(e)
+    })
+    expect(logs[0]).toMatchObject({ level: 'info', message: '→ POST https://api.test.com/items' })
+  })
+
+  it('logs ← STATUS statusText after a successful response', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse({ status: 201, statusText: 'Created', data: 'ok' }))
+    const logs: LogEntry[] = []
+    await executeRequest(makeReq(), { onLog: (e) => logs.push(e) })
+    const responseLog = logs.find((l) => l.message.startsWith('←'))
+    expect(responseLog).toBeDefined()
+    expect(responseLog?.level).toBe('info')
+    expect(responseLog?.message).toMatch(/← 201 Created/)
+  })
+
+  it('logs ← as WARN level on 4xx/5xx responses', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse({ status: 404, statusText: 'Not Found', data: '' }))
+    const logs: LogEntry[] = []
+    await executeRequest(makeReq(), { onLog: (e) => logs.push(e) })
+    const responseLog = logs.find((l) => l.message.startsWith('←'))
+    expect(responseLog).toBeDefined()
+    expect(responseLog?.level).toBe('warn')
+    expect(responseLog?.message).toContain('404')
+  })
+
+  it('logs ERROR on network failure', async () => {
+    mockAxios.mockRejectedValue(new Error('ECONNREFUSED 127.0.0.1:9999'))
+    const logs: LogEntry[] = []
+    await executeRequest(makeReq(), { onLog: (e) => logs.push(e) })
+    const errorLog = logs.find((l) => l.level === 'error')
+    expect(errorLog).toBeDefined()
+    expect(errorLog?.message).toContain('ECONNREFUSED')
+  })
+
+  it('does not throw when onLog is not provided', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse())
+    await expect(executeRequest(makeReq())).resolves.not.toThrow()
   })
 })
