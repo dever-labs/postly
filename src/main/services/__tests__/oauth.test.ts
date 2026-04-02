@@ -484,7 +484,7 @@ describe('OAuth integration', () => {
 
     // Generate a self-signed cert once for the entire suite — it's slow (~200ms).
     beforeAll(async () => {
-      pems = await generateCert(null, { days: 1 })
+      pems = await generateCert()
     })
 
     describe('clientCredentials against a self-signed HTTPS endpoint', () => {
