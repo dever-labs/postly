@@ -57,6 +57,16 @@ export function registerHttpHandlers(): void {
         log('info', 'No active environment')
       }
 
+      // ── Eager group/collection fetch ─────────────────────────────────────────
+      // Fetch once when a groupId is present; reused for both auth and SSL
+      // resolution below to avoid redundant DB round-trips.
+      const groupRow = req.groupId
+        ? queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
+        : null
+      const collectionRow = groupRow?.collection_id
+        ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [groupRow.collection_id])
+        : null
+
       // ── Auth resolution ───────────────────────────────────────────────────────
       let resolvedAuthType = req.authType
       let resolvedAuthConfig = req.authConfig
@@ -64,22 +74,18 @@ export function registerHttpHandlers(): void {
 
       const shouldInherit = (t: string) => t === 'inherit' || !t
 
-      if (shouldInherit(resolvedAuthType) && req.groupId) {
-        const group = queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
-        if (group?.auth_type && !shouldInherit(group.auth_type as string)) {
-          resolvedAuthType = group.auth_type as string
-          resolvedAuthConfig = safeParseJSON(group.auth_config as string, {})
-          authSource = `group "${group.name as string}"`
+      if (shouldInherit(resolvedAuthType) && groupRow) {
+        if (groupRow?.auth_type && !shouldInherit(groupRow.auth_type as string)) {
+          resolvedAuthType = groupRow.auth_type as string
+          resolvedAuthConfig = safeParseJSON(groupRow.auth_config as string, {})
+          authSource = `group "${groupRow.name as string}"`
         } else {
-          const collection = group?.collection_id
-            ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
-            : null
-          if (collection?.auth_type && !shouldInherit(collection.auth_type as string)) {
-            resolvedAuthType = collection.auth_type as string
-            resolvedAuthConfig = safeParseJSON(collection.auth_config as string, {})
-            authSource = `collection "${collection.name as string}"`
-          } else if (collection?.integration_id) {
-            const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [collection.integration_id])
+          if (collectionRow?.auth_type && !shouldInherit(collectionRow.auth_type as string)) {
+            resolvedAuthType = collectionRow.auth_type as string
+            resolvedAuthConfig = safeParseJSON(collectionRow.auth_config as string, {})
+            authSource = `collection "${collectionRow.name as string}"`
+          } else if (collectionRow?.integration_id) {
+            const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [collectionRow.integration_id])
             if (integration?.token) {
               resolvedAuthType = 'bearer'
               resolvedAuthConfig = { token: integration.token as string }
@@ -99,6 +105,37 @@ export function registerHttpHandlers(): void {
         log('info', `Auth: ${resolvedAuthType} (inherited from ${authSource})`)
       }
 
+      // ── Settings ─────────────────────────────────────────────────────────────
+      const settingsRow = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
+      let sslVerification = true, followRedirects = true, timeout = 30000
+      if (settingsRow) {
+        try {
+          const parsed = JSON.parse(settingsRow.value) as Record<string, unknown>
+          if (typeof parsed['sslVerification'] === 'boolean') sslVerification = parsed['sslVerification']
+          if (typeof parsed['followRedirects'] === 'boolean') followRedirects = parsed['followRedirects']
+          if (typeof parsed['defaultTimeout'] === 'number') timeout = parsed['defaultTimeout']
+        } catch { /* use defaults */ }
+      }
+
+      // ── SSL resolution ────────────────────────────────────────────────────────
+      const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
+      let resolvedSsl: string | undefined = req.sslVerification
+      let sslSource = 'global setting'
+      if (shouldInheritSsl(resolvedSsl) && groupRow) {
+        if (groupRow?.ssl_verification && !shouldInheritSsl(groupRow.ssl_verification as string)) {
+          resolvedSsl = groupRow.ssl_verification as string
+          sslSource = `group "${groupRow.name as string}"`
+        } else if (collectionRow?.ssl_verification && !shouldInheritSsl(collectionRow.ssl_verification as string)) {
+          resolvedSsl = collectionRow.ssl_verification as string
+          sslSource = `collection "${collectionRow.name as string}"`
+        }
+      }
+      if (resolvedSsl === 'enabled') sslVerification = true
+      else if (resolvedSsl === 'disabled') { sslVerification = false; sslSource = resolvedSsl === req.sslVerification ? 'request' : sslSource }
+
+      if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
+      if (!followRedirects) log('info', 'Following redirects: disabled')
+
       // ── OAuth 2.0 token resolution ────────────────────────────────────────────
       if (resolvedAuthType === 'oauth2') {
         const cfg = {
@@ -116,12 +153,12 @@ export function registerHttpHandlers(): void {
           log('error', 'OAuth 2.0: clientId and tokenUrl are required')
           return { error: 'OAuth 2.0: clientId and tokenUrl are required.', logs }
         }
-        let token = await getValidTokenForConfig(cfg)
+        let token = await getValidTokenForConfig(cfg, sslVerification)
         if (token) {
           log('info', `OAuth: using cached token (${formatExpiry(token.expiresAt ?? undefined)})`)
         } else {
           log('info', 'OAuth: no cached token — starting authorization flow')
-          try { token = await authorizeInline(cfg) } catch (e) {
+          try { token = await authorizeInline(cfg, sslVerification) } catch (e) {
             log('error', `OAuth authorization failed: ${String(e)}`)
             return { error: `OAuth authorization failed: ${String(e)}`, logs }
           }
@@ -153,43 +190,6 @@ export function registerHttpHandlers(): void {
           Object.entries(req.headers).map(([k, v]) => [k, interpolateEnvVars(v, envVars)])
         )
       }
-
-      // ── Settings ─────────────────────────────────────────────────────────────
-      const settingsRow = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
-      let sslVerification = true, followRedirects = true, timeout = 30000
-      if (settingsRow) {
-        try {
-          const parsed = JSON.parse(settingsRow.value) as Record<string, unknown>
-          if (typeof parsed['sslVerification'] === 'boolean') sslVerification = parsed['sslVerification']
-          if (typeof parsed['followRedirects'] === 'boolean') followRedirects = parsed['followRedirects']
-          if (typeof parsed['defaultTimeout'] === 'number') timeout = parsed['defaultTimeout']
-        } catch { /* use defaults */ }
-      }
-
-      // ── SSL resolution ────────────────────────────────────────────────────────
-      const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
-      let resolvedSsl: string | undefined = req.sslVerification
-      let sslSource = 'global setting'
-      if (shouldInheritSsl(resolvedSsl) && req.groupId) {
-        const group = queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
-        if (group?.ssl_verification && !shouldInheritSsl(group.ssl_verification as string)) {
-          resolvedSsl = group.ssl_verification as string
-          sslSource = `group "${group.name as string}"`
-        } else {
-          const collection = group?.collection_id
-            ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [group.collection_id])
-            : null
-          if (collection?.ssl_verification && !shouldInheritSsl(collection.ssl_verification as string)) {
-            resolvedSsl = collection.ssl_verification as string
-            sslSource = `collection "${collection.name as string}"`
-          }
-        }
-      }
-      if (resolvedSsl === 'enabled') sslVerification = true
-      else if (resolvedSsl === 'disabled') { sslVerification = false; sslSource = resolvedSsl === req.sslVerification ? 'request' : sslSource }
-
-      if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
-      if (!followRedirects) log('info', 'Following redirects: disabled')
 
       // ── Execute ───────────────────────────────────────────────────────────────
       const response = await executeRequest(interpolatedReq, {

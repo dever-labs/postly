@@ -1,0 +1,51 @@
+version: 2
+
+# Only trigger PR scans when dependency manifests change.
+triggerPaths:
+  - "package.json"
+  - "package-lock.json"
+
+# Exclude generated/vendored paths from manifest ingestion.
+projectIgnorePaths:
+  - "dist"
+  - "out"
+  - "node_modules"
+
+issueRules:
+  # ── Supply-chain attack signals (block) ──────────────────────────────────────
+  # A new or changed install script in any (transitive) dependency.
+  installScripts: true
+  # Shell injection via bin script override.
+  shellScriptOverride: true
+  # Package name is suspiciously close to a popular package (typosquatting).
+  didYouMean: true
+  # Package has been flagged as malware.
+  malware: true
+  # Package is a known troll/protest package.
+  troll: true
+  # Bin script confusion (masquerades as another package's binary).
+  binScriptConfusion: true
+  # Package is loaded directly from a git URL — no integrity guarantee.
+  gitDependency: true
+  # Package is loaded via an HTTP(S) URL — no integrity guarantee.
+  httpDependency: true
+  # Obfuscated code — a strong indicator of hidden malicious behaviour.
+  obfuscatedCode: true
+  # Package reads environment variables — potential credential exfiltration.
+  envVars: true
+  # Package maintainer changed recently — common vector for hijack attacks.
+  newAuthor: true
+
+  # ── Informational signals (warn) ─────────────────────────────────────────────
+  # Package bundles native (compiled) binaries.
+  hasNativeCode: true
+  # Unresolved dynamic require() calls.
+  unresolvedRequire: true
+  # Package sends telemetry.
+  telemetry: true
+
+githubApp:
+  enabled: true
+  pullRequestAlertsEnabled: true
+  dependencyOverviewEnabled: true
+  projectReportsEnabled: true

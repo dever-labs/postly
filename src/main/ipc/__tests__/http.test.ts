@@ -284,6 +284,27 @@ describe('http IPC handler', () => {
       expect(calledReq.authType).toBe('bearer')
       expect(calledReq.authConfig.token).toBe('my-tok')
     })
+
+    it('forwards sslVerification=true to getValidTokenForConfig by default', async () => {
+      mockGetToken.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      await invoke(baseReq({ authType: 'oauth2', authConfig: oauthCfg }))
+      expect(mockGetToken).toHaveBeenCalledWith(expect.anything(), true)
+    })
+
+    it('forwards sslVerification=false to getValidTokenForConfig when global SSL is disabled', async () => {
+      setupDb({ settings: '{"sslVerification":false}' })
+      mockGetToken.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      await invoke(baseReq({ authType: 'oauth2', authConfig: oauthCfg }))
+      expect(mockGetToken).toHaveBeenCalledWith(expect.anything(), false)
+    })
+
+    it('forwards sslVerification=false to authorizeInline when no cached token and SSL is disabled', async () => {
+      setupDb({ settings: '{"sslVerification":false}' })
+      mockGetToken.mockResolvedValue(null)
+      mockAuthorize.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      await invoke(baseReq({ authType: 'oauth2', authConfig: oauthCfg }))
+      expect(mockAuthorize).toHaveBeenCalledWith(expect.anything(), false)
+    })
   })
 
   // ── SSL resolution ─────────────────────────────────────────────────────────

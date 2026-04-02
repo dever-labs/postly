@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
 import type { AddressInfo } from 'net'
 import http from 'http'
+import https from 'https'
+import { generate as generateCert } from 'selfsigned'
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -8,6 +10,10 @@ vi.mock('../../database', () => ({
   queryOne: vi.fn(),
   run: vi.fn(),
 }))
+
+// Expose session mock references so SSL tests can assert on them.
+const mockSetCertVerifyProc = vi.hoisted(() => vi.fn())
+const mockFromPartition = vi.hoisted(() => vi.fn().mockReturnValue({ setCertificateVerifyProc: mockSetCertVerifyProc }))
 
 /**
  * Fake BrowserWindow: when loadURL is called, parse the redirect_uri and state
@@ -50,7 +56,10 @@ vi.mock('electron', () => {
       close: vi.fn(),
     }
   })
-  return { BrowserWindow: BrowserWindowMock }
+  return {
+    BrowserWindow: BrowserWindowMock,
+    session: { fromPartition: mockFromPartition },
+  }
 })
 
 import { authorizeAuthCode, clientCredentials, authorizeInline, type OAuthConfig } from '../oauth'
@@ -94,6 +103,53 @@ function startFakeIdp(tokenResponse?: Record<string, unknown>, statusCode = 200)
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
       const base = `http://127.0.0.1:${port}`
+      resolve({
+        tokenUrl: `${base}/token`,
+        authUrl: `${base}/authorize`,
+        stop: () => server.close(),
+        requests: () => capturedBodies,
+      })
+    })
+
+    server.on('error', reject)
+  })
+}
+
+/**
+ * Like startFakeIdp but serves over HTTPS with a self-signed certificate.
+ * Used to test SSL verification behaviour.
+ */
+function startFakeIdpHttps(
+  pems: { private: string; cert: string },
+  tokenResponse?: Record<string, unknown>,
+  statusCode = 200,
+): Promise<FakeIdp> {
+  const capturedBodies: string[] = []
+
+  return new Promise((resolve, reject) => {
+    const server = https.createServer({ key: pems.private, cert: pems.cert }, (req, res) => {
+      let body = ''
+      req.on('data', (chunk) => { body += chunk })
+      req.on('end', () => {
+        capturedBodies.push(body)
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+        res.end(
+          JSON.stringify(
+            tokenResponse ?? {
+              access_token: 'test_access_token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+              scope: 'read write',
+              refresh_token: 'test_refresh_token',
+            },
+          ),
+        )
+      })
+    })
+
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo
+      const base = `https://127.0.0.1:${port}`
       resolve({
         tokenUrl: `${base}/token`,
         authUrl: `${base}/authorize`,
@@ -418,6 +474,81 @@ describe('OAuth integration', () => {
       // The inline flow uses a content-hash as the DB key, not the original id
       expect(token.oauthConfigId).not.toBe('test-config')
       expect(token.oauthConfigId).toHaveLength(32)
+    })
+  })
+
+  // ── SSL verification ───────────────────────────────────────────────────────
+
+  describe('SSL verification', () => {
+    let pems: { private: string; cert: string }
+
+    // Generate a self-signed cert once for the entire suite — it's slow (~200ms).
+    beforeAll(async () => {
+      pems = await generateCert()
+    })
+
+    describe('clientCredentials against a self-signed HTTPS endpoint', () => {
+      let idp: FakeIdp
+      beforeEach(async () => { idp = await startFakeIdpHttps(pems) })
+      afterEach(() => idp.stop())
+
+      it('fails with a certificate error when sslVerification is true (default)', async () => {
+        await expect(
+          clientCredentials(makeConfig({ tokenUrl: idp.tokenUrl }))
+        ).rejects.toThrow()
+        // No request should have reached the server
+        expect(idp.requests()).toHaveLength(0)
+      })
+
+      it('succeeds and returns a token when sslVerification is false', async () => {
+        const token = await clientCredentials(makeConfig({ tokenUrl: idp.tokenUrl }), false)
+        expect(token.accessToken).toBe('test_access_token')
+        expect(idp.requests()).toHaveLength(1)
+      })
+    })
+
+    describe('authorizeAuthCode token exchange against a self-signed HTTPS endpoint', () => {
+      let idp: FakeIdp
+      beforeEach(async () => { idp = await startFakeIdpHttps(pems) })
+      afterEach(() => idp.stop())
+
+      it('fails the token exchange when sslVerification is true (default)', async () => {
+        // authUrl uses HTTP so the mocked BrowserWindow works; only the token
+        // exchange POST hits the HTTPS server and must be rejected.
+        await expect(
+          authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl }))
+        ).rejects.toThrow()
+        expect(idp.requests()).toHaveLength(0)
+      })
+
+      it('completes the flow and returns a token when sslVerification is false', async () => {
+        const token = await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl }), false)
+        expect(token.accessToken).toBe('test_access_token')
+        expect(idp.requests()).toHaveLength(1)
+      })
+
+      it('creates a dedicated session partition and bypasses cert verification when sslVerification is false', async () => {
+        await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl }), false)
+
+        expect(mockFromPartition).toHaveBeenCalledWith(expect.stringMatching(/^oauth-ssl-disabled-/))
+        // The cert verify proc must be called with a callback — pass 0 = OK
+        expect(mockSetCertVerifyProc).toHaveBeenCalledWith(expect.any(Function))
+        const proc = mockSetCertVerifyProc.mock.calls[0][0] as (req: unknown, cb: (result: number) => void) => void
+        const callback = vi.fn()
+        proc({}, callback)
+        expect(callback).toHaveBeenCalledWith(0)
+      })
+
+      it('does not touch the session when sslVerification is true (default)', async () => {
+        // Use HTTP idp so the request actually completes cleanly
+        const httpIdp = await startFakeIdp()
+        try {
+          await authorizeAuthCode(makeConfig({ tokenUrl: httpIdp.tokenUrl, authUrl: httpIdp.authUrl }))
+          expect(mockFromPartition).not.toHaveBeenCalled()
+        } finally {
+          httpIdp.stop()
+        }
+      })
     })
   })
 })
