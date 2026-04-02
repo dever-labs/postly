@@ -104,11 +104,11 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
 
-  // Use a dedicated ephemeral partition when SSL verification is disabled so
-  // the auth login page loads against self-signed certificates without
-  // affecting the default session.
-  const partition = sslVerification ? undefined : 'oauth-ssl-disabled'
-  if (!sslVerification && partition) {
+  // When SSL verification is disabled, use a unique in-memory session partition
+  // so the auth login page loads against self-signed certificates.  Each attempt
+  // gets its own partition so sessions/cookies are never shared across flows.
+  const partition = sslVerification ? undefined : `oauth-ssl-disabled-${crypto.randomUUID()}`
+  if (partition) {
     const s = session.fromPartition(partition)
     s.setCertificateVerifyProc((_req, callback) => callback(0))
   }

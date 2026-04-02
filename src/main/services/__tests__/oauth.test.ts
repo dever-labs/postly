@@ -530,7 +530,7 @@ describe('OAuth integration', () => {
       it('creates a dedicated session partition and bypasses cert verification when sslVerification is false', async () => {
         await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl }), false)
 
-        expect(mockFromPartition).toHaveBeenCalledWith('oauth-ssl-disabled')
+        expect(mockFromPartition).toHaveBeenCalledWith(expect.stringMatching(/^oauth-ssl-disabled-/))
         // The cert verify proc must be called with a callback — pass 0 = OK
         expect(mockSetCertVerifyProc).toHaveBeenCalledWith(expect.any(Function))
         const proc = mockSetCertVerifyProc.mock.calls[0][0] as (req: unknown, cb: (result: number) => void) => void
