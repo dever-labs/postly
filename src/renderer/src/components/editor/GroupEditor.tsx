@@ -56,6 +56,22 @@ export function GroupEditor({ groupId }: Props) {
   const [saving, setSaving] = useState(false)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
+  const undoStack = useRef<FormSnapshot[]>([])
+  const lastUndoField = useRef<string | null>(null)
+  const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const pushUndo = (snapshot: FormSnapshot) => {
+    if (undoStack.current.length >= 50) undoStack.current.shift()
+    undoStack.current.push({ ...snapshot, authConfig: { ...snapshot.authConfig } })
+  }
+
+  const clearUndo = () => {
+    undoStack.current = []
+    lastUndoField.current = null
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+  }
+
   const scheduleDraft = (fields: {
     name: string; description: string
     authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
@@ -97,7 +113,10 @@ export function GroupEditor({ groupId }: Props) {
       }
     }
     load()
-    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current)
+      clearUndo()
+    }
   }, [groupId, group])
 
   if (!group) {
@@ -115,6 +134,7 @@ export function GroupEditor({ groupId }: Props) {
 
   const discard = async () => {
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     await window.api.drafts.group.delete({ groupId })
     setName(group.name)
     setDescription(group.description ?? '')
@@ -127,6 +147,7 @@ export function GroupEditor({ groupId }: Props) {
   const save = async () => {
     if (!name.trim()) return
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     setSaving(true)
     await updateGroup(groupId, { name: name.trim(), description, authType, authConfig, sslVerification })
     await window.api.drafts.group.delete({ groupId })
@@ -143,7 +164,22 @@ export function GroupEditor({ groupId }: Props) {
   const mark = (fields?: {
     name?: string; description?: string
     authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
-  }) => {
+  }, changedField?: string) => {
+    const currentSnapshot: FormSnapshot = {
+      name: name, description: description, authType: authType,
+      authConfig: authConfig, sslVerification: sslVerification,
+    }
+    if (changedField !== lastUndoField.current) {
+      if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+      pushUndo(currentSnapshot)
+      lastUndoField.current = changedField ?? null
+    } else if (!undoPushTimer.current) {
+      const snap = { ...currentSnapshot, authConfig: { ...currentSnapshot.authConfig } }
+      undoPushTimer.current = setTimeout(() => {
+        undoPushTimer.current = null
+        pushUndo(snap)
+      }, 1000)
+    }
     setIsDirty(true)
     scheduleDraft({
       name: fields?.name ?? name,
@@ -154,12 +190,39 @@ export function GroupEditor({ groupId }: Props) {
     })
   }
 
+  const handleUndo = () => {
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+    lastUndoField.current = null
+    setName(previous.name)
+    setDescription(previous.description)
+    setAuthType(previous.authType)
+    setAuthConfig(previous.authConfig)
+    setSslVerification(previous.sslVerification)
+    if (undoStack.current.length === 0) {
+      setIsDirty(false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      window.api.drafts.group.delete({ groupId })
+    } else {
+      setIsDirty(true)
+      scheduleDraft(previous)
+    }
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+      e.preventDefault()
+      handleUndo()
+    }
+  }
+
   return (
-    <div className="bg-th-bg w-full">
+    <div className="bg-th-bg w-full" onKeyDown={onKeyDown}>
       {/* Thin drag strip — window drag target only, no content */}
       <div className="drag-region shrink-0 pt-8 pb-4" />
-
-      {/* Content */}
       <div className="no-drag px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
 
         {/* Title with breadcrumb */}
@@ -191,7 +254,7 @@ export function GroupEditor({ groupId }: Props) {
             className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Group name"
             value={name}
-            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }) }}
+            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }, 'name') }}
           />
           <p className="mt-1 text-xs text-th-text-faint">Group</p>
           <AiActionButton
@@ -207,7 +270,7 @@ export function GroupEditor({ groupId }: Props) {
             placeholder="Describe what this group contains, e.g. which service or feature area."
             rows={4}
             value={description}
-            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }) }}
+            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }, 'description') }}
           />
         </Section>
 
@@ -219,7 +282,7 @@ export function GroupEditor({ groupId }: Props) {
           <AuthEditor
             authType={authType}
             authConfig={authConfig}
-            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }) }}
+            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }, 'auth') }}
             inheritedFrom={inheritedAuthFrom}
             canInherit={true}
           />
@@ -232,7 +295,7 @@ export function GroupEditor({ groupId }: Props) {
           </p>
           <SslEditor
             value={sslVerification}
-            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }) }}
+            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }, 'ssl') }}
             inheritedFrom={collection?.sslVerification !== 'inherit' ? collection?.name : undefined}
           />
         </Section>

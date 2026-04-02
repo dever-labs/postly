@@ -51,7 +51,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, saveRequest, discardDraft } = useRequestsStore()
+  const { editingRequest, isLoading, updateField, sendRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -92,18 +92,27 @@ export function RequestEditor() {
     }
   }
 
-  // Ctrl+S: save the request, then show commit overlay for git-sourced requests
+  // Ctrl+S: save; Ctrl+Z (when not in a text field): app-level undo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
         e.preventDefault()
         if (!editingRequest) return
         saveRequest().then(triggerGitSave)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Let native undo handle text within inputs/textareas/contenteditable
+        const el = document.activeElement
+        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+        e.preventDefault()
+        if (!editingRequest) return
+        undoRequest()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editingRequest, saveRequest, breadcrumb, openGitAction])
+  }, [editingRequest, saveRequest, undoRequest, breadcrumb, openGitAction])
 
   if (!editingRequest) {
     return (

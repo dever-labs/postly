@@ -71,6 +71,18 @@ export function EnvironmentEditor() {
   const [isDirty, setIsDirty] = useState(false)
   const [varSearch, setVarSearch] = useState('')
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const undoStack = useRef<EnvVar[][]>([])
+  const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearUndo = () => {
+    undoStack.current = []
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+  }
+
+  const pushUndo = (snapshot: EnvVar[]) => {
+    if (undoStack.current.length >= 50) undoStack.current.shift()
+    undoStack.current.push(snapshot.map((v) => ({ ...v })))
+  }
 
   const scheduleDraft = (vars: EnvVar[]) => {
     if (!env) return
@@ -84,6 +96,14 @@ export function EnvironmentEditor() {
   const setLocalVars = (updater: EnvVar[] | ((prev: EnvVar[]) => EnvVar[])) => {
     setLocalVarsState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
+      // Push undo snapshot with 1s debounce
+      if (!undoPushTimer.current) {
+        const snap = prev.map((v) => ({ ...v }))
+        undoPushTimer.current = setTimeout(() => {
+          undoPushTimer.current = null
+          pushUndo(snap)
+        }, 50) // short delay so sync changes are batched
+      }
       setIsDirty(true)
       scheduleDraft(next)
       return next
@@ -107,7 +127,10 @@ export function EnvironmentEditor() {
       setIsDirty(false)
     }
     load()
-    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current)
+      clearUndo()
+    }
   }, [env?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reflect external store changes (e.g., after full load) when not dirty
@@ -124,6 +147,7 @@ export function EnvironmentEditor() {
   const handleSave = async () => {
     if (!env) return
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     for (const v of localVars) {
       await upsertVar(env.id, v.key, v.value, v.isSecret, v.id)
     }
@@ -141,6 +165,7 @@ export function EnvironmentEditor() {
   const handleDiscard = async () => {
     if (!env) return
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     await window.api.drafts.env.delete({ envId: env.id })
     setLocalVarsState(envVars)
     setIsDirty(false)
@@ -160,6 +185,30 @@ export function EnvironmentEditor() {
     if (!env) return
     await deleteEnvironment(env.id)
     setSelectedEnvId(null)
+  }
+
+  const handleUndo = () => {
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+    setLocalVarsState(previous)
+    if (undoStack.current.length === 0) {
+      setIsDirty(false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      if (env) window.api.drafts.env.delete({ envId: env.id })
+    } else {
+      setIsDirty(true)
+      scheduleDraft(previous)
+    }
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+      e.preventDefault()
+      handleUndo()
+    }
   }
 
   // ── Empty state ────────────────────────────────────────────────────────────
@@ -183,7 +232,7 @@ export function EnvironmentEditor() {
 
   // ── Editor ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg" onKeyDown={onKeyDown}>
       {/* Header — drag-region; pt-8 clears title bar height, pr-40 clears window controls (min/max/close ~138px) */}
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border pl-6 pr-48 pt-8 pb-4">
         <input

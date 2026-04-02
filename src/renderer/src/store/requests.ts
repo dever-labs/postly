@@ -11,6 +11,7 @@ interface RequestsState {
   setActiveRequest: (request: Request) => void
   clearActiveRequest: () => void
   updateField: (field: keyof Request, value: unknown) => void
+  undoRequest: () => void
   sendRequest: () => Promise<void>
   saveRequest: () => Promise<void>
   discardDraft: () => Promise<void>
@@ -23,7 +24,25 @@ const DIRTY_FIELDS = new Set<keyof Request>([
   'sslVerification', 'protocol', 'protocolConfig',
 ])
 
+const MAX_UNDO_STEPS = 50
+
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+// Undo stack lives outside the store so it doesn't trigger re-renders
+const undoStack: Request[] = []
+let lastUndoField: keyof Request | null = null
+let undoPushTimer: ReturnType<typeof setTimeout> | null = null
+
+function pushUndo(snapshot: Request): void {
+  if (undoStack.length >= MAX_UNDO_STEPS) undoStack.shift()
+  undoStack.push(JSON.parse(JSON.stringify(snapshot)) as Request)
+}
+
+function clearUndo(): void {
+  undoStack.length = 0
+  lastUndoField = null
+  if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
+}
 
 function scheduleDraftSave(request: Request): void {
   if (draftSaveTimer) clearTimeout(draftSaveTimer)
@@ -54,6 +73,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   isLoading: false,
 
   setActiveRequest: async (request: Request) => {
+    clearUndo()
     const base: Request = JSON.parse(JSON.stringify(request)) as Request
     // Check for a persisted draft and merge it over the saved record
     try {
@@ -82,12 +102,32 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
   clearActiveRequest: () => {
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    clearUndo()
     set({ activeRequestId: null, editingRequest: null, response: null })
   },
 
   updateField: (field: keyof Request, value: unknown) => {
     set((state) => {
       if (!state.editingRequest) return state
+
+      if (DIRTY_FIELDS.has(field)) {
+        // Push undo snapshot when: switching to a different field, OR 1s since last push
+        if (field !== lastUndoField) {
+          if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
+          pushUndo(state.editingRequest)
+          lastUndoField = field
+        } else {
+          // Same field — reset the 1s debounce timer; if it fires, push a new entry
+          if (!undoPushTimer) {
+            const snapshot = JSON.parse(JSON.stringify(state.editingRequest)) as Request
+            undoPushTimer = setTimeout(() => {
+              undoPushTimer = null
+              pushUndo(snapshot)
+            }, 1000)
+          }
+        }
+      }
+
       const updated: Request = { ...state.editingRequest, [field]: value }
       if (DIRTY_FIELDS.has(field)) {
         updated.isDirty = true
@@ -98,6 +138,29 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       return { editingRequest: updated }
     })
+  },
+
+  undoRequest: () => {
+    const previous = undoStack.pop()
+    if (!previous) return
+
+    // If the undo timer was pending (same-field debounce), cancel it — we don't want
+    // it firing after we've already stepped back
+    if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
+    lastUndoField = null
+
+    const isDirty = undoStack.length > 0 || previous.isDirty
+    const restored: Request = { ...previous, isDirty }
+    set({ editingRequest: restored })
+    useCollectionsStore.getState().syncRequest(restored)
+
+    if (isDirty) {
+      scheduleDraftSave(restored)
+    } else {
+      // Back to saved state — cancel pending draft save and delete the draft
+      if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+      window.api.drafts.request.delete({ requestId: restored.id })
+    }
   },
 
   sendRequest: async () => {
@@ -167,8 +230,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const { editingRequest } = get()
     if (!editingRequest) return
 
-    // Cancel any pending draft save
+    // Cancel any pending draft save and clear undo history
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    clearUndo()
 
     // Clear dirty flag before serializing so the DB is written with is_dirty = 0
     const saved = { ...editingRequest, isDirty: false }
@@ -198,6 +262,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (!editingRequest) return
 
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    clearUndo()
     await window.api.drafts.request.delete({ requestId: editingRequest.id })
 
     // Reload the saved request from the DB
