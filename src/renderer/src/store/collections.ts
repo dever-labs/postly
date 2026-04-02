@@ -10,6 +10,7 @@ interface CollectionsState {
   hiddenSources: Set<CollectionSource>
   load: () => Promise<void>
   toggleGroupCollapsed: (groupId: string) => Promise<void>
+  toggleCollectionCollapsed: (collectionId: string) => Promise<void>
   toggleSourceHidden: (source: CollectionSource) => void
   setSearchQuery: (q: string) => void
   createGroup: (collectionId: string, name: string) => Promise<string | null>
@@ -20,7 +21,7 @@ interface CollectionsState {
   markDirty: (requestId: string) => void
   syncRequest: (request: Request) => void
   clearDirtyForCollection: (collectionId: string) => void
-  updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
+  updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; collapsed?: boolean }) => Promise<void>
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
   renameGroup: (id: string, name: string) => Promise<void>
@@ -59,6 +60,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       authType: (c.auth_type ?? 'none') as AuthType,
       authConfig: parseJsonField<Record<string, string>>(c.auth_config, {}),
       sslVerification: (c.ssl_verification ?? 'inherit') as SslVerification,
+      collapsed: Boolean(c.collapsed),
       createdAt: (c.created_at ?? 0) as number,
       updatedAt: (c.updated_at ?? 0) as number,
     }))
@@ -91,6 +93,22 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     }
     set((state) => ({
       groups: state.groups.map((g) => (g.id === groupId ? { ...g, collapsed: newCollapsed } : g)),
+    }))
+  },
+
+  toggleCollectionCollapsed: async (collectionId: string) => {
+    const collection = get().collections.find((c) => c.id === collectionId)
+    if (!collection) return
+    const newCollapsed = !collection.collapsed
+    const { error } = await window.api.collections.update({ id: collectionId, collapsed: newCollapsed })
+    if (error) {
+      console.error('Failed to update collection:', error)
+      return
+    }
+    set((state) => ({
+      collections: state.collections.map((c) =>
+        c.id === collectionId ? { ...c, collapsed: newCollapsed } : c
+      ),
     }))
   },
 
@@ -197,7 +215,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     })
   },
 
-  updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification }) => {
+  updateCollection: async (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; collapsed?: boolean }) => {
     const api = window.api
     const { error } = await api.collections.update({ id, ...updates })
     if (error) { console.error('Failed to update collection:', error); return }

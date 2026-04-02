@@ -36,6 +36,7 @@ export interface Collection {
   authType: AuthType
   authConfig: Record<string, string>
   sslVerification: SslVerification
+  collapsed: boolean
   createdAt: number
   updatedAt: number
 }

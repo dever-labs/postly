@@ -6,7 +6,7 @@ const api = {
     create: (data: { name: string; source?: string; integrationId?: string }) => ipcRenderer.invoke('postly:collections:create', data),
     delete: (data: { id: string; commitMessage?: string }) => ipcRenderer.invoke('postly:collections:delete', data),
     rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:collections:rename', data),
-    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string> }) =>
+    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; collapsed?: boolean }) =>
       ipcRenderer.invoke('postly:collections:update', data),
     moveSource: (data: { id: string; source: string }) => ipcRenderer.invoke('postly:collections:move-source', data),
   },

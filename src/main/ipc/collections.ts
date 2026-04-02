@@ -82,7 +82,7 @@ export function registerCollectionHandlers(): void {
 
   ipcMain.handle(
     'postly:collections:update',
-    async (_, args: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string }) => {
+    async (_, args: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; collapsed?: boolean }) => {
       try {
         const fields: string[] = []
         const values: unknown[] = []
@@ -92,6 +92,7 @@ export function registerCollectionHandlers(): void {
         if (args.authType !== undefined) { fields.push('auth_type = ?'); values.push(args.authType) }
         if (args.authConfig !== undefined) { fields.push('auth_config = ?'); values.push(JSON.stringify(args.authConfig)) }
         if (args.sslVerification !== undefined) { fields.push('ssl_verification = ?'); values.push(args.sslVerification) }
+        if (args.collapsed !== undefined) { fields.push('collapsed = ?'); values.push(args.collapsed ? 1 : 0) }
         if (fields.length === 0) return { data: true }
 
         fields.push('updated_at = ?')
