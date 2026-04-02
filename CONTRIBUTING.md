@@ -28,13 +28,36 @@ All four must pass before opening a PR.
 - **Add tests** for new behaviour where feasible
 - **Keep commits clean** — squash fixups before asking for review
 
-### PR title format
+### Commit message format (Conventional Commits — enforced)
+
+Every commit must follow [Conventional Commits](https://www.conventionalcommits.org/).
+This is checked by commitlint in CI and drives automatic versioning (see `release-please-config.json`).
 
 ```
-feat: add NTLM auth support
-fix: resolve OAuth token not refreshing after expiry
-chore: bump electron to 30.x
-docs: add integration setup guide
+<type>(<optional scope>): <short description in lowercase, no trailing period>
+```
+
+| Type | Effect on version |
+|------|-------------------|
+| `feat` | minor bump (0.x.0) |
+| `fix` / `security` / `perf` | patch bump (0.0.x) |
+| `feat!` or `BREAKING CHANGE:` in footer | major bump (x.0.0) |
+| `refactor`, `docs`, `test`, `chore`, `build`, `ci` | no bump |
+
+**Good examples:**
+```
+feat(oauth): add client_credentials grant support
+fix(http): resolve timeout not applied after redirect
+security: use unique session partition per oauth auth attempt
+docs: document conventional commit rules
+chore(deps): bump electron to 36.x
+```
+
+**Bad (rejected by CI):**
+```
+Fixed bug                  # missing type
+feat: Fixed bug            # capitalised subject
+feat: add thing.           # trailing period
 ```
 
 ## Reporting Bugs
