@@ -59,6 +59,8 @@ function runMigrations(): void {
   // Requests protocol support
   try { db.run("ALTER TABLE requests ADD COLUMN protocol TEXT NOT NULL DEFAULT 'http'") } catch {}
   try { db.run("ALTER TABLE requests ADD COLUMN protocol_config TEXT NOT NULL DEFAULT '{}'") } catch {}
+  // Collections collapsed state
+  try { db.run('ALTER TABLE collections ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0') } catch {}
 }
 
 /** Flush the in-memory DB to disk. Call after every write. */

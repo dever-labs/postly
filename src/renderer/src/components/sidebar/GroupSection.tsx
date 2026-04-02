@@ -353,8 +353,6 @@ function SortableGroupRow({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function GroupSection({ source, integration, collections, groups, requests, searchQuery, dragActiveId, dragOverId }: GroupSectionProps) {
-  const [sourceOpen, setSourceOpen] = useState(true)
-  const [openCollections, setOpenCollections] = useState<Set<string>>(new Set())
   const [addingGroupTo, setAddingGroupTo] = useState<string | null>(null)
   const [renamingCollection, setRenamingCollection] = useState<string | null>(null)
   const [addingCollection, setAddingCollection] = useState(false)
@@ -370,10 +368,13 @@ export function GroupSection({ source, integration, collections, groups, request
     deleteGroup,
     renameGroup,
     load,
+    toggleCollectionCollapsed,
   } = useCollectionsStore()
   const addToast = useUIStore((s) => s.addToast)
   const openDeleteCollection = useUIStore((s) => s.openDeleteCollection)
   const openGitAction = useUIStore((s) => s.openGitAction)
+  const collapsedSources = useUIStore((s) => s.collapsedSources)
+  const toggleSourceCollapsed = useUIStore((s) => s.toggleSourceCollapsed)
   const integrationsStore = useIntegrationsStore()
   const { activeRequestId, setActiveRequest, clearActiveRequest } = useRequestsStore()
   const { selectItem, clearSelectedItem, selectedItem } = useUIStore()
@@ -385,36 +386,20 @@ export function GroupSection({ source, integration, collections, groups, request
     ? collections.filter((c) => c.integrationId === integration.id)
     : collections.filter((c) => c.source === source && !c.integrationId)
   const isSourceHidden = hiddenSources.has(source)
+  const isSourceOpen = !collapsedSources.has(source)
 
   const totalRequests = requests.filter((r) => {
     const group = groups.find((g) => g.id === r.groupId)
     return group && sourceCollections.some((c) => c.id === group.collectionId)
   })
 
-  const toggleCollection = (id: string) => {
-    setOpenCollections((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  // Auto-open a collection when it's first seen
-  React.useEffect(() => {
-    setOpenCollections((prev) => {
-      const next = new Set(prev)
-      sourceCollections.forEach((c) => { if (!next.has(c.id)) next.add(c.id) })
-      return next
-    })
-  }, [sourceCollections.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
-    <Collapsible.Root open={sourceOpen} onOpenChange={setSourceOpen} className="mb-1">
+    <Collapsible.Root open={isSourceOpen} onOpenChange={() => toggleSourceCollapsed(source)} className="mb-1">
       {/* Source header */}
       <div className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
         <Collapsible.Trigger asChild>
           <button className="shrink-0 rounded-sm p-0.5 focus:outline-hidden">
-            {sourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            {isSourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         </Collapsible.Trigger>
 
@@ -427,7 +412,7 @@ export function GroupSection({ source, integration, collections, groups, request
             if (integration && ['git', 'github', 'gitlab'].includes(integration.type)) {
               selectItem('git-source', integration.id)
             } else {
-              setSourceOpen((o) => !o)
+              toggleSourceCollapsed(source)
             }
           }}
           className={`flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden ${selectedItem?.type === 'git-source' && selectedItem.id === integration?.id ? 'text-th-text-primary' : ''}`}
@@ -449,7 +434,7 @@ export function GroupSection({ source, integration, collections, groups, request
               </button>
             )}
             <button
-              onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
+              onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }}
               className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100"
               title="Add collection"
             >
@@ -466,7 +451,7 @@ export function GroupSection({ source, integration, collections, groups, request
         ) : (
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => { setSourceOpen(true); setAddingCollection(true) }}
+              onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }}
               className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100"
               title="Add collection"
             >
@@ -496,7 +481,7 @@ export function GroupSection({ source, integration, collections, groups, request
             const collectionGroups = groups
               .filter((g) => g.collectionId === collection.id)
               .sort((a, b) => a.sortOrder - b.sortOrder)
-            const isOpen = openCollections.has(collection.id)
+            const isOpen = !collection.collapsed
 
             return (
               <div key={collection.id} className="mb-0.5">
@@ -519,13 +504,16 @@ export function GroupSection({ source, integration, collections, groups, request
                     open={isOpen}
                     dndId={`col:${collection.id}`}
                     isActive={selectedItem?.type === 'collection' && selectedItem.id === collection.id}
-                    onToggle={() => toggleCollection(collection.id)}
+                    onToggle={() => toggleCollectionCollapsed(collection.id)}
                     onSelect={() => selectItem('collection', collection.id)}
                     onAddRequest={() => {
-                      setOpenCollections((p) => new Set([...p, collection.id]))
+                      if (collection.collapsed) toggleCollectionCollapsed(collection.id)
                       addRequestToCollection(collection.id)
                     }}
-                    onAddGroup={() => { setOpenCollections((p) => new Set([...p, collection.id])); setAddingGroupTo(collection.id) }}
+                    onAddGroup={() => {
+                      if (collection.collapsed) toggleCollectionCollapsed(collection.id)
+                      setAddingGroupTo(collection.id)
+                    }}
                     onRename={() => setRenamingCollection(collection.id)}
                     onDelete={() => {
                       if (['git', 'github', 'gitlab'].includes(collection.source)) {

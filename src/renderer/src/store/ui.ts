@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { CollectionSource } from '../types'
 
 export type Theme = 'dark' | 'light'
 
@@ -12,6 +13,20 @@ function applyThemeClass(theme: Theme) {
 
 const storedTheme = localStorage.getItem('postly-theme') as Theme | null
 const initialTheme: Theme = storedTheme === 'light' ? 'light' : 'dark'
+
+function loadCollapsedSources(): Set<CollectionSource> {
+  try {
+    const raw = localStorage.getItem('postly-collapsed-sources')
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw) as CollectionSource[])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveCollapsedSources(sources: Set<CollectionSource>): void {
+  localStorage.setItem('postly-collapsed-sources', JSON.stringify([...sources]))
+}
 
 interface ToastItem {
   id: string
@@ -34,6 +49,7 @@ interface UIState {
   pendingGitAction: GitPendingAction | null
   deletingCollectionId: string | null
   toasts: ToastItem[]
+  collapsedSources: Set<CollectionSource>
   selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source'; id: string } | null
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
@@ -49,6 +65,7 @@ interface UIState {
   closeDeleteCollection: () => void
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
+  toggleSourceCollapsed: (source: CollectionSource) => void
   selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => void
   clearSelectedItem: () => void
 }
@@ -64,6 +81,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   pendingGitAction: null,
   deletingCollectionId: null,
   toasts: [],
+  collapsedSources: loadCollapsedSources(),
   selectedItem: null,
 
   toggleTheme: () => {
@@ -103,6 +121,17 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
   },
 
-  selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => set({ selectedItem: { type, id } }),
+  toggleSourceCollapsed: (source: CollectionSource) => {
+    const next = new Set(get().collapsedSources)
+    if (next.has(source)) {
+      next.delete(source)
+    } else {
+      next.add(source)
+    }
+    saveCollapsedSources(next)
+    set({ collapsedSources: next })
+  },
+
+  selectItem:(type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => set({ selectedItem: { type, id } }),
   clearSelectedItem: () => set({ selectedItem: null }),
 }))
