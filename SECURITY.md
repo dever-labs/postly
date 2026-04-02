@@ -38,3 +38,18 @@ Postly follows Electron security best practices:
 
 We run automated dependency audits on every PR and weekly via GitHub Actions.
 Critical vulnerabilities block merges. Dependabot is enabled for automated patch PRs.
+
+### Supply-chain attack protection
+
+[Socket.dev](https://socket.dev) is installed as a GitHub App and scans every pull
+request that modifies `package.json` or `package-lock.json`. Unlike `npm audit`,
+which only catches *known* CVEs, Socket detects *active* supply-chain threats:
+
+- Newly added or changed install scripts in any dependency
+- Obfuscated code and dynamic `require()` patterns
+- Typosquatting (package names similar to popular packages)
+- Packages that read environment variables (credential exfiltration risk)
+- Packages pulled from git or HTTP URLs (no integrity guarantee)
+- Recent maintainer changes (common hijack vector)
+
+The project-level configuration lives in [`socket.yml`](./socket.yml).
