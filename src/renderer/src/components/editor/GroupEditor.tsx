@@ -46,6 +46,7 @@ export function GroupEditor({ groupId }: Props) {
   const addToast = useUIStore((s) => s.addToast)
   const selectItem = useUIStore((s) => s.selectItem)
   const openGitAction = useUIStore((s) => s.openGitAction)
+  const setEditorDirty = useUIStore((s) => s.setEditorDirty)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -125,8 +126,13 @@ export function GroupEditor({ groupId }: Props) {
     return () => {
       if (draftTimer.current) clearTimeout(draftTimer.current)
       clearUndo()
+      setEditorDirty(groupId, false)
     }
   }, [groupId, group])
+
+  useEffect(() => {
+    setEditorDirty(groupId, isDirty)
+  }, [groupId, isDirty])
 
   if (!group) {
     return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Group not found</div>
@@ -189,14 +195,22 @@ export function GroupEditor({ groupId }: Props) {
         pushUndo(snap)
       }, 1000)
     }
-    setIsDirty(true)
-    scheduleDraft({
+    const newState = {
       name: fields?.name ?? name,
       description: fields?.description ?? description,
       authType: fields?.authType ?? authType,
       authConfig: fields?.authConfig ?? authConfig,
       sslVerification: fields?.sslVerification ?? sslVerification,
-    })
+    }
+    const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
+    if (atSaved) {
+      setIsDirty(false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      window.api.drafts.group.delete({ groupId })
+    } else {
+      setIsDirty(true)
+      scheduleDraft(newState)
+    }
   }
 
   const handleUndo = () => {
@@ -223,6 +237,8 @@ export function GroupEditor({ groupId }: Props) {
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = e.target
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
       e.preventDefault()
       handleUndo()
     }
@@ -260,6 +276,7 @@ export function GroupEditor({ groupId }: Props) {
             </span>
           </div>
           <input
+            data-testid="group-name-input"
             className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Group name"
             value={name}
@@ -311,24 +328,26 @@ export function GroupEditor({ groupId }: Props) {
 
       </div>
 
-      {/* Sticky save bar */}
-      {isDirty && (
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
+      {/* Save bar */}
+      <div className="no-drag flex items-center justify-end gap-2 border-t border-th-border px-8 py-3">
+        {isDirty && (
           <button
+            data-testid="group-discard-button"
             onClick={discard}
             className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
           >
             Discard
           </button>
-          <button
-            onClick={save}
-            disabled={saving || !name.trim()}
-            className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          data-testid="group-save-button"
+          onClick={save}
+          disabled={saving || !name.trim()}
+          className={`rounded-sm px-4 py-1.5 text-sm font-medium focus:outline-hidden disabled:opacity-50 ${isDirty ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-th-surface-raised text-th-text-subtle hover:bg-th-surface-active hover:text-th-text-primary'}`}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }

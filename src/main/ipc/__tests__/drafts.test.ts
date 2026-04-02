@@ -141,6 +141,66 @@ describe('postly:drafts:collection:delete', () => {
   })
 })
 
+// ── Group drafts ──────────────────────────────────────────────────────────────
+
+describe('postly:drafts:group:get', () => {
+  it('returns null when no draft exists', async () => {
+    mockQueryOne.mockReturnValueOnce(null)
+    const result = await handlers['postly:drafts:group:get'](null, { groupId: 'g1' }) as { data: unknown }
+    expect(result.data).toBeNull()
+    expect(mockQueryOne).toHaveBeenCalledWith(
+      'SELECT * FROM group_drafts WHERE group_id = ?',
+      ['g1']
+    )
+  })
+
+  it('returns the draft when it exists', async () => {
+    const draft = { group_id: 'g1', name: 'Draft Group', description: 'desc' }
+    mockQueryOne.mockReturnValueOnce(draft)
+    const result = await handlers['postly:drafts:group:get'](null, { groupId: 'g1' }) as { data: unknown }
+    expect(result.data).toEqual(draft)
+  })
+})
+
+describe('postly:drafts:group:upsert', () => {
+  it('inserts a group draft with correct fields', async () => {
+    await handlers['postly:drafts:group:upsert'](null, {
+      groupId: 'g1',
+      name: 'My Group',
+      description: 'A test group',
+      authType: 'bearer',
+      authConfig: '{"token":"secret"}',
+      sslVerification: 'enabled',
+    })
+
+    expect(mockRun).toHaveBeenCalledOnce()
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('INSERT OR REPLACE INTO group_drafts')
+    expect(params[0]).toBe('g1')
+    expect(params[1]).toBe('My Group')
+    expect(params[3]).toBe('bearer')
+  })
+
+  it('uses null for omitted optional fields', async () => {
+    await handlers['postly:drafts:group:upsert'](null, { groupId: 'g1' })
+
+    const [, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(params[1]).toBeNull()
+    expect(params[2]).toBeNull()
+  })
+})
+
+describe('postly:drafts:group:delete', () => {
+  it('deletes the group draft', async () => {
+    await handlers['postly:drafts:group:delete'](null, { groupId: 'g1' })
+
+    expect(mockRun).toHaveBeenCalledWith(
+      'DELETE FROM group_drafts WHERE group_id = ?',
+      ['g1']
+    )
+  })
+})
+
 // ── Environment drafts ────────────────────────────────────────────────────────
 
 describe('postly:drafts:env:get', () => {

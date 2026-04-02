@@ -28,8 +28,42 @@ const DIRTY_FIELDS = new Set<keyof Request>([
 const MAX_UNDO_STEPS = 50
 
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+let pendingDraftRequest: Request | null = null
 
-// Undo stack lives outside the store so it doesn't trigger re-renders
+function upsertDraftNow(request: Request): void {
+  const s = serializeRequest(request)
+  window.api.drafts.request.upsert({
+    requestId: request.id,
+    method: s.method as string | undefined,
+    url: s.url as string | undefined,
+    params: typeof s.params === 'string' ? s.params : JSON.stringify(s.params),
+    headers: typeof s.headers === 'string' ? s.headers : JSON.stringify(s.headers),
+    bodyType: s.bodyType as string | undefined,
+    bodyContent: s.bodyContent as string | undefined,
+    authType: s.authType as string | undefined,
+    authConfig: typeof s.authConfig === 'string' ? s.authConfig : JSON.stringify(s.authConfig),
+    sslVerification: s.sslVerification as string | undefined,
+    protocol: s.protocol as string | undefined,
+    protocolConfig: typeof s.protocolConfig === 'string' ? s.protocolConfig : JSON.stringify(s.protocolConfig),
+  })
+}
+
+function scheduleDraftSave(request: Request): void {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer)
+  pendingDraftRequest = request
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null
+    if (pendingDraftRequest) { upsertDraftNow(pendingDraftRequest); pendingDraftRequest = null }
+  }, 500)
+}
+
+function flushPendingDraftSave(): void {
+  if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+  if (pendingDraftRequest) { upsertDraftNow(pendingDraftRequest); pendingDraftRequest = null }
+}
+
+
+// Undo stack lives outside the store so it does not trigger re-renders
 const undoStack: Request[] = []
 let lastUndoField: keyof Request | null = null
 let undoPushTimer: ReturnType<typeof setTimeout> | null = null
@@ -45,28 +79,6 @@ function clearUndo(): void {
   if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
 }
 
-function scheduleDraftSave(request: Request): void {
-  if (draftSaveTimer) clearTimeout(draftSaveTimer)
-  draftSaveTimer = setTimeout(() => {
-    draftSaveTimer = null
-    const s = serializeRequest(request)
-    window.api.drafts.request.upsert({
-      requestId: request.id,
-      method: s.method as string | undefined,
-      url: s.url as string | undefined,
-      params: typeof s.params === 'string' ? s.params : JSON.stringify(s.params),
-      headers: typeof s.headers === 'string' ? s.headers : JSON.stringify(s.headers),
-      bodyType: s.bodyType as string | undefined,
-      bodyContent: s.bodyContent as string | undefined,
-      authType: s.authType as string | undefined,
-      authConfig: typeof s.authConfig === 'string' ? s.authConfig : JSON.stringify(s.authConfig),
-      sslVerification: s.sslVerification as string | undefined,
-      protocol: s.protocol as string | undefined,
-      protocolConfig: typeof s.protocolConfig === 'string' ? s.protocolConfig : JSON.stringify(s.protocolConfig),
-    })
-  }, 500)
-}
-
 function isEqualToSaved(a: Request, b: Request): boolean {
   for (const field of DIRTY_FIELDS) {
     const av = a[field]
@@ -75,7 +87,6 @@ function isEqualToSaved(a: Request, b: Request): boolean {
   }
   return true
 }
-
 export const useRequestsStore = create<RequestsState>((set, get) => ({
   activeRequestId: null,
   editingRequest: null,
@@ -84,6 +95,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   isLoading: false,
 
   setActiveRequest: async (request: Request) => {
+    // Flush any pending draft save for the outgoing request before switching
+    flushPendingDraftSave()
     clearUndo()
     const saved: Request = JSON.parse(JSON.stringify(request)) as Request
     const base: Request = JSON.parse(JSON.stringify(request)) as Request
@@ -113,7 +126,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   },
 
   clearActiveRequest: () => {
-    if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    flushPendingDraftSave()
     clearUndo()
     set({ activeRequestId: null, editingRequest: null, savedRequest: null, response: null })
   },
@@ -129,14 +142,13 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
           pushUndo(state.editingRequest)
           lastUndoField = field
         } else {
-          // Same field — reset the 1s debounce timer; if it fires, push a new entry
-          if (!undoPushTimer) {
-            const snapshot = JSON.parse(JSON.stringify(state.editingRequest)) as Request
-            undoPushTimer = setTimeout(() => {
-              undoPushTimer = null
-              pushUndo(snapshot)
-            }, 1000)
-          }
+          // Same field — restart the 1s debounce timer; capture latest state when it fires
+          if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
+          undoPushTimer = setTimeout(() => {
+            undoPushTimer = null
+            const current = get().editingRequest
+            if (current) pushUndo(current)
+          }, 1000)
         }
       }
 
@@ -169,7 +181,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (isDirty) {
       scheduleDraftSave(restored)
     } else {
+      // Back to saved state — cancel any pending draft save and delete the draft
       if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+      pendingDraftRequest = null
       window.api.drafts.request.delete({ requestId: restored.id })
     }
   },

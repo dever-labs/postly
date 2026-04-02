@@ -199,6 +199,7 @@ export function RequestEditor() {
             await saveRequest()
             triggerGitSave()
           }}
+          data-testid="request-save-button"
           className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
           title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
         >
@@ -207,6 +208,7 @@ export function RequestEditor() {
         {editingRequest.isDirty && (
           <button
             onClick={discardDraft}
+            data-testid="request-discard-button"
             className="rounded-sm px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
             title="Discard unsaved changes"
           >

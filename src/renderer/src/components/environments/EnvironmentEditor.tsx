@@ -97,7 +97,7 @@ export function EnvironmentEditor() {
   const setLocalVars = (updater: EnvVar[] | ((prev: EnvVar[]) => EnvVar[])) => {
     setLocalVarsState((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater
-      // Push undo snapshot with 1s debounce
+      // Push undo snapshot with 50ms debounce to batch rapid changes
       if (!undoPushTimer.current) {
         const snap = prev.map((v) => ({ ...v }))
         undoPushTimer.current = setTimeout(() => {
@@ -210,6 +210,8 @@ export function EnvironmentEditor() {
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = e.target
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
       e.preventDefault()
       handleUndo()
     }

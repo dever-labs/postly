@@ -96,7 +96,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       )}
 
       {request.isDirty && (
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />
+        <span data-testid="request-dirty-dot" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />
       )}
 
       <button
