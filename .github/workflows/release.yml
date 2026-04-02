@@ -1,12 +1,9 @@
 # Release
 #
-# Triggered automatically when release-please merges its Release PR and creates
-# a GitHub release (see .github/workflows/version.yml).  Runs CI then builds
-# and publishes the cross-platform Electron binaries as release assets.
-#
-# To release manually (e.g. a hotfix), publish a GitHub release with a tag that
-# matches the version in package.json (e.g. v0.2.2) — this workflow will fire
-# in the same way.
+# Triggered when a GitHub release is published (manually via the GitHub UI or
+# API).  Create a release with a tag matching the version in package.json
+# (e.g. v0.3.0) and this workflow will run CI then build and publish the
+# cross-platform Electron binaries as release assets.
 
 name: Release
 

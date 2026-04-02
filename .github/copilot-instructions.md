@@ -10,7 +10,7 @@
 ## Commit messages — Conventional Commits (required)
 
 Every commit **must** follow [Conventional Commits](https://www.conventionalcommits.org/).
-This is enforced by commitlint in CI and drives automatic versioning via release-please.
+This is enforced by commitlint in CI.
 
 A git commit message template is also provided in `.gitmessage` at the repo root.
 Configure it locally with: `git config commit.template .gitmessage`
@@ -25,23 +25,23 @@ Configure it locally with: `git config commit.template .gitmessage`
 <optional footer — e.g. BREAKING CHANGE: or Closes #N>
 ```
 
-### Allowed types and their effect
+### Allowed types
 
-| Type       | When to use                                           | Version bump  |
-|------------|-------------------------------------------------------|---------------|
-| `feat`     | New user-facing feature                               | minor (0.x.0) |
-| `fix`      | Bug fix                                               | patch (0.0.x) |
-| `security` | Security fix or hardening                             | patch         |
-| `perf`     | Performance improvement (no API change)               | patch         |
-| `refactor` | Code restructure — no behaviour change, no new feature| none          |
-| `revert`   | Reverts a previous commit                             | patch         |
-| `docs`     | Documentation only                                    | none          |
-| `test`     | Adding or updating tests                              | none          |
-| `chore`    | Maintenance, dependencies, config                     | none          |
-| `build`    | Build system or tooling changes                       | none          |
-| `ci`       | CI/CD workflow changes                                | none          |
+| Type       | When to use                                            |
+|------------|--------------------------------------------------------|
+| `feat`     | New user-facing feature                                |
+| `fix`      | Bug fix                                                |
+| `security` | Security fix or hardening                              |
+| `perf`     | Performance improvement (no API change)                |
+| `refactor` | Code restructure — no behaviour change, no new feature |
+| `revert`   | Reverts a previous commit                              |
+| `docs`     | Documentation only                                     |
+| `test`     | Adding or updating tests                               |
+| `chore`    | Maintenance, dependencies, config                      |
+| `build`    | Build system or tooling changes                        |
+| `ci`       | CI/CD workflow changes                                 |
 
-### Breaking changes → major bump
+### Breaking changes
 
 Append `!` to the type, **or** add `BREAKING CHANGE:` in the footer:
 
