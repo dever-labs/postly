@@ -12,14 +12,17 @@ Thank you for taking the time to contribute!
 ## Development Workflow
 
 ```bash
-npm install       # install dependencies
-npm run dev       # start with hot reload
-npm run typecheck # verify types before committing
-npm run lint      # check for lint errors
-npm test          # run test suite
+npm install                              # install dependencies
+git config commit.template .gitmessage  # enable commit message template
+npm run dev                              # start with hot reload
+npm run typecheck                        # verify types before committing
+npm run lint                             # check for lint errors
+npm test                                 # run test suite
 ```
 
-All four must pass before opening a PR.
+All four checks (typecheck, lint, test, commitlint) must pass before opening a PR.
+
+The commit template is also picked up by GitHub Desktop's **"Generate commit message"** button and any tool using the GitHub Copilot SDK — ensuring AI-generated messages follow the project convention.
 
 ## Pull Request Guidelines
 

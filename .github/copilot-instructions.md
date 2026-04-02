@@ -1,9 +1,19 @@
 # Postly — Copilot & Agent Instructions
 
+> **This file is read automatically by:**
+> - GitHub Copilot (IDE extensions, chat, coding agent)
+> - GitHub Desktop → "Generate commit message" (Copilot-powered)
+> - Any tool using the GitHub Copilot SDK against this repository
+>
+> **All generated commit messages must follow the rules below.**
+
 ## Commit messages — Conventional Commits (required)
 
 Every commit **must** follow [Conventional Commits](https://www.conventionalcommits.org/).
 This is enforced by commitlint in CI and drives automatic versioning via release-please.
+
+A git commit message template is also provided in `.gitmessage` at the repo root.
+Configure it locally with: `git config commit.template .gitmessage`
 
 ### Format
 
