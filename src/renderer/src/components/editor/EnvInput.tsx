@@ -227,8 +227,11 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
         onScroll={syncScroll}
         onMouseMove={handleMouseMove}
         className={className}
-        // Make input text transparent so the overlay shows through; keep caret visible
-        style={hasVars ? { color: 'transparent', caretColor: 'var(--color-th-text-primary)' } : undefined}
+        // Make input text transparent so the overlay shows through; always set caretColor explicitly
+        style={hasVars
+          ? { color: 'transparent', caretColor: 'var(--color-text-primary)' }
+          : { caretColor: 'var(--color-text-primary)' }
+        }
         {...props}
       />
 

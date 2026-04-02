@@ -73,6 +73,7 @@ export function EnvironmentEditor() {
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const undoStack = useRef<EnvVar[][]>([])
   const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedVars = useRef<EnvVar[]>([])
 
   const clearUndo = () => {
     undoStack.current = []
@@ -115,6 +116,8 @@ export function EnvironmentEditor() {
     setName(env?.name ?? '')
     if (!env) { setLocalVarsState([]); setIsDirty(false); return }
     const load = async () => {
+      // Capture saved state before any draft overlay
+      savedVars.current = envVars.map((v) => ({ ...v }))
       const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
       if (data?.vars_json) {
         try {
@@ -157,6 +160,7 @@ export function EnvironmentEditor() {
       if (!savedIds.has(v.id)) await deleteVar(v.id)
     }
     await window.api.drafts.env.delete({ envId: env.id })
+    savedVars.current = localVars.map((v) => ({ ...v }))
     setIsDirty(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -192,7 +196,9 @@ export function EnvironmentEditor() {
     if (!previous) return
     if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
     setLocalVarsState(previous)
-    if (undoStack.current.length === 0) {
+    // Dirty only if the restored state differs from the originally saved vars
+    const atSaved = JSON.stringify(previous) === JSON.stringify(savedVars.current)
+    if (atSaved) {
       setIsDirty(false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
       if (env) window.api.drafts.env.delete({ envId: env.id })
@@ -204,8 +210,6 @@ export function EnvironmentEditor() {
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      const el = document.activeElement
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
       e.preventDefault()
       handleUndo()
     }

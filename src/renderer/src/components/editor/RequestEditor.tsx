@@ -102,9 +102,6 @@ export function RequestEditor() {
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        // Let native undo handle text within inputs/textareas/contenteditable
-        const el = document.activeElement
-        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
         e.preventDefault()
         if (!editingRequest) return
         undoRequest()

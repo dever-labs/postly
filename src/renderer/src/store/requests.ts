@@ -6,6 +6,7 @@ import { useCollectionsStore } from './collections'
 interface RequestsState {
   activeRequestId: string | null
   editingRequest: Request | null
+  savedRequest: Request | null
   response: HttpResponse | null
   isLoading: boolean
   setActiveRequest: (request: Request) => void
@@ -66,14 +67,25 @@ function scheduleDraftSave(request: Request): void {
   }, 500)
 }
 
+function isEqualToSaved(a: Request, b: Request): boolean {
+  for (const field of DIRTY_FIELDS) {
+    const av = a[field]
+    const bv = b[field]
+    if (JSON.stringify(av) !== JSON.stringify(bv)) return false
+  }
+  return true
+}
+
 export const useRequestsStore = create<RequestsState>((set, get) => ({
   activeRequestId: null,
   editingRequest: null,
+  savedRequest: null,
   response: null,
   isLoading: false,
 
   setActiveRequest: async (request: Request) => {
     clearUndo()
+    const saved: Request = JSON.parse(JSON.stringify(request)) as Request
     const base: Request = JSON.parse(JSON.stringify(request)) as Request
     // Check for a persisted draft and merge it over the saved record
     try {
@@ -97,13 +109,13 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     } catch {
       // Draft load failure is non-fatal — fall back to saved request
     }
-    set({ activeRequestId: request.id, editingRequest: base, response: null })
+    set({ activeRequestId: request.id, editingRequest: base, savedRequest: saved, response: null })
   },
 
   clearActiveRequest: () => {
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
     clearUndo()
-    set({ activeRequestId: null, editingRequest: null, response: null })
+    set({ activeRequestId: null, editingRequest: null, savedRequest: null, response: null })
   },
 
   updateField: (field: keyof Request, value: unknown) => {
@@ -141,15 +153,15 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   },
 
   undoRequest: () => {
+    const { savedRequest } = get()
     const previous = undoStack.pop()
     if (!previous) return
 
-    // If the undo timer was pending (same-field debounce), cancel it — we don't want
-    // it firing after we've already stepped back
     if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
     lastUndoField = null
 
-    const isDirty = undoStack.length > 0 || previous.isDirty
+    // Dirty only if the restored state differs from the originally saved (pre-draft) state
+    const isDirty = savedRequest ? !isEqualToSaved(previous, savedRequest) : (undoStack.length > 0 || previous.isDirty)
     const restored: Request = { ...previous, isDirty }
     set({ editingRequest: restored })
     useCollectionsStore.getState().syncRequest(restored)
@@ -157,7 +169,6 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (isDirty) {
       scheduleDraftSave(restored)
     } else {
-      // Back to saved state — cancel pending draft save and delete the draft
       if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
       window.api.drafts.request.delete({ requestId: restored.id })
     }
@@ -245,7 +256,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     // Delete the draft now that it has been promoted to long-term storage
     await window.api.drafts.request.delete({ requestId: editingRequest.id })
 
-    set({ editingRequest: saved })
+    set({ editingRequest: saved, savedRequest: JSON.parse(JSON.stringify(saved)) as Request })
     useCollectionsStore.getState().syncRequest(saved)
 
     // For git-sourced collections, mark the request as uncommitted to git
@@ -291,7 +302,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       isDirty: false,
       sortOrder: (data.sort_order as number) ?? 0,
     }
-    set({ editingRequest: saved })
+    set({ editingRequest: saved, savedRequest: JSON.parse(JSON.stringify(saved)) as Request })
     useCollectionsStore.getState().syncRequest(saved)
   },
 

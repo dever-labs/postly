@@ -60,6 +60,7 @@ export function GroupEditor({ groupId }: Props) {
   const undoStack = useRef<FormSnapshot[]>([])
   const lastUndoField = useRef<string | null>(null)
   const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedSnapshot = useRef<FormSnapshot | null>(null)
 
   const pushUndo = (snapshot: FormSnapshot) => {
     if (undoStack.current.length >= 50) undoStack.current.shift()
@@ -95,6 +96,14 @@ export function GroupEditor({ groupId }: Props) {
   useEffect(() => {
     if (!group) return
     const load = async () => {
+      // Capture saved state before any draft overlay
+      savedSnapshot.current = {
+        name: group.name,
+        description: group.description ?? '',
+        authType: group.authType,
+        authConfig: group.authConfig,
+        sslVerification: group.sslVerification ?? 'inherit',
+      }
       const { data } = await window.api.drafts.group.get({ groupId }) as { data: Record<string, unknown> | null }
       if (data) {
         setName((data.name as string) ?? group.name)
@@ -200,7 +209,9 @@ export function GroupEditor({ groupId }: Props) {
     setAuthType(previous.authType)
     setAuthConfig(previous.authConfig)
     setSslVerification(previous.sslVerification)
-    if (undoStack.current.length === 0) {
+    // Dirty only if the restored snapshot differs from the originally saved state
+    const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
+    if (atSaved) {
       setIsDirty(false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
       window.api.drafts.group.delete({ groupId })
@@ -212,8 +223,6 @@ export function GroupEditor({ groupId }: Props) {
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      const el = document.activeElement
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
       e.preventDefault()
       handleUndo()
     }
