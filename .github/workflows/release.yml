@@ -1,12 +1,13 @@
 # Release
 #
-# Triggered automatically when release-please merges its Release PR and creates
-# a GitHub release (see .github/workflows/version.yml).  Runs CI then builds
-# and publishes the cross-platform Electron binaries as release assets.
+# Triggered when a GitHub release is published (manually via the GitHub UI or
+# API).  The release tag (e.g. v0.3.0) is used as the app version — package.json
+# does NOT need to be updated before releasing.
 #
-# To release manually (e.g. a hotfix), publish a GitHub release with a tag that
-# matches the version in package.json (e.g. v0.2.2) — this workflow will fire
-# in the same way.
+# Steps to release:
+#   1. Go to GitHub → Releases → Draft a new release
+#   2. Create a tag (e.g. v0.3.0) and publish the release
+#   3. This workflow runs CI, then builds and uploads binaries for all platforms
 
 name: Release
 
@@ -96,4 +97,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing — set CSC_LINK / CSC_KEY_PASSWORD for signed builds
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --${{ matrix.platform }} --publish always
+        # Strip the leading 'v' from the tag (v1.2.3 → 1.2.3) and inject it
+        # as the app version so package.json never needs to be updated manually.
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          npx electron-builder --${{ matrix.platform }} --publish always \
+            --config.extraMetadata.version="$VERSION"
