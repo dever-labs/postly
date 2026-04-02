@@ -66,7 +66,7 @@ test(ipc): cover SSL flag forwarding
 ### Rules (enforced by commitlint)
 
 - Subject line **≤ 72 characters**
-- Subject line **lowercase** — no capital first letter, no trailing period
+- Subject line **no trailing period**
 - **No `WIP` commits** merged to main
 - Body lines **≤ 100 characters**
 
@@ -86,7 +86,6 @@ ci: add commitlint check to pull-request workflow
 
 ```
 Fixed bug                        # no type
-feat: Fixed bug                  # capitalised, past-tense
 feat: add new thing.             # trailing period
 WIP: experimenting               # WIP not allowed
 FEAT: add thing                  # type must be lowercase
