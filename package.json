@@ -141,6 +141,8 @@
     "dompurify": "^3.3.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^10.0.1",

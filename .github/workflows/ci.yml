@@ -11,6 +11,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  commitlint:
+    name: Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Lint commit messages
+        env:
+          COMMITLINT_FROM: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          COMMITLINT_TO: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: npx commitlint --config commitlint.config.mjs --from "$COMMITLINT_FROM" --to "$COMMITLINT_TO" --verbose
+
   lint-and-typecheck:
     name: Lint & Typecheck
     runs-on: ubuntu-latest

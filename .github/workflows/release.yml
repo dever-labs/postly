@@ -1,3 +1,13 @@
+# Release
+#
+# Triggered automatically when release-please merges its Release PR and creates
+# a GitHub release (see .github/workflows/version.yml).  Runs CI then builds
+# and publishes the cross-platform Electron binaries as release assets.
+#
+# To release manually (e.g. a hotfix), publish a GitHub release with a tag that
+# matches the version in package.json (e.g. v0.2.2) — this workflow will fire
+# in the same way.
+
 name: Release
 
 on:
@@ -9,18 +19,8 @@ permissions:
 
 jobs:
   ci:
-    name: CI · ${{ matrix.label }}
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: Lint & Typecheck & Test
-          - os: windows-latest
-            label: Build check (Windows)
-          - os: macos-latest
-            label: Build check (macOS)
-    runs-on: ${{ matrix.os }}
+    name: CI · Lint, Typecheck & Test
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -35,19 +35,13 @@ jobs:
         run: npm ci
 
       - name: Lint
-        if: matrix.os == 'ubuntu-latest'
         run: npm run lint
 
       - name: Typecheck
-        if: matrix.os == 'ubuntu-latest'
         run: npm run typecheck
 
       - name: Test
-        if: matrix.os == 'ubuntu-latest'
         run: npm test
-
-      - name: Build (electron-vite)
-        run: npm run build
 
   build:
     needs: [ci]

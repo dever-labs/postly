@@ -1,0 +1,19 @@
+# <type>(<scope>): <short description>   ← 72 chars max, lowercase, no period
+#
+# Types: feat | fix | security | perf | refactor | revert
+#        docs | test | chore | build | ci
+#
+# Append ! for breaking changes: feat!: ...
+#
+# Examples:
+#   feat(oauth): add client_credentials grant
+#   fix(http): resolve ssl flag not forwarded to token request
+#   chore(deps): bump axios to 2.x
+#   ci: add commitlint to pull-request workflow
+#
+# Body (optional) — wrap at 100 chars, explain WHY not what
+#
+# Footer (optional):
+#   BREAKING CHANGE: describe what breaks and how to migrate
+#   Closes #<issue>
+#   Co-authored-by: Name <email>
