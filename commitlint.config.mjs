@@ -9,6 +9,7 @@ export default {
       ['feat', 'fix', 'security', 'perf', 'refactor', 'revert', 'docs', 'test', 'chore', 'build', 'ci'],
     ],
     'subject-full-stop': [2, 'never', '.'],
+    'subject-case': [0],
     'header-max-length': [2, 'always', 72],
     'body-max-line-length': [2, 'always', 100],
   },
