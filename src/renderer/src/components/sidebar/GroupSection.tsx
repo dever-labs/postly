@@ -107,6 +107,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
 
       {/* Chevron — expand/collapse only */}
       <button
+        data-testid={`collection-toggle-${collection.id}`}
         onClick={(e) => { e.stopPropagation(); onToggle() }}
         className="shrink-0 rounded-sm p-0.5 focus:outline-hidden"
       >
@@ -398,7 +399,10 @@ export function GroupSection({ source, integration, collections, groups, request
       {/* Source header */}
       <div className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
         <Collapsible.Trigger asChild>
-          <button className="shrink-0 rounded-sm p-0.5 focus:outline-hidden">
+          <button
+            data-testid={`source-toggle-${source}`}
+            className="shrink-0 rounded-sm p-0.5 focus:outline-hidden"
+          >
             {isSourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         </Collapsible.Trigger>
@@ -469,7 +473,7 @@ export function GroupSection({ source, integration, collections, groups, request
       </div>
 
       <Collapsible.Content>
-        <div className={cn(isSourceHidden && 'opacity-40')}>
+        <div data-testid={`source-content-${source}`} className={cn(isSourceHidden && 'opacity-40')}>
           {sourceCollections.length === 0 && !addingCollection && (
             <div className="mx-3 my-2 rounded-sm border border-dashed border-th-border px-3 py-3 text-center">
               <p className="text-xs text-th-text-faint">No collections yet</p>
@@ -527,7 +531,7 @@ export function GroupSection({ source, integration, collections, groups, request
                 )}
 
                 {(isOpen || !!searchQuery) && (
-                  <div className="pl-3">
+                  <div data-testid={`collection-content-${collection.id}`} className="pl-3">
                     <SortableContext items={collectionGroups.map((g) => `grp:${g.id}`)} strategy={verticalListSortingStrategy}>
                       {collectionGroups.map((group) => (
                         <SortableGroupRow
