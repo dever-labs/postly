@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
@@ -53,16 +53,48 @@ export function CollectionEditor({ collectionId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleDraft = (fields: {
+    name: string; description: string
+    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
+  }) => {
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draftTimer.current = null
+      window.api.drafts.collection.upsert({
+        collectionId,
+        name: fields.name,
+        description: fields.description,
+        authType: fields.authType,
+        authConfig: JSON.stringify(fields.authConfig),
+        sslVerification: fields.sslVerification,
+      })
+    }, 500)
+  }
 
   useEffect(() => {
-    if (collection) {
-      setName(collection.name)
-      setDescription(collection.description ?? '')
-      setAuthType(collection.authType)
-      setAuthConfig(collection.authConfig)
-      setSslVerification(collection.sslVerification ?? 'inherit')
-      setIsDirty(false)
+    if (!collection) return
+    const load = async () => {
+      const { data } = await window.api.drafts.collection.get({ collectionId }) as { data: Record<string, unknown> | null }
+      if (data) {
+        setName((data.name as string) ?? collection.name)
+        setDescription((data.description as string) ?? collection.description ?? '')
+        setAuthType(((data.auth_type as AuthType) ?? collection.authType))
+        setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
+        setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
+        setIsDirty(true)
+      } else {
+        setName(collection.name)
+        setDescription(collection.description ?? '')
+        setAuthType(collection.authType)
+        setAuthConfig(collection.authConfig)
+        setSslVerification(collection.sslVerification ?? 'inherit')
+        setIsDirty(false)
+      }
     }
+    load()
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
   }, [collectionId, collection])
 
   if (!collection) {
@@ -73,7 +105,9 @@ export function CollectionEditor({ collectionId }: Props) {
   const inheritedFrom = integration?.token ? integration.name : undefined
   const isGit = ['git', 'github', 'gitlab'].includes(collection.source)
 
-  const discard = () => {
+  const discard = async () => {
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    await window.api.drafts.collection.delete({ collectionId })
     setName(collection.name)
     setDescription(collection.description ?? '')
     setAuthType(collection.authType)
@@ -84,8 +118,10 @@ export function CollectionEditor({ collectionId }: Props) {
 
   const save = async () => {
     if (!name.trim()) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     setSaving(true)
     await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await window.api.drafts.collection.delete({ collectionId })
     setSaving(false)
     setIsDirty(false)
     if (isGit) {
@@ -95,7 +131,19 @@ export function CollectionEditor({ collectionId }: Props) {
     }
   }
 
-  const mark = () => setIsDirty(true)
+  const mark = (fields?: {
+    name?: string; description?: string
+    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
+  }) => {
+    setIsDirty(true)
+    scheduleDraft({
+      name: fields?.name ?? name,
+      description: fields?.description ?? description,
+      authType: fields?.authType ?? authType,
+      authConfig: fields?.authConfig ?? authConfig,
+      sslVerification: fields?.sslVerification ?? sslVerification,
+    })
+  }
 
   return (
     <div className="bg-th-bg w-full">
@@ -122,7 +170,7 @@ export function CollectionEditor({ collectionId }: Props) {
             className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Collection name"
             value={name}
-            onChange={(e) => { setName(e.target.value); mark() }}
+            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }) }}
           />
           <p className="mt-1 text-xs text-th-text-muted">Collection</p>
           <AiActionButton
@@ -138,7 +186,7 @@ export function CollectionEditor({ collectionId }: Props) {
             placeholder="Describe what this collection is for, which services it covers, etc."
             rows={4}
             value={description}
-            onChange={(e) => { setDescription(e.target.value); mark() }}
+            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }) }}
           />
         </Section>
 
@@ -148,7 +196,7 @@ export function CollectionEditor({ collectionId }: Props) {
           <AuthEditor
             authType={authType}
             authConfig={authConfig}
-            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark() }}
+            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }) }}
             inheritedFrom={inheritedFrom}
             canInherit={false}
           />
@@ -159,7 +207,7 @@ export function CollectionEditor({ collectionId }: Props) {
           <p className="mb-3 text-xs text-th-text-faint">Default SSL setting for all requests in this collection. Can be overridden per group or request.</p>
           <SslEditor
             value={sslVerification}
-            onChange={(v) => { setSslVerification(v); mark() }}
+            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }) }}
             canInherit={false}
           />
         </Section>

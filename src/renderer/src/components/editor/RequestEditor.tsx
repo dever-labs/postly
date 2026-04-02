@@ -51,7 +51,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, saveRequest } = useRequestsStore()
+  const { editingRequest, isLoading, updateField, sendRequest, saveRequest, discardDraft } = useRequestsStore()
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -198,6 +198,15 @@ export function RequestEditor() {
         >
           <Save className="h-4 w-4" />
         </button>
+        {editingRequest.isDirty && (
+          <button
+            onClick={discardDraft}
+            className="rounded-sm px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
+            title="Discard unsaved changes"
+          >
+            Discard
+          </button>
+        )}
       </div>
 
       {/* Protocol-specific content area */}

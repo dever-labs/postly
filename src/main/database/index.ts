@@ -61,6 +61,32 @@ function runMigrations(): void {
   try { db.run("ALTER TABLE requests ADD COLUMN protocol_config TEXT NOT NULL DEFAULT '{}'") } catch {}
   // Collections collapsed state
   try { db.run('ALTER TABLE collections ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0') } catch {}
+  // Draft cache tables (Issue #14) — changes are auto-saved here until explicit save
+  db.run(`CREATE TABLE IF NOT EXISTS request_drafts (
+    request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+    method TEXT, url TEXT, params TEXT, headers TEXT,
+    body_type TEXT, body_content TEXT,
+    auth_type TEXT, auth_config TEXT,
+    ssl_verification TEXT, protocol TEXT, protocol_config TEXT,
+    updated_at INTEGER NOT NULL
+  )`)
+  db.run(`CREATE TABLE IF NOT EXISTS collection_drafts (
+    collection_id TEXT PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,
+    name TEXT, description TEXT,
+    auth_type TEXT, auth_config TEXT, ssl_verification TEXT,
+    updated_at INTEGER NOT NULL
+  )`)
+  db.run(`CREATE TABLE IF NOT EXISTS group_drafts (
+    group_id TEXT PRIMARY KEY REFERENCES groups(id) ON DELETE CASCADE,
+    name TEXT, description TEXT,
+    auth_type TEXT, auth_config TEXT, ssl_verification TEXT,
+    updated_at INTEGER NOT NULL
+  )`)
+  db.run(`CREATE TABLE IF NOT EXISTS env_drafts (
+    env_id TEXT PRIMARY KEY REFERENCES environments(id) ON DELETE CASCADE,
+    vars_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`)
 }
 
 /** Flush the in-memory DB to disk. Call after every write. */

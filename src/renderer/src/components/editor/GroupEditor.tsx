@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
@@ -54,18 +54,50 @@ export function GroupEditor({ groupId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleDraft = (fields: {
+    name: string; description: string
+    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
+  }) => {
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draftTimer.current = null
+      window.api.drafts.group.upsert({
+        groupId,
+        name: fields.name,
+        description: fields.description,
+        authType: fields.authType,
+        authConfig: JSON.stringify(fields.authConfig),
+        sslVerification: fields.sslVerification,
+      })
+    }, 500)
+  }
 
   const collection = group ? collections.find((c) => c.id === group.collectionId) : null
 
   useEffect(() => {
-    if (group) {
-      setName(group.name)
-      setDescription(group.description ?? '')
-      setAuthType(group.authType)
-      setAuthConfig(group.authConfig)
-      setSslVerification(group.sslVerification ?? 'inherit')
-      setIsDirty(false)
+    if (!group) return
+    const load = async () => {
+      const { data } = await window.api.drafts.group.get({ groupId }) as { data: Record<string, unknown> | null }
+      if (data) {
+        setName((data.name as string) ?? group.name)
+        setDescription((data.description as string) ?? group.description ?? '')
+        setAuthType(((data.auth_type as AuthType) ?? group.authType))
+        setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : group.authConfig)
+        setSslVerification(((data.ssl_verification as SslVerification) ?? group.sslVerification ?? 'inherit'))
+        setIsDirty(true)
+      } else {
+        setName(group.name)
+        setDescription(group.description ?? '')
+        setAuthType(group.authType)
+        setAuthConfig(group.authConfig)
+        setSslVerification(group.sslVerification ?? 'inherit')
+        setIsDirty(false)
+      }
     }
+    load()
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
   }, [groupId, group])
 
   if (!group) {
@@ -81,7 +113,9 @@ export function GroupEditor({ groupId }: Props) {
     inheritedAuthFrom = integration.name
   }
 
-  const discard = () => {
+  const discard = async () => {
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    await window.api.drafts.group.delete({ groupId })
     setName(group.name)
     setDescription(group.description ?? '')
     setAuthType(group.authType)
@@ -92,8 +126,10 @@ export function GroupEditor({ groupId }: Props) {
 
   const save = async () => {
     if (!name.trim()) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     setSaving(true)
     await updateGroup(groupId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await window.api.drafts.group.delete({ groupId })
     setSaving(false)
     setIsDirty(false)
     const isGit = collection && ['git', 'github', 'gitlab'].includes(collection.source)
@@ -104,7 +140,19 @@ export function GroupEditor({ groupId }: Props) {
     }
   }
 
-  const mark = () => setIsDirty(true)
+  const mark = (fields?: {
+    name?: string; description?: string
+    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
+  }) => {
+    setIsDirty(true)
+    scheduleDraft({
+      name: fields?.name ?? name,
+      description: fields?.description ?? description,
+      authType: fields?.authType ?? authType,
+      authConfig: fields?.authConfig ?? authConfig,
+      sslVerification: fields?.sslVerification ?? sslVerification,
+    })
+  }
 
   return (
     <div className="bg-th-bg w-full">
@@ -143,7 +191,7 @@ export function GroupEditor({ groupId }: Props) {
             className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Group name"
             value={name}
-            onChange={(e) => { setName(e.target.value); mark() }}
+            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }) }}
           />
           <p className="mt-1 text-xs text-th-text-faint">Group</p>
           <AiActionButton
@@ -159,7 +207,7 @@ export function GroupEditor({ groupId }: Props) {
             placeholder="Describe what this group contains, e.g. which service or feature area."
             rows={4}
             value={description}
-            onChange={(e) => { setDescription(e.target.value); mark() }}
+            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }) }}
           />
         </Section>
 
@@ -171,7 +219,7 @@ export function GroupEditor({ groupId }: Props) {
           <AuthEditor
             authType={authType}
             authConfig={authConfig}
-            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark() }}
+            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }) }}
             inheritedFrom={inheritedAuthFrom}
             canInherit={true}
           />
@@ -184,7 +232,7 @@ export function GroupEditor({ groupId }: Props) {
           </p>
           <SslEditor
             value={sslVerification}
-            onChange={(v) => { setSslVerification(v); mark() }}
+            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }) }}
             inheritedFrom={collection?.sslVerification !== 'inherit' ? collection?.name : undefined}
           />
         </Section>

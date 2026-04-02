@@ -13,6 +13,7 @@ interface RequestsState {
   updateField: (field: keyof Request, value: unknown) => void
   sendRequest: () => Promise<void>
   saveRequest: () => Promise<void>
+  discardDraft: () => Promise<void>
   clearDirty: (requestId: string) => void
 }
 
@@ -22,21 +23,65 @@ const DIRTY_FIELDS = new Set<keyof Request>([
   'sslVerification', 'protocol', 'protocolConfig',
 ])
 
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleDraftSave(request: Request): void {
+  if (draftSaveTimer) clearTimeout(draftSaveTimer)
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null
+    const s = serializeRequest(request)
+    window.api.drafts.request.upsert({
+      requestId: request.id,
+      method: s.method as string | undefined,
+      url: s.url as string | undefined,
+      params: typeof s.params === 'string' ? s.params : JSON.stringify(s.params),
+      headers: typeof s.headers === 'string' ? s.headers : JSON.stringify(s.headers),
+      bodyType: s.bodyType as string | undefined,
+      bodyContent: s.bodyContent as string | undefined,
+      authType: s.authType as string | undefined,
+      authConfig: typeof s.authConfig === 'string' ? s.authConfig : JSON.stringify(s.authConfig),
+      sslVerification: s.sslVerification as string | undefined,
+      protocol: s.protocol as string | undefined,
+      protocolConfig: typeof s.protocolConfig === 'string' ? s.protocolConfig : JSON.stringify(s.protocolConfig),
+    })
+  }, 500)
+}
+
 export const useRequestsStore = create<RequestsState>((set, get) => ({
   activeRequestId: null,
   editingRequest: null,
   response: null,
   isLoading: false,
 
-  setActiveRequest: (request: Request) => {
-    set({
-      activeRequestId: request.id,
-      editingRequest: JSON.parse(JSON.stringify(request)) as Request,
-      response: null,
-    })
+  setActiveRequest: async (request: Request) => {
+    const base: Request = JSON.parse(JSON.stringify(request)) as Request
+    // Check for a persisted draft and merge it over the saved record
+    try {
+      const { data } = await window.api.drafts.request.get({ requestId: request.id }) as { data: Record<string, unknown> | null }
+      if (data) {
+        if (data.method != null) base.method = data.method as Request['method']
+        if (data.url != null) base.url = data.url as string
+        if (data.params != null) base.params = typeof data.params === 'string' ? JSON.parse(data.params as string) : data.params as Request['params']
+        if (data.headers != null) base.headers = typeof data.headers === 'string' ? JSON.parse(data.headers as string) : data.headers as Request['headers']
+        if (data.body_type != null) base.bodyType = data.body_type as Request['bodyType']
+        if (data.body_content != null) base.bodyContent = data.body_content as string
+        if (data.auth_type != null) base.authType = data.auth_type as Request['authType']
+        if (data.auth_config != null) base.authConfig = typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : data.auth_config as Record<string, string>
+        if (data.ssl_verification != null) base.sslVerification = data.ssl_verification as Request['sslVerification']
+        if (data.protocol != null) base.protocol = data.protocol as Request['protocol']
+        if (data.protocol_config != null) base.protocolConfig = typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : data.protocol_config as Record<string, string>
+        base.isDirty = true
+        // Reflect dirty in sidebar
+        useCollectionsStore.getState().syncRequest({ ...request, isDirty: true })
+      }
+    } catch {
+      // Draft load failure is non-fatal — fall back to saved request
+    }
+    set({ activeRequestId: request.id, editingRequest: base, response: null })
   },
 
   clearActiveRequest: () => {
+    if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
     set({ activeRequestId: null, editingRequest: null, response: null })
   },
 
@@ -46,10 +91,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       const updated: Request = { ...state.editingRequest, [field]: value }
       if (DIRTY_FIELDS.has(field)) {
         updated.isDirty = true
-        // On the first dirty change, push the flag to the sidebar immediately
         if (!state.editingRequest.isDirty) {
           useCollectionsStore.getState().syncRequest({ ...state.editingRequest, isDirty: true })
         }
+        scheduleDraftSave(updated)
       }
       return { editingRequest: updated }
     })
@@ -122,6 +167,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const { editingRequest } = get()
     if (!editingRequest) return
 
+    // Cancel any pending draft save
+    if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+
     // Clear dirty flag before serializing so the DB is written with is_dirty = 0
     const saved = { ...editingRequest, isDirty: false }
     const payload = serializeRequest(saved)
@@ -130,6 +178,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       console.error('Failed to save request:', error)
       return
     }
+    // Delete the draft now that it has been promoted to long-term storage
+    await window.api.drafts.request.delete({ requestId: editingRequest.id })
+
     set({ editingRequest: saved })
     useCollectionsStore.getState().syncRequest(saved)
 
@@ -140,6 +191,43 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (['git', 'github', 'gitlab'].includes(collection?.source ?? '')) {
       markDirty(editingRequest.id)
     }
+  },
+
+  discardDraft: async () => {
+    const { editingRequest } = get()
+    if (!editingRequest) return
+
+    if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    await window.api.drafts.request.delete({ requestId: editingRequest.id })
+
+    // Reload the saved request from the DB
+    const { data } = await window.api.requests.get({ id: editingRequest.id }) as { data: Record<string, unknown> | null }
+    if (!data) return
+
+    // Normalise snake_case DB row to camelCase Request
+    const saved: Request = {
+      id: data.id as string,
+      groupId: data.group_id as string,
+      name: data.name as string,
+      protocol: (data.protocol as Request['protocol']) ?? 'http',
+      method: data.method as Request['method'],
+      url: data.url as string,
+      params: typeof data.params === 'string' ? JSON.parse(data.params as string) : (data.params as Request['params']) ?? [],
+      headers: typeof data.headers === 'string' ? JSON.parse(data.headers as string) : (data.headers as Request['headers']) ?? [],
+      bodyType: (data.body_type as Request['bodyType']) ?? 'none',
+      bodyContent: (data.body_content as string) ?? '',
+      authType: (data.auth_type as Request['authType']) ?? 'none',
+      authConfig: typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : (data.auth_config as Record<string, string>) ?? {},
+      protocolConfig: typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : (data.protocol_config as Record<string, string>) ?? {},
+      sslVerification: (data.ssl_verification as Request['sslVerification']) ?? 'inherit',
+      description: data.description as string | undefined,
+      scmPath: data.scm_path as string | undefined,
+      scmSha: data.scm_sha as string | undefined,
+      isDirty: false,
+      sortOrder: (data.sort_order as number) ?? 0,
+    }
+    set({ editingRequest: saved })
+    useCollectionsStore.getState().syncRequest(saved)
   },
 
   clearDirty: (requestId: string) => {

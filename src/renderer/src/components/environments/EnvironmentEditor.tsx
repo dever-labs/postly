@@ -1,5 +1,5 @@
-import { Check, Eye, EyeOff, Plus, Save, Search, Trash2 } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import { Check, Eye, EyeOff, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -66,12 +66,54 @@ export function EnvironmentEditor() {
   const envVars = vars.filter((v) => v.envId === selectedEnvId)
 
   const [name, setName] = useState(env?.name ?? '')
-  const [localVars, setLocalVars] = useState<EnvVar[]>([])
+  const [localVars, setLocalVarsState] = useState<EnvVar[]>([])
   const [saved, setSaved] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const [varSearch, setVarSearch] = useState('')
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { setName(env?.name ?? '') }, [env?.id, env?.name])
-  useEffect(() => { setLocalVars(envVars) }, [env?.id, vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  const scheduleDraft = (vars: EnvVar[]) => {
+    if (!env) return
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draftTimer.current = null
+      window.api.drafts.env.upsert({ envId: env.id, varsJson: JSON.stringify(vars) })
+    }, 500)
+  }
+
+  const setLocalVars = (updater: EnvVar[] | ((prev: EnvVar[]) => EnvVar[])) => {
+    setLocalVarsState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      setIsDirty(true)
+      scheduleDraft(next)
+      return next
+    })
+  }
+
+  // Load from draft or store when selected env changes
+  useEffect(() => {
+    setName(env?.name ?? '')
+    if (!env) { setLocalVarsState([]); setIsDirty(false); return }
+    const load = async () => {
+      const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
+      if (data?.vars_json) {
+        try {
+          setLocalVarsState(JSON.parse(data.vars_json as string) as EnvVar[])
+          setIsDirty(true)
+          return
+        } catch { /* fall through */ }
+      }
+      setLocalVarsState(envVars)
+      setIsDirty(false)
+    }
+    load()
+    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
+  }, [env?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reflect external store changes (e.g., after full load) when not dirty
+  useEffect(() => {
+    if (!isDirty) setLocalVarsState(envVars)
+  }, [vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNameBlur = async () => {
     if (!env || !name.trim() || name.trim() === env.name) return
@@ -81,11 +123,27 @@ export function EnvironmentEditor() {
 
   const handleSave = async () => {
     if (!env) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     for (const v of localVars) {
       await upsertVar(env.id, v.key, v.value, v.isSecret, v.id)
     }
+    // Remove vars from the store that were deleted in the draft
+    const savedIds = new Set(localVars.map((v) => v.id))
+    for (const v of envVars) {
+      if (!savedIds.has(v.id)) await deleteVar(v.id)
+    }
+    await window.api.drafts.env.delete({ envId: env.id })
+    setIsDirty(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleDiscard = async () => {
+    if (!env) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    await window.api.drafts.env.delete({ envId: env.id })
+    setLocalVarsState(envVars)
+    setIsDirty(false)
   }
 
   const handleAddVar = () => {
@@ -94,9 +152,8 @@ export function EnvironmentEditor() {
     setLocalVars((prev) => [...prev, newVar])
   }
 
-  const handleDeleteVar = async (id: string) => {
+  const handleDeleteVar = (id: string) => {
     setLocalVars((prev) => prev.filter((v) => v.id !== id))
-    await deleteVar(id)
   }
 
   const handleDelete = async () => {
@@ -204,18 +261,29 @@ export function EnvironmentEditor() {
           <Plus className="h-4 w-4" /> Add variable
         </button>
 
-        <button
-          onClick={handleSave}
-          className={cn(
-            'mt-4 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
-            saved
-              ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
-              : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
+              saved
+                ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
+                : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
+            )}
+          >
+            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+            {saved ? 'Saved' : 'Save'}
+          </button>
+          {isDirty && (
+            <button
+              onClick={handleDiscard}
+              className="flex items-center gap-1.5 rounded-md border border-th-border px-4 py-2.5 text-sm text-th-text-subtle transition-colors hover:border-th-border-strong hover:text-th-text-primary focus:outline-hidden"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Discard changes
+            </button>
           )}
-        >
-          {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {saved ? 'Saved' : 'Save'}
-        </button>
+        </div>
       </div>
     </div>
   )

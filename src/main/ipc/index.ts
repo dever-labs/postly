@@ -14,6 +14,7 @@ import { registerGrpcHandlers } from './grpc'
 import { registerMqttHandlers } from './mqtt'
 import { registerAiHandlers } from './ai'
 import { registerExportImportHandlers } from './export-import'
+import { registerDraftHandlers } from './drafts'
 
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
@@ -32,4 +33,5 @@ export function registerAllIpcHandlers(): void {
   registerMqttHandlers()
   registerAiHandlers()
   registerExportImportHandlers()
+  registerDraftHandlers()
 }
