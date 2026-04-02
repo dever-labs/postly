@@ -99,61 +99,6 @@ export function registerHttpHandlers(): void {
         log('info', `Auth: ${resolvedAuthType} (inherited from ${authSource})`)
       }
 
-      // ── OAuth 2.0 token resolution ────────────────────────────────────────────
-      if (resolvedAuthType === 'oauth2') {
-        const cfg = {
-          id: '',
-          name: 'inline',
-          grantType: resolvedAuthConfig.grantType ?? 'authorization_code',
-          clientId: resolvedAuthConfig.clientId ?? '',
-          clientSecret: resolvedAuthConfig.clientSecret || undefined,
-          authUrl: resolvedAuthConfig.authUrl || undefined,
-          tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
-          scopes: resolvedAuthConfig.scopes ?? '',
-          redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
-        }
-        if (!cfg.clientId || !cfg.tokenUrl) {
-          log('error', 'OAuth 2.0: clientId and tokenUrl are required')
-          return { error: 'OAuth 2.0: clientId and tokenUrl are required.', logs }
-        }
-        let token = await getValidTokenForConfig(cfg)
-        if (token) {
-          log('info', `OAuth: using cached token (${formatExpiry(token.expiresAt ?? undefined)})`)
-        } else {
-          log('info', 'OAuth: no cached token — starting authorization flow')
-          try { token = await authorizeInline(cfg) } catch (e) {
-            log('error', `OAuth authorization failed: ${String(e)}`)
-            return { error: `OAuth authorization failed: ${String(e)}`, logs }
-          }
-          if (token) log('info', `OAuth: new token obtained (${formatExpiry(token.expiresAt ?? undefined)})`)
-        }
-        if (token) {
-          resolvedAuthType = 'bearer'
-          resolvedAuthConfig = { token: token.accessToken }
-        } else {
-          log('error', 'OAuth: no valid token — please authorize in the Auth tab')
-          return { error: 'OAuth: no valid token. Please authorize in the Auth tab.', logs }
-        }
-      }
-
-      // ── Environment variable interpolation ───────────────────────────────────
-      const urlCount = countInterpolations(req.url, envVars)
-      const headerCount = Object.values(req.headers).reduce((s, v) => s + countInterpolations(v, envVars), 0)
-      const totalCount = urlCount + headerCount
-      if (totalCount > 0) {
-        log('info', `Interpolated ${totalCount} environment variable${totalCount !== 1 ? 's' : ''}`)
-      }
-
-      const interpolatedReq: HttpRequest = {
-        ...req,
-        authType: resolvedAuthType,
-        authConfig: resolvedAuthConfig,
-        url: interpolateEnvVars(req.url, envVars),
-        headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k, interpolateEnvVars(v, envVars)])
-        )
-      }
-
       // ── Settings ─────────────────────────────────────────────────────────────
       const settingsRow = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
       let sslVerification = true, followRedirects = true, timeout = 30000
@@ -190,6 +135,61 @@ export function registerHttpHandlers(): void {
 
       if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
       if (!followRedirects) log('info', 'Following redirects: disabled')
+
+      // ── OAuth 2.0 token resolution ────────────────────────────────────────────
+      if (resolvedAuthType === 'oauth2') {
+        const cfg = {
+          id: '',
+          name: 'inline',
+          grantType: resolvedAuthConfig.grantType ?? 'authorization_code',
+          clientId: resolvedAuthConfig.clientId ?? '',
+          clientSecret: resolvedAuthConfig.clientSecret || undefined,
+          authUrl: resolvedAuthConfig.authUrl || undefined,
+          tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
+          scopes: resolvedAuthConfig.scopes ?? '',
+          redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
+        }
+        if (!cfg.clientId || !cfg.tokenUrl) {
+          log('error', 'OAuth 2.0: clientId and tokenUrl are required')
+          return { error: 'OAuth 2.0: clientId and tokenUrl are required.', logs }
+        }
+        let token = await getValidTokenForConfig(cfg, sslVerification)
+        if (token) {
+          log('info', `OAuth: using cached token (${formatExpiry(token.expiresAt ?? undefined)})`)
+        } else {
+          log('info', 'OAuth: no cached token — starting authorization flow')
+          try { token = await authorizeInline(cfg, sslVerification) } catch (e) {
+            log('error', `OAuth authorization failed: ${String(e)}`)
+            return { error: `OAuth authorization failed: ${String(e)}`, logs }
+          }
+          if (token) log('info', `OAuth: new token obtained (${formatExpiry(token.expiresAt ?? undefined)})`)
+        }
+        if (token) {
+          resolvedAuthType = 'bearer'
+          resolvedAuthConfig = { token: token.accessToken }
+        } else {
+          log('error', 'OAuth: no valid token — please authorize in the Auth tab')
+          return { error: 'OAuth: no valid token. Please authorize in the Auth tab.', logs }
+        }
+      }
+
+      // ── Environment variable interpolation ───────────────────────────────────
+      const urlCount = countInterpolations(req.url, envVars)
+      const headerCount = Object.values(req.headers).reduce((s, v) => s + countInterpolations(v, envVars), 0)
+      const totalCount = urlCount + headerCount
+      if (totalCount > 0) {
+        log('info', `Interpolated ${totalCount} environment variable${totalCount !== 1 ? 's' : ''}`)
+      }
+
+      const interpolatedReq: HttpRequest = {
+        ...req,
+        authType: resolvedAuthType,
+        authConfig: resolvedAuthConfig,
+        url: interpolateEnvVars(req.url, envVars),
+        headers: Object.fromEntries(
+          Object.entries(req.headers).map(([k, v]) => [k, interpolateEnvVars(v, envVars)])
+        )
+      }
 
       // ── Execute ───────────────────────────────────────────────────────────────
       const response = await executeRequest(interpolatedReq, {

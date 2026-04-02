@@ -1,5 +1,6 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, session } from 'electron'
 import crypto from 'crypto'
+import https from 'https'
 import axios from 'axios'
 import { queryOne, run } from '../database'
 
@@ -70,10 +71,12 @@ export function generateCodeChallenge(verifier: string): string {
  * Re-throws with the provider's error_description included so callers can
  * surface a meaningful message instead of the generic AxiosError string.
  */
-async function postTokenRequest(url: string, params: URLSearchParams): Promise<Record<string, unknown>> {
+async function postTokenRequest(url: string, params: URLSearchParams, sslVerification = true): Promise<Record<string, unknown>> {
   try {
+    const httpsAgent = sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
     const response = await axios.post(url, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      httpsAgent,
     })
     return response.data as Record<string, unknown>
   } catch (err) {
@@ -86,7 +89,7 @@ async function postTokenRequest(url: string, params: URLSearchParams): Promise<R
   }
 }
 
-export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
+export async function authorizeAuthCode(config: OAuthConfig, sslVerification = true): Promise<Token> {
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
@@ -101,11 +104,20 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
 
+  // Use a dedicated ephemeral partition when SSL verification is disabled so
+  // the auth login page loads against self-signed certificates without
+  // affecting the default session.
+  const partition = sslVerification ? undefined : 'oauth-ssl-disabled'
+  if (!sslVerification && partition) {
+    const s = session.fromPartition(partition)
+    s.setCertificateVerifyProc((_req, callback) => callback(0))
+  }
+
   const win = new BrowserWindow({
     width: 800,
     height: 600,
     autoHideMenuBar: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true }
+    webPreferences: { nodeIntegration: false, contextIsolation: true, partition }
   })
   // Register listener BEFORE loadURL so the redirect is caught even if
   // Keycloak completes it instantly (e.g. an existing session).
@@ -130,10 +142,10 @@ export async function authorizeAuthCode(config: OAuthConfig): Promise<Token> {
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
 }
 
-export async function clientCredentials(config: OAuthConfig): Promise<Token> {
+export async function clientCredentials(config: OAuthConfig, sslVerification = true): Promise<Token> {
   const params = new URLSearchParams({
     grant_type: 'client_credentials',
     client_id: config.clientId,
@@ -141,10 +153,10 @@ export async function clientCredentials(config: OAuthConfig): Promise<Token> {
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
 }
 
-export async function refreshTokenGrant(token: Token, config: OAuthConfig): Promise<Token> {
+export async function refreshTokenGrant(token: Token, config: OAuthConfig, sslVerification = true): Promise<Token> {
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: token.refreshToken ?? '',
@@ -153,7 +165,7 @@ export async function refreshTokenGrant(token: Token, config: OAuthConfig): Prom
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
   run('DELETE FROM tokens WHERE oauth_config_id = ?', [config.id])
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
 }
 
 function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token {
@@ -189,7 +201,7 @@ function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token 
   }
 }
 
-export async function getValidToken(oauthConfigId: string): Promise<Token | null> {
+export async function getValidToken(oauthConfigId: string, sslVerification = true): Promise<Token | null> {
   type TokenRow = { id: string; oauth_config_id: string; access_token: string; refresh_token: string | null; token_type: string; expires_at: number | null; scope: string | null; created_at: number }
   const row = queryOne<TokenRow>(
     'SELECT * FROM tokens WHERE oauth_config_id = ? ORDER BY created_at DESC LIMIT 1',
@@ -215,7 +227,7 @@ export async function getValidToken(oauthConfigId: string): Promise<Token | null
       const configRow = queryOne<ConfigRow>('SELECT * FROM oauth_configs WHERE id = ?', [oauthConfigId])
       if (configRow) {
         try {
-          return await refreshTokenGrant(token, rowToOAuthConfig(configRow))
+          return await refreshTokenGrant(token, rowToOAuthConfig(configRow), sslVerification)
         } catch {
           return null
         }
@@ -255,7 +267,7 @@ export function configHashKey(config: Pick<OAuthConfig, 'clientId' | 'tokenUrl' 
  * Like getValidToken but works with an inline config (no oauth_configs table row needed).
  * Looks up the token by a hash key and refreshes using the provided config if needed.
  */
-export async function getValidTokenForConfig(config: OAuthConfig): Promise<Token | null> {
+export async function getValidTokenForConfig(config: OAuthConfig, sslVerification = true): Promise<Token | null> {
   const key = configHashKey(config)
   type TokenRow = { id: string; oauth_config_id: string; access_token: string; refresh_token: string | null; token_type: string; expires_at: number | null; scope: string | null; created_at: number }
   const row = queryOne<TokenRow>(
@@ -279,7 +291,7 @@ export async function getValidTokenForConfig(config: OAuthConfig): Promise<Token
     if (token.refreshToken) {
       try {
         // Temporarily assign key as id for saveToken to use correct bucket
-        return await refreshTokenGrant(token, { ...config, id: key })
+        return await refreshTokenGrant(token, { ...config, id: key }, sslVerification)
       } catch {
         return null
       }
@@ -291,10 +303,10 @@ export async function getValidTokenForConfig(config: OAuthConfig): Promise<Token
 }
 
 /** Authorize using inline config and cache token by config hash. */
-export async function authorizeInline(config: OAuthConfig): Promise<Token> {
+export async function authorizeInline(config: OAuthConfig, sslVerification = true): Promise<Token> {
   const key = configHashKey(config)
   const cfg = { ...config, id: key }
   return config.grantType === 'client_credentials'
-    ? await clientCredentials(cfg)
-    : await authorizeAuthCode(cfg)
+    ? await clientCredentials(cfg, sslVerification)
+    : await authorizeAuthCode(cfg, sslVerification)
 }
