@@ -94,35 +94,39 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   response: null,
   isLoading: false,
 
-  setActiveRequest: async (request: Request) => {
+  setActiveRequest: (request: Request) => {
     // Flush any pending draft save for the outgoing request before switching
     flushPendingDraftSave()
     clearUndo()
     const saved: Request = JSON.parse(JSON.stringify(request)) as Request
     const base: Request = JSON.parse(JSON.stringify(request)) as Request
-    // Check for a persisted draft and merge it over the saved record
-    try {
-      const { data } = await window.api.drafts.request.get({ requestId: request.id }) as { data: Record<string, unknown> | null }
-      if (data) {
-        if (data.method != null) base.method = data.method as Request['method']
-        if (data.url != null) base.url = data.url as string
-        if (data.params != null) base.params = typeof data.params === 'string' ? JSON.parse(data.params as string) : data.params as Request['params']
-        if (data.headers != null) base.headers = typeof data.headers === 'string' ? JSON.parse(data.headers as string) : data.headers as Request['headers']
-        if (data.body_type != null) base.bodyType = data.body_type as Request['bodyType']
-        if (data.body_content != null) base.bodyContent = data.body_content as string
-        if (data.auth_type != null) base.authType = data.auth_type as Request['authType']
-        if (data.auth_config != null) base.authConfig = typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : data.auth_config as Record<string, string>
-        if (data.ssl_verification != null) base.sslVerification = data.ssl_verification as Request['sslVerification']
-        if (data.protocol != null) base.protocol = data.protocol as Request['protocol']
-        if (data.protocol_config != null) base.protocolConfig = typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : data.protocol_config as Record<string, string>
-        base.isDirty = true
-        // Reflect dirty in sidebar
-        useCollectionsStore.getState().syncRequest({ ...request, isDirty: true })
-      }
-    } catch {
-      // Draft load failure is non-fatal — fall back to saved request
-    }
+    // Set state immediately so the UI responds without waiting for IPC
     set({ activeRequestId: request.id, editingRequest: base, savedRequest: saved, response: null })
+    // Load any persisted draft in the background; discard result if user already moved on
+    void window.api.drafts.request.get({ requestId: request.id })
+      .then((result) => {
+        const { data } = result as { data: Record<string, unknown> | null }
+        if (!data || get().activeRequestId !== request.id) return
+        const draft: Request = JSON.parse(JSON.stringify(base)) as Request
+        if (data.method != null) draft.method = data.method as Request['method']
+        if (data.url != null) draft.url = data.url as string
+        if (data.params != null) draft.params = typeof data.params === 'string' ? JSON.parse(data.params as string) : data.params as Request['params']
+        if (data.headers != null) draft.headers = typeof data.headers === 'string' ? JSON.parse(data.headers as string) : data.headers as Request['headers']
+        if (data.body_type != null) draft.bodyType = data.body_type as Request['bodyType']
+        if (data.body_content != null) draft.bodyContent = data.body_content as string
+        if (data.auth_type != null) draft.authType = data.auth_type as Request['authType']
+        if (data.auth_config != null) draft.authConfig = typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : data.auth_config as Record<string, string>
+        if (data.ssl_verification != null) draft.sslVerification = data.ssl_verification as Request['sslVerification']
+        if (data.protocol != null) draft.protocol = data.protocol as Request['protocol']
+        if (data.protocol_config != null) draft.protocolConfig = typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : data.protocol_config as Record<string, string>
+        draft.isDirty = true
+        if (get().activeRequestId !== request.id) return
+        set({ editingRequest: draft })
+        useCollectionsStore.getState().syncRequest({ ...request, isDirty: true })
+      })
+      .catch(() => {
+        // Draft load failure is non-fatal — fall back to saved request already set above
+      })
   },
 
   clearActiveRequest: () => {

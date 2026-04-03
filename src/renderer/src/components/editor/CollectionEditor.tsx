@@ -55,6 +55,7 @@ export function CollectionEditor({ collectionId }: Props) {
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification } | null>(null)
 
   type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
   const undoStack = useRef<FormSnapshot[]>([])
@@ -77,9 +78,11 @@ export function CollectionEditor({ collectionId }: Props) {
     name: string; description: string
     authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
   }) => {
+    pendingDraftData.current = fields
     if (draftTimer.current) clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
       draftTimer.current = null
+      pendingDraftData.current = null
       window.api.drafts.collection.upsert({
         collectionId,
         name: fields.name,
@@ -102,26 +105,36 @@ export function CollectionEditor({ collectionId }: Props) {
         authConfig: collection.authConfig,
         sslVerification: collection.sslVerification ?? 'inherit',
       }
-      const { data } = await window.api.drafts.collection.get({ collectionId }) as { data: Record<string, unknown> | null }
-      if (data) {
-        setName((data.name as string) ?? collection.name)
-        setDescription((data.description as string) ?? collection.description ?? '')
-        setAuthType(((data.auth_type as AuthType) ?? collection.authType))
-        setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
-        setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
-        setIsDirty(true)
-      } else {
-        setName(collection.name)
-        setDescription(collection.description ?? '')
-        setAuthType(collection.authType)
-        setAuthConfig(collection.authConfig)
-        setSslVerification(collection.sslVerification ?? 'inherit')
-        setIsDirty(false)
-      }
+      try {
+        const { data } = await window.api.drafts.collection.get({ collectionId }) as { data: Record<string, unknown> | null }
+        if (data) {
+          setName((data.name as string) ?? collection.name)
+          setDescription((data.description as string) ?? collection.description ?? '')
+          setAuthType(((data.auth_type as AuthType) ?? collection.authType))
+          setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
+          setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
+          setIsDirty(true)
+          return
+        }
+      } catch { /* fall through to saved state */ }
+      setName(collection.name)
+      setDescription(collection.description ?? '')
+      setAuthType(collection.authType)
+      setAuthConfig(collection.authConfig)
+      setSslVerification(collection.sslVerification ?? 'inherit')
+      setIsDirty(false)
     }
     load()
     return () => {
-      if (draftTimer.current) clearTimeout(draftTimer.current)
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current)
+        draftTimer.current = null
+        const pending = pendingDraftData.current
+        if (pending) {
+          pendingDraftData.current = null
+          window.api.drafts.collection.upsert({ collectionId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+        }
+      }
       clearUndo()
       setEditorDirty(collectionId, false)
     }

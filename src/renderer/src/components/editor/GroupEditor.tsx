@@ -56,6 +56,7 @@ export function GroupEditor({ groupId }: Props) {
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification } | null>(null)
 
   type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
   const undoStack = useRef<FormSnapshot[]>([])
@@ -78,9 +79,11 @@ export function GroupEditor({ groupId }: Props) {
     name: string; description: string
     authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
   }) => {
+    pendingDraftData.current = fields
     if (draftTimer.current) clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
       draftTimer.current = null
+      pendingDraftData.current = null
       window.api.drafts.group.upsert({
         groupId,
         name: fields.name,
@@ -105,26 +108,36 @@ export function GroupEditor({ groupId }: Props) {
         authConfig: group.authConfig,
         sslVerification: group.sslVerification ?? 'inherit',
       }
-      const { data } = await window.api.drafts.group.get({ groupId }) as { data: Record<string, unknown> | null }
-      if (data) {
-        setName((data.name as string) ?? group.name)
-        setDescription((data.description as string) ?? group.description ?? '')
-        setAuthType(((data.auth_type as AuthType) ?? group.authType))
-        setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : group.authConfig)
-        setSslVerification(((data.ssl_verification as SslVerification) ?? group.sslVerification ?? 'inherit'))
-        setIsDirty(true)
-      } else {
-        setName(group.name)
-        setDescription(group.description ?? '')
-        setAuthType(group.authType)
-        setAuthConfig(group.authConfig)
-        setSslVerification(group.sslVerification ?? 'inherit')
-        setIsDirty(false)
-      }
+      try {
+        const { data } = await window.api.drafts.group.get({ groupId }) as { data: Record<string, unknown> | null }
+        if (data) {
+          setName((data.name as string) ?? group.name)
+          setDescription((data.description as string) ?? group.description ?? '')
+          setAuthType(((data.auth_type as AuthType) ?? group.authType))
+          setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : group.authConfig)
+          setSslVerification(((data.ssl_verification as SslVerification) ?? group.sslVerification ?? 'inherit'))
+          setIsDirty(true)
+          return
+        }
+      } catch { /* fall through to saved state */ }
+      setName(group.name)
+      setDescription(group.description ?? '')
+      setAuthType(group.authType)
+      setAuthConfig(group.authConfig)
+      setSslVerification(group.sslVerification ?? 'inherit')
+      setIsDirty(false)
     }
     load()
     return () => {
-      if (draftTimer.current) clearTimeout(draftTimer.current)
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current)
+        draftTimer.current = null
+        const pending = pendingDraftData.current
+        if (pending) {
+          pendingDraftData.current = null
+          window.api.drafts.group.upsert({ groupId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+        }
+      }
       clearUndo()
       setEditorDirty(groupId, false)
     }

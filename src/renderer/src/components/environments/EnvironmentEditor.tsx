@@ -71,6 +71,7 @@ export function EnvironmentEditor() {
   const [isDirty, setIsDirty] = useState(false)
   const [varSearch, setVarSearch] = useState('')
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftVars = useRef<EnvVar[] | null>(null)
   const undoStack = useRef<EnvVar[][]>([])
   const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedVars = useRef<EnvVar[]>([])
@@ -87,9 +88,11 @@ export function EnvironmentEditor() {
 
   const scheduleDraft = (vars: EnvVar[]) => {
     if (!env) return
+    pendingDraftVars.current = vars
     if (draftTimer.current) clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
       draftTimer.current = null
+      pendingDraftVars.current = null
       window.api.drafts.env.upsert({ envId: env.id, varsJson: JSON.stringify(vars) })
     }, 500)
   }
@@ -118,20 +121,30 @@ export function EnvironmentEditor() {
     const load = async () => {
       // Capture saved state before any draft overlay
       savedVars.current = envVars.map((v) => ({ ...v }))
-      const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
-      if (data?.vars_json) {
-        try {
-          setLocalVarsState(JSON.parse(data.vars_json as string) as EnvVar[])
-          setIsDirty(true)
-          return
-        } catch { /* fall through */ }
-      }
+      try {
+        const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
+        if (data?.vars_json) {
+          try {
+            setLocalVarsState(JSON.parse(data.vars_json as string) as EnvVar[])
+            setIsDirty(true)
+            return
+          } catch { /* fall through */ }
+        }
+      } catch { /* fall through to saved state */ }
       setLocalVarsState(envVars)
       setIsDirty(false)
     }
     load()
     return () => {
-      if (draftTimer.current) clearTimeout(draftTimer.current)
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current)
+        draftTimer.current = null
+        const pending = pendingDraftVars.current
+        if (env && pending) {
+          pendingDraftVars.current = null
+          window.api.drafts.env.upsert({ envId: env.id, varsJson: JSON.stringify(pending) })
+        }
+      }
       clearUndo()
     }
   }, [env?.id]) // eslint-disable-line react-hooks/exhaustive-deps
