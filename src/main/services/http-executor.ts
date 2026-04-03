@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
+import https from 'https'
 
 type LogLevel = 'info' | 'warn' | 'error'
 export interface LogEntry { level: LogLevel; message: string; detail?: string }
@@ -160,7 +161,8 @@ export async function executeRequest(
     timeout,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
-    httpsAgent: sslVerification ? undefined : new (require('https').Agent)({ rejectUnauthorized: false })
+    // lgtm[js/disabling-certificate-validation] — intentional user-controlled opt-in for self-signed certificates
+    httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
   }
 
   log('info', `→ ${req.method.toUpperCase()} ${req.url}`)
