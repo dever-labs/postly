@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useEnvAutocomplete } from '@/hooks/useEnvAutocomplete'
 import { useEnvironmentsStore } from '@/store/environments'
@@ -100,10 +100,15 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
   const vars = useEnvironmentsStore((s) => s.vars)
 
-  const [hitZones, setHitZones] = useState<TokenHitZone[]>([])
+  // hitZones only needed for mouse-move hit testing — use a ref to avoid
+  // triggering an extra render cycle on every keystroke
+  const hitZonesRef = useRef<TokenHitZone[]>([])
   const [hovered, setHovered] = useState<{ key: string; left: number } | null>(null)
 
-  const activeVars = vars.filter((v) => v.envId === activeEnv?.id)
+  const activeVars = useMemo(
+    () => vars.filter((v) => v.envId === activeEnv?.id),
+    [vars, activeEnv?.id],
+  )
   const hasVars = /\{\{[^}]+\}\}/.test(value)
   const segments = hasVars ? parseSegments(value, activeVars) : null
 
@@ -122,12 +127,12 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
     if (hasVars) applyOverlayStyle(inputRef.current?.scrollLeft ?? 0)
   }, [hasVars, value, applyOverlayStyle])
 
-  // Recompute hover hit zones whenever value changes
+  // Recompute hover hit zones whenever value changes (writes to ref, no re-render)
   const recalcHitZones = useCallback(() => {
     if (inputRef.current && hasVars) {
-      setHitZones(computeHitZones(value, inputRef.current))
+      hitZonesRef.current = computeHitZones(value, inputRef.current)
     } else {
-      setHitZones([])
+      hitZonesRef.current = []
     }
   }, [value, hasVars])
 
@@ -173,11 +178,11 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   // ─── Hover detection ─────────────────────────────────────────────────────────
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
-    if (!hasVars || hitZones.length === 0 || !wrapperRef.current) { setHovered(null); return }
+    if (!hasVars || hitZonesRef.current.length === 0 || !wrapperRef.current) { setHovered(null); return }
     const relX = e.clientX - wrapperRef.current.getBoundingClientRect().left
-    const hit = hitZones.find((h) => relX >= h.left && relX < h.left + h.width) ?? null
+    const hit = hitZonesRef.current.find((h) => relX >= h.left && relX < h.left + h.width) ?? null
     setHovered(hit ? { key: hit.key, left: hit.left } : null)
-  }, [hasVars, hitZones])
+  }, [hasVars])
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
