@@ -100,6 +100,8 @@ export function GroupEditor({ groupId }: Props) {
   useEffect(() => {
     if (!group) return
     const load = async () => {
+      // Reset dirty immediately so the sidebar indicator clears while draft loads
+      setEditorDirty(groupId, false)
       // Capture saved state before any draft overlay
       savedSnapshot.current = {
         name: group.name,
@@ -117,6 +119,7 @@ export function GroupEditor({ groupId }: Props) {
           setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : group.authConfig)
           setSslVerification(((data.ssl_verification as SslVerification) ?? group.sslVerification ?? 'inherit'))
           setIsDirty(true)
+          setEditorDirty(groupId, true)
           return
         }
       } catch { /* fall through to saved state */ }
@@ -143,9 +146,8 @@ export function GroupEditor({ groupId }: Props) {
     }
   }, [groupId, group])
 
-  useEffect(() => {
-    setEditorDirty(groupId, isDirty)
-  }, [groupId, isDirty])
+  // No separate isDirty sync effect — setEditorDirty is called directly
+  // in load/save/discard/mark/handleUndo to avoid stale-state race on group switch
 
   if (!group) {
     return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Group not found</div>
@@ -170,6 +172,7 @@ export function GroupEditor({ groupId }: Props) {
     setAuthConfig(group.authConfig)
     setSslVerification(group.sslVerification ?? 'inherit')
     setIsDirty(false)
+    setEditorDirty(groupId, false)
   }
 
   const save = async () => {
@@ -181,7 +184,8 @@ export function GroupEditor({ groupId }: Props) {
     await window.api.drafts.group.delete({ groupId })
     setSaving(false)
     setIsDirty(false)
-    const isGit = collection && ['git', 'github', 'gitlab'].includes(collection.source)
+    setEditorDirty(groupId, false)
+    const isGit= collection && ['git', 'github', 'gitlab'].includes(collection.source)
     if (isGit && collection) {
       openGitAction({ type: 'push', collectionId: collection.id, title: `Updated group '${name.trim()}'`, subtitle: collection.name })
     } else {
@@ -218,10 +222,13 @@ export function GroupEditor({ groupId }: Props) {
     const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
+      setEditorDirty(groupId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
       window.api.drafts.group.delete({ groupId })
     } else {
       setIsDirty(true)
+      setEditorDirty(groupId, true)
       scheduleDraft(newState)
     }
   }
@@ -240,10 +247,12 @@ export function GroupEditor({ groupId }: Props) {
     const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
+      setEditorDirty(groupId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
       window.api.drafts.group.delete({ groupId })
     } else {
       setIsDirty(true)
+      setEditorDirty(groupId, true)
       scheduleDraft(previous)
     }
   }

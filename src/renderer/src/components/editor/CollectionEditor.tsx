@@ -97,6 +97,8 @@ export function CollectionEditor({ collectionId }: Props) {
   useEffect(() => {
     if (!collection) return
     const load = async () => {
+      // Reset dirty immediately so the sidebar indicator clears while draft loads
+      setEditorDirty(collectionId, false)
       // Capture saved state before any draft overlay
       savedSnapshot.current = {
         name: collection.name,
@@ -114,6 +116,7 @@ export function CollectionEditor({ collectionId }: Props) {
           setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
           setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
           setIsDirty(true)
+          setEditorDirty(collectionId, true)
           return
         }
       } catch { /* fall through to saved state */ }
@@ -140,9 +143,8 @@ export function CollectionEditor({ collectionId }: Props) {
     }
   }, [collectionId, collection])
 
-  useEffect(() => {
-    setEditorDirty(collectionId, isDirty)
-  }, [collectionId, isDirty])
+  // No separate isDirty sync effect — setEditorDirty is called directly
+  // in load/save/discard/mark/handleUndo to avoid stale-state race on collection switch
 
   if (!collection) {
     return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Collection not found</div>
@@ -162,6 +164,7 @@ export function CollectionEditor({ collectionId }: Props) {
     setAuthConfig(collection.authConfig)
     setSslVerification(collection.sslVerification ?? 'inherit')
     setIsDirty(false)
+    setEditorDirty(collectionId, false)
   }
 
   const save = async () => {
@@ -173,6 +176,7 @@ export function CollectionEditor({ collectionId }: Props) {
     await window.api.drafts.collection.delete({ collectionId })
     setSaving(false)
     setIsDirty(false)
+    setEditorDirty(collectionId, false)
     if (isGit) {
       openGitAction({ type: 'push', collectionId, title: `Updated collection '${name.trim()}'` })
     } else {
@@ -213,10 +217,13 @@ export function CollectionEditor({ collectionId }: Props) {
     const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
+      setEditorDirty(collectionId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
       window.api.drafts.collection.delete({ collectionId })
     } else {
       setIsDirty(true)
+      setEditorDirty(collectionId, true)
       scheduleDraft(newState)
     }
   }
@@ -235,10 +242,12 @@ export function CollectionEditor({ collectionId }: Props) {
     const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
+      setEditorDirty(collectionId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
       window.api.drafts.collection.delete({ collectionId })
     } else {
       setIsDirty(true)
+      setEditorDirty(collectionId, true)
       scheduleDraft(previous)
     }
   }
