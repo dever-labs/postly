@@ -34,6 +34,8 @@ export function registerOAuthHandlers(): void {
 
   ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri: string }) => {
     try {
+      if (!args.redirectUri) return { error: 'redirectUri is required' }
+      try { new URL(args.redirectUri) } catch { return { error: 'redirectUri must be a valid absolute URL' } }
       const id = crypto.randomUUID(); const now = Date.now()
       run(
         `INSERT INTO oauth_configs (id, name, grant_type, client_id, client_secret, auth_url, token_url, scopes, redirect_uri, created_at, updated_at)

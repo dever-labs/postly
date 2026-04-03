@@ -92,6 +92,9 @@ async function postTokenRequest(url: string, params: URLSearchParams, sslVerific
 }
 
 export async function authorizeAuthCode(config: OAuthConfig, sslVerification = true): Promise<Token> {
+  if (!config.redirectUri) {
+    throw new Error('OAuth authorization_code flow requires a redirect URI.')
+  }
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')

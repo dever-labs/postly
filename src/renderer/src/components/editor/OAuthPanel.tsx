@@ -92,6 +92,10 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       setAuthError('Scopes are required. Enter at least one scope, e.g. "openid profile".')
       return
     }
+    if (grantType === 'authorization_code' && !authConfig.redirectUri?.trim()) {
+      setAuthError('Redirect URI is required for Authorization Code flow.')
+      return
+    }
     setAuthorizing(true)
     setAuthError(null)
     const config = buildInlineConfig(authConfig)
