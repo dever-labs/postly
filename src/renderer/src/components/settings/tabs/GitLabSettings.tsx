@@ -14,6 +14,16 @@ const DEFAULTS: GitLabSettings = {
   groups: [],
 }
 
+function safeGitLabUrl(baseUrl: string, path: string): string {
+  try {
+    const url = new URL(baseUrl)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '#'
+    return `${url.origin}${path}`
+  } catch {
+    return '#'
+  }
+}
+
 export function GitLabSettings() {
   const addToast = useUIStore((s) => s.addToast)
   const loadSettings = useSettingsStore((s) => s.load)
@@ -108,7 +118,7 @@ export function GitLabSettings() {
           <p className="mt-1 text-xs text-th-text-subtle">
             Register at{' '}
             <a
-              href={`${settings.baseUrl}/-/profile/applications`}
+              href={safeGitLabUrl(settings.baseUrl, '/-/profile/applications')}
               target="_blank"
               rel="noreferrer"
               className="text-blue-400 hover:underline"

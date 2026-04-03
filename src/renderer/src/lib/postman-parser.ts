@@ -115,7 +115,13 @@ export function isPostmanCollection(json: unknown): boolean {
   const info = obj['info']
   if (!info || typeof info !== 'object') return false
   const schema = (info as Record<string, unknown>)['schema']
-  return typeof schema === 'string' && schema.includes('getpostman.com')
+  if (typeof schema !== 'string') return false
+  try {
+    const { hostname } = new URL(schema)
+    return hostname === 'getpostman.com' || hostname.endsWith('.getpostman.com')
+  } catch {
+    return false
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
