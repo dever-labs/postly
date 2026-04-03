@@ -161,7 +161,6 @@ export async function executeRequest(
     timeout,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
-    // lgtm[js/disabling-certificate-validation] — intentional user-controlled opt-in for self-signed certificates
     httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
   }
 
