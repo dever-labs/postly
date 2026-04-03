@@ -6,9 +6,6 @@ import { queryOne, run } from '../database'
 
 const OAUTH_AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1000
 
-// Default redirect URI — must match the value in migrations.ts and any test fixtures.
-export const DEFAULT_OAUTH_REDIRECT_URI = 'http://localhost:9876/callback'
-
 export interface OAuthConfig {
   id: string
   name: string
@@ -259,7 +256,7 @@ function rowToOAuthConfig(row: OAuthConfigRow): OAuthConfig {
     authUrl: row.auth_url ?? undefined,
     tokenUrl: row.token_url,
     scopes: row.scopes ?? '',
-    redirectUri: row.redirect_uri ?? DEFAULT_OAUTH_REDIRECT_URI
+    redirectUri: row.redirect_uri
   }
 }
 

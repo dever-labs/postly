@@ -8,7 +8,6 @@ import {
   getValidTokenForConfig,
   authorizeInline,
   configHashKey,
-  DEFAULT_OAUTH_REDIRECT_URI,
   OAuthConfig
 } from '../services/oauth'
 
@@ -22,7 +21,7 @@ function rowToConfig(row: Record<string, unknown>): OAuthConfig {
     authUrl: row['auth_url'] ? String(row['auth_url']) : undefined,
     tokenUrl: String(row['token_url']),
     scopes: String(row['scopes'] ?? ''),
-    redirectUri: String(row['redirect_uri'] ?? DEFAULT_OAUTH_REDIRECT_URI)
+    redirectUri: String(row['redirect_uri'])
   }
 }
 
@@ -33,14 +32,14 @@ export function registerOAuthHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri?: string }) => {
+  ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri: string }) => {
     try {
       const id = crypto.randomUUID(); const now = Date.now()
       run(
         `INSERT INTO oauth_configs (id, name, grant_type, client_id, client_secret, auth_url, token_url, scopes, redirect_uri, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, args.name, args.grantType, args.clientId, args.clientSecret ?? null, args.authUrl ?? null,
-         args.tokenUrl, args.scopes ?? '', args.redirectUri ?? DEFAULT_OAUTH_REDIRECT_URI, now, now]
+         args.tokenUrl, args.scopes ?? '', args.redirectUri, now, now]
       )
       const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])
       return { data: row ? rowToConfig(row) : null }
