@@ -25,13 +25,14 @@ vi.mock('../../services/http-executor', () => ({
 
 vi.mock('../../services/oauth', () => ({
   getValidTokenForConfig: vi.fn(),
-  authorizeInline: vi.fn()
+  authorizeInline: vi.fn(),
+  DEFAULT_OAUTH_REDIRECT_URI: 'http://localhost:9876/callback'
 }))
 
 import { registerHttpHandlers } from '../http'
 import { queryOne, queryAll } from '../../database'
 import { executeRequest } from '../../services/http-executor'
-import { getValidTokenForConfig, authorizeInline } from '../../services/oauth'
+import { getValidTokenForConfig, authorizeInline, DEFAULT_OAUTH_REDIRECT_URI } from '../../services/oauth'
 
 const mockQ1 = vi.mocked(queryOne)
 const mockQA = vi.mocked(queryAll)
@@ -232,7 +233,7 @@ describe('http IPC handler', () => {
       clientSecret: 'secret',
       tokenUrl: 'https://auth.example.com/token',
       scopes: 'openid',
-      redirectUri: 'http://localhost:9876/callback'
+      redirectUri: DEFAULT_OAUTH_REDIRECT_URI
     }
 
     it('returns error when clientId is missing', async () => {

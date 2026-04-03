@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
-import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
+import { getValidTokenForConfig, authorizeInline, DEFAULT_OAUTH_REDIRECT_URI } from '../services/oauth'
 
 type LogLevel = 'info' | 'warn' | 'error'
 
@@ -147,7 +147,7 @@ export function registerHttpHandlers(): void {
           authUrl: resolvedAuthConfig.authUrl || undefined,
           tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
           scopes: resolvedAuthConfig.scopes ?? '',
-          redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
+          redirectUri: resolvedAuthConfig.redirectUri || DEFAULT_OAUTH_REDIRECT_URI,
         }
         if (!cfg.clientId || !cfg.tokenUrl) {
           log('error', 'OAuth 2.0: clientId and tokenUrl are required')

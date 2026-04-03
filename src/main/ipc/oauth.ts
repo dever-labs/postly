@@ -8,6 +8,7 @@ import {
   getValidTokenForConfig,
   authorizeInline,
   configHashKey,
+  DEFAULT_OAUTH_REDIRECT_URI,
   OAuthConfig
 } from '../services/oauth'
 
@@ -21,7 +22,7 @@ function rowToConfig(row: Record<string, unknown>): OAuthConfig {
     authUrl: row['auth_url'] ? String(row['auth_url']) : undefined,
     tokenUrl: String(row['token_url']),
     scopes: String(row['scopes'] ?? ''),
-    redirectUri: String(row['redirect_uri'] ?? 'http://localhost:9876/callback')
+    redirectUri: String(row['redirect_uri'] ?? DEFAULT_OAUTH_REDIRECT_URI)
   }
 }
 
@@ -39,7 +40,7 @@ export function registerOAuthHandlers(): void {
         `INSERT INTO oauth_configs (id, name, grant_type, client_id, client_secret, auth_url, token_url, scopes, redirect_uri, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, args.name, args.grantType, args.clientId, args.clientSecret ?? null, args.authUrl ?? null,
-         args.tokenUrl, args.scopes ?? '', args.redirectUri ?? 'http://localhost:9876/callback', now, now]
+         args.tokenUrl, args.scopes ?? '', args.redirectUri ?? DEFAULT_OAUTH_REDIRECT_URI, now, now]
       )
       const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])
       return { data: row ? rowToConfig(row) : null }

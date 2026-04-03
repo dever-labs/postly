@@ -71,7 +71,7 @@ export const migrations: string[] = [
     auth_url TEXT,
     token_url TEXT NOT NULL,
     scopes TEXT NOT NULL DEFAULT '',
-    redirect_uri TEXT NOT NULL DEFAULT 'http://localhost:9876/callback',
+    redirect_uri TEXT NOT NULL DEFAULT 'http://localhost:9876/callback', -- keep in sync with DEFAULT_OAUTH_REDIRECT_URI in services/oauth.ts
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
