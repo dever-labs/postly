@@ -9,7 +9,7 @@ interface AuthTabProps {
   onConfigChange: (c: Record<string, string>) => void
 }
 
-export function AuthTab({ authType, authConfig, onTypeChange, onConfigChange }: AuthTabProps) {
+export const AuthTab = React.memo(function AuthTab({ authType, authConfig, onTypeChange, onConfigChange }: AuthTabProps) {
   return (
     <div className="p-3">
       <AuthEditor
@@ -20,4 +20,4 @@ export function AuthTab({ authType, authConfig, onTypeChange, onConfigChange }: 
       />
     </div>
   )
-}
+})

@@ -32,7 +32,11 @@ function createWindow(): void {
 
   if (!app.isPackaged) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173')
-    win.webContents.openDevTools()
+    // Skip DevTools when running E2E tests — they create a second BrowserWindow
+    // that interferes with Playwright's firstWindow() detection.
+    if (!process.env['PLAYWRIGHT']) {
+      win.webContents.openDevTools()
+    }
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }

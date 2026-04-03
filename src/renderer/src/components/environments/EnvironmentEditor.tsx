@@ -1,5 +1,5 @@
-import { Check, Eye, EyeOff, Plus, Save, Search, Trash2 } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import { Check, Eye, EyeOff, Plus, RotateCcw, Save, Search, Trash2 } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -66,12 +66,97 @@ export function EnvironmentEditor() {
   const envVars = vars.filter((v) => v.envId === selectedEnvId)
 
   const [name, setName] = useState(env?.name ?? '')
-  const [localVars, setLocalVars] = useState<EnvVar[]>([])
+  const [localVars, setLocalVarsState] = useState<EnvVar[]>([])
   const [saved, setSaved] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
   const [varSearch, setVarSearch] = useState('')
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftVars = useRef<EnvVar[] | null>(null)
+  const undoStack = useRef<EnvVar[][]>([])
+  const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedVars = useRef<EnvVar[]>([])
 
-  useEffect(() => { setName(env?.name ?? '') }, [env?.id, env?.name])
-  useEffect(() => { setLocalVars(envVars) }, [env?.id, vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  const clearUndo = () => {
+    undoStack.current = []
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+  }
+
+  const pushUndo = (snapshot: EnvVar[]) => {
+    if (undoStack.current.length >= 50) undoStack.current.shift()
+    undoStack.current.push(snapshot.map((v) => ({ ...v })))
+  }
+
+  const scheduleDraft = (vars: EnvVar[]) => {
+    if (!env) return
+    pendingDraftVars.current = vars
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draftTimer.current = null
+      pendingDraftVars.current = null
+      window.api.drafts.env.upsert({ envId: env.id, varsJson: JSON.stringify(vars) })
+    }, 500)
+  }
+
+  const setLocalVars = (updater: EnvVar[] | ((prev: EnvVar[]) => EnvVar[])) => {
+    setLocalVarsState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      // Push undo snapshot with 50ms debounce to batch rapid changes
+      if (!undoPushTimer.current) {
+        const snap = prev.map((v) => ({ ...v }))
+        undoPushTimer.current = setTimeout(() => {
+          undoPushTimer.current = null
+          pushUndo(snap)
+        }, 50) // short delay so sync changes are batched
+      }
+      setIsDirty(true)
+      scheduleDraft(next)
+      return next
+    })
+  }
+
+  // Load from draft or store when selected env changes
+  useEffect(() => {
+    let aborted = false
+    setName(env?.name ?? '')
+    if (!env) { setLocalVarsState([]); setIsDirty(false); return }
+    const load = async () => {
+      // Capture saved state before any draft overlay
+      savedVars.current = envVars.map((v) => ({ ...v }))
+      try {
+        const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
+        if (aborted) return
+        if (data?.vars_json) {
+          try {
+            setLocalVarsState(JSON.parse(data.vars_json as string) as EnvVar[])
+            setIsDirty(true)
+            return
+          } catch { /* fall through */ }
+        }
+      } catch { /* fall through to saved state */ }
+      if (aborted) return
+      setLocalVarsState(envVars)
+      setIsDirty(false)
+    }
+    load()
+    return () => {
+      aborted = true
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current)
+        draftTimer.current = null
+        const pending = pendingDraftVars.current
+        if (env && pending) {
+          pendingDraftVars.current = null
+          window.api.drafts.env.upsert({ envId: env.id, varsJson: JSON.stringify(pending) })
+        }
+      }
+      clearUndo()
+    }
+  }, [env?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reflect external store changes (e.g., after full load) when not dirty
+  useEffect(() => {
+    if (!isDirty) setLocalVarsState(envVars)
+  }, [vars.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNameBlur = async () => {
     if (!env || !name.trim() || name.trim() === env.name) return
@@ -81,11 +166,30 @@ export function EnvironmentEditor() {
 
   const handleSave = async () => {
     if (!env) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     for (const v of localVars) {
       await upsertVar(env.id, v.key, v.value, v.isSecret, v.id)
     }
+    // Remove vars from the store that were deleted in the draft
+    const savedIds = new Set(localVars.map((v) => v.id))
+    for (const v of envVars) {
+      if (!savedIds.has(v.id)) await deleteVar(v.id)
+    }
+    await window.api.drafts.env.delete({ envId: env.id })
+    savedVars.current = localVars.map((v) => ({ ...v }))
+    setIsDirty(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleDiscard = async () => {
+    if (!env) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
+    await window.api.drafts.env.delete({ envId: env.id })
+    setLocalVarsState(envVars)
+    setIsDirty(false)
   }
 
   const handleAddVar = () => {
@@ -94,15 +198,40 @@ export function EnvironmentEditor() {
     setLocalVars((prev) => [...prev, newVar])
   }
 
-  const handleDeleteVar = async (id: string) => {
+  const handleDeleteVar = (id: string) => {
     setLocalVars((prev) => prev.filter((v) => v.id !== id))
-    await deleteVar(id)
   }
 
   const handleDelete = async () => {
     if (!env) return
     await deleteEnvironment(env.id)
     setSelectedEnvId(null)
+  }
+
+  const handleUndo = () => {
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+    setLocalVarsState(previous)
+    // Dirty only if the restored state differs from the originally saved vars
+    const atSaved = JSON.stringify(previous) === JSON.stringify(savedVars.current)
+    if (atSaved) {
+      setIsDirty(false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      if (env) window.api.drafts.env.delete({ envId: env.id })
+    } else {
+      setIsDirty(true)
+      scheduleDraft(previous)
+    }
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = e.target
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+      e.preventDefault()
+      handleUndo()
+    }
   }
 
   // ── Empty state ────────────────────────────────────────────────────────────
@@ -126,7 +255,7 @@ export function EnvironmentEditor() {
 
   // ── Editor ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg">
+    <div className="flex h-full flex-1 flex-col overflow-hidden bg-th-bg" onKeyDown={onKeyDown}>
       {/* Header — drag-region; pt-8 clears title bar height, pr-40 clears window controls (min/max/close ~138px) */}
       <div className="drag-region flex shrink-0 items-center justify-between border-b border-th-border pl-6 pr-48 pt-8 pb-4">
         <input
@@ -204,18 +333,29 @@ export function EnvironmentEditor() {
           <Plus className="h-4 w-4" /> Add variable
         </button>
 
-        <button
-          onClick={handleSave}
-          className={cn(
-            'mt-4 flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
-            saved
-              ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
-              : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
+              saved
+                ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
+                : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
+            )}
+          >
+            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+            {saved ? 'Saved' : 'Save'}
+          </button>
+          {isDirty && (
+            <button
+              onClick={handleDiscard}
+              className="flex items-center gap-1.5 rounded-md border border-th-border px-4 py-2.5 text-sm text-th-text-subtle transition-colors hover:border-th-border-strong hover:text-th-text-primary focus:outline-hidden"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Discard changes
+            </button>
           )}
-        >
-          {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {saved ? 'Saved' : 'Save'}
-        </button>
+        </div>
       </div>
     </div>
   )

@@ -86,6 +86,7 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
   const [menuOpen, setMenuOpen] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+  const isDirty = useUIStore((s) => s.dirtyEditors.has(collection.id))
 
   return (
     <div
@@ -118,11 +119,12 @@ function CollectionRow({ collection, open, onToggle, onSelect, onAddRequest, onA
       <button
         onClick={onSelect}
         className={cn(
-          'flex flex-1 truncate rounded-sm px-1 py-1 text-left text-sm font-semibold focus:outline-hidden',
+          'flex flex-1 items-center gap-1.5 truncate rounded-sm px-1 py-1 text-left text-sm font-semibold focus:outline-hidden',
           isActive ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary'
         )}
       >
         <span className="truncate">{collection.name}</span>
+        {isDirty && <span data-testid="collection-dirty-dot" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
       </button>
 
       {/* hover actions */}
@@ -211,6 +213,7 @@ function SortableGroupRow({
 }: SortableGroupRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `grp:${group.id}` })
   const grpStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+  const isDirtyGroup = useUIStore((s) => s.dirtyEditors.has(group.id))
 
   const filteredReqs = requests
     .filter((r) => {
@@ -291,6 +294,7 @@ function SortableGroupRow({
               )}
             >
               <span className="truncate">{group.name}</span>
+              {isDirtyGroup && <span data-testid="group-dirty-dot" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
               {group.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
             </button>
 

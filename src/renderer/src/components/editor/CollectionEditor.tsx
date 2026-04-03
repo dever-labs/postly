@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
@@ -45,6 +45,7 @@ export function CollectionEditor({ collectionId }: Props) {
   const addToast = useUIStore((s) => s.addToast)
   const selectUIItem = useUIStore((s) => s.selectItem)
   const openGitAction = useUIStore((s) => s.openGitAction)
+  const setEditorDirty = useUIStore((s) => s.setEditorDirty)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -53,9 +54,72 @@ export function CollectionEditor({ collectionId }: Props) {
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification } | null>(null)
+
+  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
+  const undoStack = useRef<FormSnapshot[]>([])
+  const lastUndoField = useRef<string | null>(null)
+  const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savedSnapshot = useRef<FormSnapshot | null>(null)
+
+  const pushUndo = (snapshot: FormSnapshot) => {
+    if (undoStack.current.length >= 50) undoStack.current.shift()
+    undoStack.current.push({ ...snapshot, authConfig: { ...snapshot.authConfig } })
+  }
+
+  const clearUndo = () => {
+    undoStack.current = []
+    lastUndoField.current = null
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+  }
+
+  const scheduleDraft = (fields: {
+    name: string; description: string
+    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
+  }) => {
+    pendingDraftData.current = fields
+    if (draftTimer.current) clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draftTimer.current = null
+      pendingDraftData.current = null
+      window.api.drafts.collection.upsert({
+        collectionId,
+        name: fields.name,
+        description: fields.description,
+        authType: fields.authType,
+        authConfig: JSON.stringify(fields.authConfig),
+        sslVerification: fields.sslVerification,
+      })
+    }, 500)
+  }
 
   useEffect(() => {
-    if (collection) {
+    if (!collection) return
+    const load = async () => {
+      // Reset dirty immediately so the sidebar indicator clears while draft loads
+      setEditorDirty(collectionId, false)
+      // Capture saved state before any draft overlay
+      savedSnapshot.current = {
+        name: collection.name,
+        description: collection.description ?? '',
+        authType: collection.authType,
+        authConfig: collection.authConfig,
+        sslVerification: collection.sslVerification ?? 'inherit',
+      }
+      try {
+        const { data } = await window.api.drafts.collection.get({ collectionId }) as { data: Record<string, unknown> | null }
+        if (data) {
+          setName((data.name as string) ?? collection.name)
+          setDescription((data.description as string) ?? collection.description ?? '')
+          setAuthType(((data.auth_type as AuthType) ?? collection.authType))
+          setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
+          setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
+          setIsDirty(true)
+          setEditorDirty(collectionId, true)
+          return
+        }
+      } catch { /* fall through to saved state */ }
       setName(collection.name)
       setDescription(collection.description ?? '')
       setAuthType(collection.authType)
@@ -63,7 +127,24 @@ export function CollectionEditor({ collectionId }: Props) {
       setSslVerification(collection.sslVerification ?? 'inherit')
       setIsDirty(false)
     }
+    load()
+    return () => {
+      if (draftTimer.current) {
+        clearTimeout(draftTimer.current)
+        draftTimer.current = null
+        const pending = pendingDraftData.current
+        if (pending) {
+          pendingDraftData.current = null
+          window.api.drafts.collection.upsert({ collectionId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+        }
+      }
+      clearUndo()
+      setEditorDirty(collectionId, false)
+    }
   }, [collectionId, collection])
+
+  // No separate isDirty sync effect — setEditorDirty is called directly
+  // in load/save/discard/mark/handleUndo to avoid stale-state race on collection switch
 
   if (!collection) {
     return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Collection not found</div>
@@ -73,21 +154,29 @@ export function CollectionEditor({ collectionId }: Props) {
   const inheritedFrom = integration?.token ? integration.name : undefined
   const isGit = ['git', 'github', 'gitlab'].includes(collection.source)
 
-  const discard = () => {
+  const discard = async () => {
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
+    await window.api.drafts.collection.delete({ collectionId })
     setName(collection.name)
     setDescription(collection.description ?? '')
     setAuthType(collection.authType)
     setAuthConfig(collection.authConfig)
     setSslVerification(collection.sslVerification ?? 'inherit')
     setIsDirty(false)
+    setEditorDirty(collectionId, false)
   }
 
   const save = async () => {
     if (!name.trim()) return
+    if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+    clearUndo()
     setSaving(true)
     await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await window.api.drafts.collection.delete({ collectionId })
     setSaving(false)
     setIsDirty(false)
+    setEditorDirty(collectionId, false)
     if (isGit) {
       openGitAction({ type: 'push', collectionId, title: `Updated collection '${name.trim()}'` })
     } else {
@@ -95,10 +184,85 @@ export function CollectionEditor({ collectionId }: Props) {
     }
   }
 
-  const mark = () => setIsDirty(true)
+  const mark = (fields?: {
+    name?: string; description?: string
+    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
+  }, changedField?: string) => {
+    // Push undo snapshot when switching fields or after 1s on same field
+    const currentSnapshot: FormSnapshot = {
+      name,
+      description,
+      authType,
+      authConfig,
+      sslVerification,
+    }
+    if (changedField !== lastUndoField.current) {
+      if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+      pushUndo(currentSnapshot)
+      lastUndoField.current = changedField ?? null
+    } else if (!undoPushTimer.current) {
+      const snap = { ...currentSnapshot, authConfig: { ...currentSnapshot.authConfig } }
+      undoPushTimer.current = setTimeout(() => {
+        undoPushTimer.current = null
+        pushUndo(snap)
+      }, 1000)
+    }
+    const newState = {
+      name: fields?.name ?? name,
+      description: fields?.description ?? description,
+      authType: fields?.authType ?? authType,
+      authConfig: fields?.authConfig ?? authConfig,
+      sslVerification: fields?.sslVerification ?? sslVerification,
+    }
+    const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
+    if (atSaved) {
+      setIsDirty(false)
+      setEditorDirty(collectionId, false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+      window.api.drafts.collection.delete({ collectionId })
+    } else {
+      setIsDirty(true)
+      setEditorDirty(collectionId, true)
+      scheduleDraft(newState)
+    }
+  }
+
+  const handleUndo= () => {
+    const previous = undoStack.current.pop()
+    if (!previous) return
+    if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
+    lastUndoField.current = null
+    setName(previous.name)
+    setDescription(previous.description)
+    setAuthType(previous.authType)
+    setAuthConfig(previous.authConfig)
+    setSslVerification(previous.sslVerification)
+    // Dirty only if the restored snapshot differs from the originally saved state
+    const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
+    if (atSaved) {
+      setIsDirty(false)
+      setEditorDirty(collectionId, false)
+      if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
+      window.api.drafts.collection.delete({ collectionId })
+    } else {
+      setIsDirty(true)
+      setEditorDirty(collectionId, true)
+      scheduleDraft(previous)
+    }
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      const el = e.target
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+      e.preventDefault()
+      handleUndo()
+    }
+  }
 
   return (
-    <div className="bg-th-bg w-full">
+    <div className="bg-th-bg w-full" onKeyDown={onKeyDown}>
       {/* Thin drag strip — window drag target only, no content */}
       <div className="drag-region shrink-0 pt-8 pb-4" />
 
@@ -119,10 +283,11 @@ export function CollectionEditor({ collectionId }: Props) {
             </span>
           </div>
           <input
+            data-testid="collection-name-input"
             className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
             placeholder="Collection name"
             value={name}
-            onChange={(e) => { setName(e.target.value); mark() }}
+            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }, 'name') }}
           />
           <p className="mt-1 text-xs text-th-text-muted">Collection</p>
           <AiActionButton
@@ -138,7 +303,7 @@ export function CollectionEditor({ collectionId }: Props) {
             placeholder="Describe what this collection is for, which services it covers, etc."
             rows={4}
             value={description}
-            onChange={(e) => { setDescription(e.target.value); mark() }}
+            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }, 'description') }}
           />
         </Section>
 
@@ -148,7 +313,7 @@ export function CollectionEditor({ collectionId }: Props) {
           <AuthEditor
             authType={authType}
             authConfig={authConfig}
-            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark() }}
+            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }, 'auth') }}
             inheritedFrom={inheritedFrom}
             canInherit={false}
           />
@@ -159,7 +324,7 @@ export function CollectionEditor({ collectionId }: Props) {
           <p className="mb-3 text-xs text-th-text-faint">Default SSL setting for all requests in this collection. Can be overridden per group or request.</p>
           <SslEditor
             value={sslVerification}
-            onChange={(v) => { setSslVerification(v); mark() }}
+            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }, 'ssl') }}
             canInherit={false}
           />
         </Section>
@@ -193,24 +358,26 @@ export function CollectionEditor({ collectionId }: Props) {
 
       </div>
 
-      {/* Sticky save bar */}
-      {isDirty && (
-        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-th-border bg-th-bg/95 px-8 py-3 backdrop-blur-xs">
+      {/* Save bar */}
+      <div className="no-drag flex items-center justify-end gap-2 border-t border-th-border px-8 py-3">
+        {isDirty && (
           <button
+            data-testid="collection-discard-button"
             onClick={discard}
             className="rounded-sm px-4 py-1.5 text-sm text-th-text-subtle hover:text-th-text-primary focus:outline-hidden"
           >
             Discard
           </button>
-          <button
-            onClick={save}
-            disabled={saving || !name.trim()}
-            className="rounded-sm bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 focus:outline-hidden"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          data-testid="collection-save-button"
+          onClick={save}
+          disabled={saving || !name.trim()}
+          className={`rounded-sm px-4 py-1.5 text-sm font-medium focus:outline-hidden disabled:opacity-50 ${isDirty ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-th-surface-raised text-th-text-subtle hover:bg-th-surface-active hover:text-th-text-primary'}`}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }

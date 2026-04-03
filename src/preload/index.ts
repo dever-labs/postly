@@ -172,6 +172,31 @@ const api = {
   },
   reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
     ipcRenderer.invoke('postly:reorder', data),
+  drafts: {
+    request: {
+      get: (data: { requestId: string }) => ipcRenderer.invoke('postly:drafts:request:get', data),
+      upsert: (data: { requestId: string; method?: string; url?: string; params?: string; headers?: string; bodyType?: string; bodyContent?: string; authType?: string; authConfig?: string; sslVerification?: string; protocol?: string; protocolConfig?: string }) =>
+        ipcRenderer.invoke('postly:drafts:request:upsert', data),
+      delete: (data: { requestId: string }) => ipcRenderer.invoke('postly:drafts:request:delete', data),
+    },
+    collection: {
+      get: (data: { collectionId: string }) => ipcRenderer.invoke('postly:drafts:collection:get', data),
+      upsert: (data: { collectionId: string; name?: string; description?: string; authType?: string; authConfig?: string; sslVerification?: string }) =>
+        ipcRenderer.invoke('postly:drafts:collection:upsert', data),
+      delete: (data: { collectionId: string }) => ipcRenderer.invoke('postly:drafts:collection:delete', data),
+    },
+    group: {
+      get: (data: { groupId: string }) => ipcRenderer.invoke('postly:drafts:group:get', data),
+      upsert: (data: { groupId: string; name?: string; description?: string; authType?: string; authConfig?: string; sslVerification?: string }) =>
+        ipcRenderer.invoke('postly:drafts:group:upsert', data),
+      delete: (data: { groupId: string }) => ipcRenderer.invoke('postly:drafts:group:delete', data),
+    },
+    env: {
+      get: (data: { envId: string }) => ipcRenderer.invoke('postly:drafts:env:get', data),
+      upsert: (data: { envId: string; varsJson: string }) => ipcRenderer.invoke('postly:drafts:env:upsert', data),
+      delete: (data: { envId: string }) => ipcRenderer.invoke('postly:drafts:env:delete', data),
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

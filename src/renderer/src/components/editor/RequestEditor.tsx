@@ -1,5 +1,5 @@
 import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
@@ -51,7 +51,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, saveRequest } = useRequestsStore()
+  const { editingRequest, isLoading, updateField, sendRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -92,18 +92,49 @@ export function RequestEditor() {
     }
   }
 
-  // Ctrl+S: save the request, then show commit overlay for git-sourced requests
+  // Refs so the keydown handler is registered only once and never stale-closes over state
+  const editingRequestRef = useRef(editingRequest)
+  editingRequestRef.current = editingRequest
+  const saveRequestRef = useRef(saveRequest)
+  saveRequestRef.current = saveRequest
+  const undoRequestRef = useRef(undoRequest)
+  undoRequestRef.current = undoRequest
+  const triggerGitSaveRef = useRef(triggerGitSave)
+  triggerGitSaveRef.current = triggerGitSave
+
+  // Ctrl+S: save; Ctrl+Z (when not in a text field): app-level undo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
         e.preventDefault()
-        if (!editingRequest) return
-        saveRequest().then(triggerGitSave)
+        if (!editingRequestRef.current) return
+        saveRequestRef.current().then(() => triggerGitSaveRef.current())
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        const el = e.target
+        if (
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLTextAreaElement ||
+          (el instanceof HTMLElement && el.isContentEditable)
+        ) return
+        e.preventDefault()
+        if (!editingRequestRef.current) return
+        undoRequestRef.current()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editingRequest, saveRequest, breadcrumb, openGitAction])
+  }, []) // stable refs — no deps needed
+
+  // Stable callbacks for tab components — must be before early return (Rules of Hooks)
+  const onParamsChange = useCallback((p: KeyValuePair[]) => updateField('params', p), [updateField])
+  const onHeadersChange = useCallback((h: KeyValuePair[]) => updateField('headers', h), [updateField])
+  const onBodyTypeChange = useCallback((t: BodyType) => updateField('bodyType', t), [updateField])
+  const onBodyContentChange = useCallback((c: string) => updateField('bodyContent', c), [updateField])
+  const onAuthTypeChange = useCallback((t: AuthType) => updateField('authType', t), [updateField])
+  const onAuthConfigChange = useCallback((c: Record<string, string>) => updateField('authConfig', c), [updateField])
+  const onSslChange = useCallback((v: SslVerification) => updateField('sslVerification', v), [updateField])
 
   if (!editingRequest) {
     return (
@@ -119,6 +150,8 @@ export function RequestEditor() {
   const protocol = (editingRequest.protocol ?? 'http') as ProtocolType
   const pc = editingRequest.protocolConfig ?? {}
 
+  // updatePc depends on `pc` which is derived after the early return — keep as regular function
+  // (it's only called on explicit user gestures, so inline re-creation is fine here)
   const updatePc = (key: string, value: string) => {
     updateField('protocolConfig', { ...pc, [key]: value })
   }
@@ -193,11 +226,22 @@ export function RequestEditor() {
             await saveRequest()
             triggerGitSave()
           }}
+          data-testid="request-save-button"
           className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
           title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
         >
           <Save className="h-4 w-4" />
         </button>
+        {editingRequest.isDirty && (
+          <button
+            onClick={discardDraft}
+            data-testid="request-discard-button"
+            className="rounded-sm px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
+            title="Discard unsaved changes"
+          >
+            Discard
+          </button>
+        )}
       </div>
 
       {/* Protocol-specific content area */}
@@ -270,28 +314,28 @@ export function RequestEditor() {
             {protocol === 'http' && (
               <>
                 <TabsContent value="params">
-                  <ParamsTab params={editingRequest.params} onChange={(p) => updateField('params', p)} />
+                  <ParamsTab params={editingRequest.params} onChange={onParamsChange} />
                 </TabsContent>
                 <TabsContent value="body">
                   <BodyTab
                     bodyType={editingRequest.bodyType as BodyType}
                     bodyContent={editingRequest.bodyContent}
-                    onTypeChange={(t) => updateField('bodyType', t)}
-                    onContentChange={(c) => updateField('bodyContent', c)}
+                    onTypeChange={onBodyTypeChange}
+                    onContentChange={onBodyContentChange}
                   />
                 </TabsContent>
               </>
             )}
 
             <TabsContent value="headers">
-              <HeadersTab params={editingRequest.headers} onChange={(h) => updateField('headers', h)} />
+              <HeadersTab params={editingRequest.headers} onChange={onHeadersChange} />
             </TabsContent>
             <TabsContent value="auth">
               <AuthTab
                 authType={editingRequest.authType as AuthType}
                 authConfig={editingRequest.authConfig}
-                onTypeChange={(t) => updateField('authType', t)}
-                onConfigChange={(c) => updateField('authConfig', c)}
+                onTypeChange={onAuthTypeChange}
+                onConfigChange={onAuthConfigChange}
               />
             </TabsContent>
             <TabsContent value="settings">
@@ -300,7 +344,7 @@ export function RequestEditor() {
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">SSL Verification</p>
                   <SslEditor
                     value={(editingRequest.sslVerification as SslVerification) ?? 'inherit'}
-                    onChange={(v) => updateField('sslVerification', v)}
+                    onChange={onSslChange}
                   />
                 </div>
               </div>

@@ -50,6 +50,7 @@ interface UIState {
   deletingCollectionId: string | null
   toasts: ToastItem[]
   collapsedSources: Set<CollectionSource>
+  dirtyEditors: Set<string>
   selectedItem: { type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source'; id: string } | null
   toggleTheme: () => void
   setTheme: (theme: Theme) => void
@@ -66,6 +67,7 @@ interface UIState {
   addToast: (message: string, type: 'success' | 'error' | 'info') => void
   removeToast: (id: string) => void
   toggleSourceCollapsed: (source: CollectionSource) => void
+  setEditorDirty: (id: string, dirty: boolean) => void
   selectItem: (type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => void
   clearSelectedItem: () => void
 }
@@ -82,6 +84,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   deletingCollectionId: null,
   toasts: [],
   collapsedSources: loadCollapsedSources(),
+  dirtyEditors: new Set<string>(),
   selectedItem: null,
 
   toggleTheme: () => {
@@ -130,6 +133,12 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
     saveCollapsedSources(next)
     set({ collapsedSources: next })
+  },
+
+  setEditorDirty: (id: string, dirty: boolean) => {
+    const next = new Set(get().dirtyEditors)
+    if (dirty) next.add(id); else next.delete(id)
+    set({ dirtyEditors: next })
   },
 
   selectItem:(type: 'collection' | 'group' | 'ai-collection' | 'ai-group' | 'ai-request' | 'add-integration' | 'edit-integration' | 'export-page' | 'import-page' | 'git-source', id: string) => set({ selectedItem: { type, id } }),

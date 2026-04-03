@@ -23,7 +23,8 @@ export const test = base.extend<Record<string, never>, Fixtures>({
         args: [MAIN],
         // app.isPackaged is false when launched directly, so the main process
         // reads this env var to locate the renderer instead of hitting localhost.
-        env: { ...process.env, ELECTRON_RENDERER_URL: RENDERER_URL },
+        // PLAYWRIGHT suppresses DevTools so firstWindow() reliably returns the app window.
+        env: { ...process.env, ELECTRON_RENDERER_URL: RENDERER_URL, PLAYWRIGHT: '1' },
       })
       await use(app)
       await app.close()
