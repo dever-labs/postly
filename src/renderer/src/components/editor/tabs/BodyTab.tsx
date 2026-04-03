@@ -177,7 +177,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
   )
 }
 
-export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }: BodyTabProps) {
+export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }: BodyTabProps) {
   const theme = useUIStore((s) => s.theme)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const monaco = useMonaco()
@@ -392,4 +392,4 @@ export function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }
       </div>
     </div>
   )
-}
+})

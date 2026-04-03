@@ -10,7 +10,7 @@ interface ParamsTabProps {
   onChange: (params: KeyValuePair[]) => void
 }
 
-export function ParamsTab({ params, onChange }: ParamsTabProps) {
+export const ParamsTab = React.memo(function ParamsTab({ params, onChange }: ParamsTabProps) {
   const addRow = () => {
     onChange([...params, { id: crypto.randomUUID(), key: '', value: '', enabled: true }])
   }
@@ -71,4 +71,4 @@ export function ParamsTab({ params, onChange }: ParamsTabProps) {
       </Button>
     </div>
   )
-}
+})

@@ -24,7 +24,7 @@ interface HeadersTabProps {
   onChange: (params: KeyValuePair[]) => void
 }
 
-export function HeadersTab({ params, onChange }: HeadersTabProps) {
+export const HeadersTab = React.memo(function HeadersTab({ params, onChange }: HeadersTabProps) {
   const addRow = () => {
     onChange([...params, { id: crypto.randomUUID(), key: '', value: '', enabled: true }])
   }
@@ -94,4 +94,4 @@ export function HeadersTab({ params, onChange }: HeadersTabProps) {
       </Button>
     </div>
   )
-}
+})

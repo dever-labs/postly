@@ -158,11 +158,22 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
       const updated: Request = { ...state.editingRequest, [field]: value }
       if (DIRTY_FIELDS.has(field)) {
-        updated.isDirty = true
-        if (!state.editingRequest.isDirty) {
-          useCollectionsStore.getState().syncRequest({ ...state.editingRequest, isDirty: true })
+        const { savedRequest } = state
+        // If the change restores us to the saved state (e.g. native Ctrl+Z in an input),
+        // clear dirty and delete the draft rather than marking it dirty again.
+        if (savedRequest && isEqualToSaved(updated, savedRequest)) {
+          updated.isDirty = false
+          if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+          pendingDraftRequest = null
+          window.api.drafts.request.delete({ requestId: updated.id })
+          useCollectionsStore.getState().syncRequest({ ...updated, isDirty: false })
+        } else {
+          updated.isDirty = true
+          if (!state.editingRequest.isDirty) {
+            useCollectionsStore.getState().syncRequest({ ...state.editingRequest, isDirty: true })
+          }
+          scheduleDraftSave(updated)
         }
-        scheduleDraftSave(updated)
       }
       return { editingRequest: updated }
     })
