@@ -46,6 +46,7 @@ export function GitCommitOverlay() {
     window.api.git.currentBranch({ integrationId: integration.id })
       .then(({ data }: { data?: string }) => { if (data) setCurrentBranch(data) })
       .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- primitive deps are intentional: re-run only when the active action or integration changes, not on every property update
   }, [action?.collectionId, integration?.id])
 
   // Subscribe to AI chunks

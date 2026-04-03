@@ -144,7 +144,7 @@ export function GroupEditor({ groupId }: Props) {
       clearUndo()
       setEditorDirty(groupId, false)
     }
-  }, [groupId, group])
+  }, [groupId, group, setEditorDirty])
 
   // No separate isDirty sync effect — setEditorDirty is called directly
   // in load/save/discard/mark/handleUndo to avoid stale-state race on group switch

@@ -141,7 +141,7 @@ export function CollectionEditor({ collectionId }: Props) {
       clearUndo()
       setEditorDirty(collectionId, false)
     }
-  }, [collectionId, collection])
+  }, [collectionId, collection, setEditorDirty])
 
   // No separate isDirty sync effect — setEditorDirty is called directly
   // in load/save/discard/mark/handleUndo to avoid stale-state race on collection switch

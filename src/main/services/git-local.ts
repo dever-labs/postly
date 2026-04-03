@@ -318,7 +318,7 @@ export async function discoverAndImport(
     collectionId = crypto.randomUUID()
     run(
       `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
-      [collectionId, opts.collectionName!, JSON.stringify({ integrationId }), integrationId, now, now]
+      [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
     )
   }
 
