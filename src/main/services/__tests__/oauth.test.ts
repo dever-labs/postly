@@ -62,7 +62,7 @@ vi.mock('electron', () => {
   }
 })
 
-import { authorizeAuthCode, clientCredentials, authorizeInline, type OAuthConfig } from '../oauth'
+import { authorizeAuthCode, clientCredentials, authorizeInline, DEFAULT_OAUTH_REDIRECT_URI, type OAuthConfig } from '../oauth'
 import { run } from '../../database'
 import { BrowserWindow } from 'electron'
 
@@ -174,7 +174,7 @@ function makeConfig(overrides: Partial<OAuthConfig> = {}): OAuthConfig {
     authUrl: 'http://idp.example/authorize',
     tokenUrl: 'http://idp.example/token',
     scopes: 'read write',
-    redirectUri: 'http://localhost:9876/callback',
+    redirectUri: DEFAULT_OAUTH_REDIRECT_URI,
     ...overrides,
   }
 }
@@ -269,7 +269,7 @@ describe('OAuth integration', () => {
       await authorizeAuthCode(cfg())
 
       const params = new URLSearchParams(idp.requests()[0])
-      expect(params.get('redirect_uri')).toBe('http://localhost:9876/callback')
+      expect(params.get('redirect_uri')).toBe(DEFAULT_OAUTH_REDIRECT_URI)
     })
 
     it('closes the browser window after the authorization callback is received', async () => {

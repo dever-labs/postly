@@ -11,6 +11,9 @@ interface OAuthPanelProps {
   onConfigChange: (c: Record<string, string>) => void
 }
 
+// Keep in sync with DEFAULT_OAUTH_REDIRECT_URI in src/main/services/oauth.ts
+const DEFAULT_OAUTH_REDIRECT_URI = 'http://localhost:9876/callback'
+
 function buildInlineConfig(authConfig: Record<string, string>) {
   return {
     id: '',
@@ -21,7 +24,7 @@ function buildInlineConfig(authConfig: Record<string, string>) {
     authUrl: authConfig.authUrl || undefined,
     tokenUrl: authConfig.tokenUrl ?? '',
     scopes: authConfig.scopes ?? '',
-    redirectUri: authConfig.redirectUri || 'http://localhost:9876/callback',
+    redirectUri: authConfig.redirectUri || DEFAULT_OAUTH_REDIRECT_URI,
   }
 }
 
@@ -139,7 +142,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
           </div>
           <div>
             <label className="mb-1 block text-xs text-th-text-subtle">Redirect URI</label>
-            <Input placeholder="http://localhost:9876/callback" value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
+            <Input placeholder={DEFAULT_OAUTH_REDIRECT_URI} value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
           </div>
         </>
       )}
