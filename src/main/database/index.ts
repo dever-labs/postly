@@ -96,6 +96,21 @@ export function persistDb(): void {
   fs.writeFileSync(dbPath, Buffer.from(data))
 }
 
+let deferredPersistTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Schedule a debounced persist (2 s). Use for high-frequency writes such as
+ * draft auto-saves where an immediate full-DB flush on every keystroke would
+ * cause excessive synchronous disk I/O.
+ */
+export function schedulePersist(delayMs = 2000): void {
+  if (deferredPersistTimer) clearTimeout(deferredPersistTimer)
+  deferredPersistTimer = setTimeout(() => {
+    deferredPersistTimer = null
+    persistDb()
+  }, delayMs)
+}
+
 export function getDb(): Database {
   if (!db) throw new Error('Database not initialized. Call initDatabase() first.')
   return db
@@ -120,8 +135,17 @@ export function queryOne<T = Record<string, unknown>>(sql: string, params?: unkn
   return result
 }
 
-/** Execute an INSERT / UPDATE / DELETE statement. Persists to disk. */
+/** Execute an INSERT / UPDATE / DELETE statement. Persists to disk immediately. */
 export function run(sql: string, params?: unknown[]): void {
   db.run(sql, params as Parameters<typeof db.run>[1])
   persistDb()
+}
+
+/**
+ * Execute an INSERT / UPDATE / DELETE and schedule a debounced persist.
+ * Use for draft upserts that fire on every keystroke to avoid frequent full-DB flushes.
+ */
+export function runDraft(sql: string, params?: unknown[]): void {
+  db.run(sql, params as Parameters<typeof db.run>[1])
+  schedulePersist()
 }

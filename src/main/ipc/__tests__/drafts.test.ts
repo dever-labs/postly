@@ -13,13 +13,15 @@ vi.mock('electron', () => ({
 vi.mock('../../database', () => ({
   queryOne: vi.fn(),
   run: vi.fn(),
+  runDraft: vi.fn(),
 }))
 
 import { registerDraftHandlers } from '../drafts'
-import { queryOne, run } from '../../database'
+import { queryOne, run, runDraft } from '../../database'
 
 const mockQueryOne = vi.mocked(queryOne)
 const mockRun = vi.mocked(run)
+const mockRunDraft = vi.mocked(runDraft)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -64,8 +66,8 @@ describe('postly:drafts:request:upsert', () => {
       protocolConfig: '{}',
     })
 
-    expect(mockRun).toHaveBeenCalledOnce()
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(mockRunDraft).toHaveBeenCalledOnce()
+    const [sql, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT OR REPLACE INTO request_drafts')
     expect(params[0]).toBe('r1')
     expect(params[1]).toBe('POST')
@@ -76,7 +78,7 @@ describe('postly:drafts:request:upsert', () => {
   it('uses null for omitted optional fields', async () => {
     await handlers['postly:drafts:request:upsert'](null, { requestId: 'r1', url: 'http://localhost' })
 
-    const [, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     // method is second param, should be null when not provided
     expect(params[1]).toBeNull()
   })
@@ -121,8 +123,8 @@ describe('postly:drafts:collection:upsert', () => {
       sslVerification: 'enabled',
     })
 
-    expect(mockRun).toHaveBeenCalledOnce()
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(mockRunDraft).toHaveBeenCalledOnce()
+    const [sql, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT OR REPLACE INTO collection_drafts')
     expect(params[0]).toBe('c1')
     expect(params[1]).toBe('My Collection')
@@ -173,8 +175,8 @@ describe('postly:drafts:group:upsert', () => {
       sslVerification: 'enabled',
     })
 
-    expect(mockRun).toHaveBeenCalledOnce()
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(mockRunDraft).toHaveBeenCalledOnce()
+    const [sql, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT OR REPLACE INTO group_drafts')
     expect(params[0]).toBe('g1')
     expect(params[1]).toBe('My Group')
@@ -184,7 +186,7 @@ describe('postly:drafts:group:upsert', () => {
   it('uses null for omitted optional fields', async () => {
     await handlers['postly:drafts:group:upsert'](null, { groupId: 'g1' })
 
-    const [, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     expect(params[1]).toBeNull()
     expect(params[2]).toBeNull()
   })
@@ -216,8 +218,8 @@ describe('postly:drafts:env:upsert', () => {
     const varsJson = JSON.stringify([{ id: 'v1', key: 'API_URL', value: 'http://localhost', isSecret: false }])
     await handlers['postly:drafts:env:upsert'](null, { envId: 'e1', varsJson })
 
-    expect(mockRun).toHaveBeenCalledOnce()
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(mockRunDraft).toHaveBeenCalledOnce()
+    const [sql, params] = mockRunDraft.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT OR REPLACE INTO env_drafts')
     expect(params[0]).toBe('e1')
     expect(params[1]).toBe(varsJson)

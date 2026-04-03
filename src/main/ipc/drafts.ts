@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { queryOne, run } from '../database'
+import { queryOne, run, runDraft } from '../database'
 
 export function registerDraftHandlers(): void {
   // ── Request drafts ────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ export function registerDraftHandlers(): void {
     sslVerification?: string; protocol?: string; protocolConfig?: string
   }) => {
     try {
-      run(
+      runDraft(
         `INSERT OR REPLACE INTO request_drafts
           (request_id, method, url, params, headers, body_type, body_content,
            auth_type, auth_config, ssl_verification, protocol, protocol_config, updated_at)
@@ -57,7 +57,7 @@ export function registerDraftHandlers(): void {
     authType?: string; authConfig?: string; sslVerification?: string
   }) => {
     try {
-      run(
+      runDraft(
         `INSERT OR REPLACE INTO collection_drafts
           (collection_id, name, description, auth_type, auth_config, ssl_verification, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -92,7 +92,7 @@ export function registerDraftHandlers(): void {
     authType?: string; authConfig?: string; sslVerification?: string
   }) => {
     try {
-      run(
+      runDraft(
         `INSERT OR REPLACE INTO group_drafts
           (group_id, name, description, auth_type, auth_config, ssl_verification, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -123,7 +123,7 @@ export function registerDraftHandlers(): void {
 
   ipcMain.handle('postly:drafts:env:upsert', (_, args: { envId: string; varsJson: string }) => {
     try {
-      run(
+      runDraft(
         `INSERT OR REPLACE INTO env_drafts (env_id, vars_json, updated_at) VALUES (?, ?, ?)`,
         [args.envId, args.varsJson, Date.now()]
       )

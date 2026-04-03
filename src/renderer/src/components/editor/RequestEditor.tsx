@@ -102,6 +102,12 @@ export function RequestEditor() {
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        const el = e.target
+        if (
+          el instanceof HTMLInputElement ||
+          el instanceof HTMLTextAreaElement ||
+          (el instanceof HTMLElement && el.isContentEditable)
+        ) return
         e.preventDefault()
         if (!editingRequest) return
         undoRequest()

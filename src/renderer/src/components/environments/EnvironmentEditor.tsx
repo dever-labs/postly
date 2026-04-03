@@ -116,6 +116,7 @@ export function EnvironmentEditor() {
 
   // Load from draft or store when selected env changes
   useEffect(() => {
+    let aborted = false
     setName(env?.name ?? '')
     if (!env) { setLocalVarsState([]); setIsDirty(false); return }
     const load = async () => {
@@ -123,6 +124,7 @@ export function EnvironmentEditor() {
       savedVars.current = envVars.map((v) => ({ ...v }))
       try {
         const { data } = await window.api.drafts.env.get({ envId: env.id }) as { data: Record<string, unknown> | null }
+        if (aborted) return
         if (data?.vars_json) {
           try {
             setLocalVarsState(JSON.parse(data.vars_json as string) as EnvVar[])
@@ -131,11 +133,13 @@ export function EnvironmentEditor() {
           } catch { /* fall through */ }
         }
       } catch { /* fall through to saved state */ }
+      if (aborted) return
       setLocalVarsState(envVars)
       setIsDirty(false)
     }
     load()
     return () => {
+      aborted = true
       if (draftTimer.current) {
         clearTimeout(draftTimer.current)
         draftTimer.current = null
