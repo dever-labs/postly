@@ -4,6 +4,8 @@ import https from 'https'
 import axios from 'axios'
 import { queryOne, run } from '../database'
 
+const OAUTH_AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1000
+
 export interface OAuthConfig {
   id: string
   name: string
@@ -54,7 +56,7 @@ async function waitForRedirect(
     win.webContents.on('will-redirect', tryCapture)
     win.webContents.on('will-navigate', tryCapture)
     win.on('closed', () => reject(new Error('Authorization window closed')))
-    setTimeout(() => reject(new Error('OAuth authorization timed out')), 5 * 60 * 1000)
+    setTimeout(() => reject(new Error('OAuth authorization timed out')), OAUTH_AUTHORIZATION_TIMEOUT_MS)
   })
 }
 
@@ -90,6 +92,9 @@ async function postTokenRequest(url: string, params: URLSearchParams, sslVerific
 }
 
 export async function authorizeAuthCode(config: OAuthConfig, sslVerification = true): Promise<Token> {
+  if (!config.redirectUri) {
+    throw new Error('OAuth authorization_code flow requires a redirect URI.')
+  }
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
   const state = crypto.randomBytes(16).toString('hex')
@@ -157,9 +162,12 @@ export async function clientCredentials(config: OAuthConfig, sslVerification = t
 }
 
 export async function refreshTokenGrant(token: Token, config: OAuthConfig, sslVerification = true): Promise<Token> {
+  if (!token.refreshToken) {
+    throw new Error('Cannot perform refresh token grant: missing refresh token on provided token record.')
+  }
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: token.refreshToken ?? '',
+    refresh_token: token.refreshToken,
     client_id: config.clientId
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
@@ -215,7 +223,7 @@ export async function getValidToken(oauthConfigId: string, sslVerification = tru
     oauthConfigId: row.oauth_config_id,
     accessToken: row.access_token,
     refreshToken: row.refresh_token ?? undefined,
-    tokenType: row.token_type ?? 'Bearer',
+    tokenType: row.token_type,
     expiresAt: row.expires_at ?? undefined,
     scope: row.scope ?? undefined,
     createdAt: row.created_at
@@ -251,7 +259,7 @@ function rowToOAuthConfig(row: OAuthConfigRow): OAuthConfig {
     authUrl: row.auth_url ?? undefined,
     tokenUrl: row.token_url,
     scopes: row.scopes ?? '',
-    redirectUri: row.redirect_uri ?? 'http://localhost:9876/callback'
+    redirectUri: row.redirect_uri
   }
 }
 
@@ -281,7 +289,7 @@ export async function getValidTokenForConfig(config: OAuthConfig, sslVerificatio
     oauthConfigId: row.oauth_config_id,
     accessToken: row.access_token,
     refreshToken: row.refresh_token ?? undefined,
-    tokenType: row.token_type ?? 'Bearer',
+    tokenType: row.token_type,
     expiresAt: row.expires_at ?? undefined,
     scope: row.scope ?? undefined,
     createdAt: row.created_at

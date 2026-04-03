@@ -14,6 +14,18 @@ const DEFAULTS: GitLabSettings = {
   groups: [],
 }
 
+function safeGitLabUrl(baseUrl: string, path: string): string | null {
+  try {
+    const url = new URL(baseUrl)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    const normalizedBase = url.href.endsWith('/') ? url.href : `${url.href}/`
+    const normalizedPath = path.replace(/^\/+/, '')
+    return new URL(normalizedPath, normalizedBase).toString()
+  } catch {
+    return null
+  }
+}
+
 export function GitLabSettings() {
   const addToast = useUIStore((s) => s.addToast)
   const loadSettings = useSettingsStore((s) => s.load)
@@ -107,14 +119,12 @@ export function GitLabSettings() {
           />
           <p className="mt-1 text-xs text-th-text-subtle">
             Register at{' '}
-            <a
-              href={`${settings.baseUrl}/-/profile/applications`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-400 hover:underline"
-            >
-              {settings.baseUrl}/-/profile/applications
-            </a>
+            {(() => {
+              const href = safeGitLabUrl(settings.baseUrl, '/-/profile/applications')
+              return href
+                ? <a href={href} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">{settings.baseUrl}/-/profile/applications</a>
+                : <span className="text-th-text-muted">{settings.baseUrl}/-/profile/applications</span>
+            })()}
             {' '}— set redirect URI to{' '}
             <span className="font-mono text-th-text-muted">http://localhost/callback</span>
             {' '}and scope <span className="font-mono text-th-text-muted">api</span>

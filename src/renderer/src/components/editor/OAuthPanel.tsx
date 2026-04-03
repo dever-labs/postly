@@ -21,7 +21,7 @@ function buildInlineConfig(authConfig: Record<string, string>) {
     authUrl: authConfig.authUrl || undefined,
     tokenUrl: authConfig.tokenUrl ?? '',
     scopes: authConfig.scopes ?? '',
-    redirectUri: authConfig.redirectUri || 'http://localhost:9876/callback',
+    redirectUri: authConfig.redirectUri ?? '',
   }
 }
 
@@ -92,6 +92,10 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       setAuthError('Scopes are required. Enter at least one scope, e.g. "openid profile".')
       return
     }
+    if (grantType === 'authorization_code' && !authConfig.redirectUri?.trim()) {
+      setAuthError('Redirect URI is required for Authorization Code flow.')
+      return
+    }
     setAuthorizing(true)
     setAuthError(null)
     const config = buildInlineConfig(authConfig)
@@ -139,7 +143,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
           </div>
           <div>
             <label className="mb-1 block text-xs text-th-text-subtle">Redirect URI</label>
-            <Input placeholder="http://localhost:9876/callback" value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
+            <Input placeholder="https://..." value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
           </div>
         </>
       )}

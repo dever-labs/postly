@@ -21,7 +21,7 @@ function rowToConfig(row: Record<string, unknown>): OAuthConfig {
     authUrl: row['auth_url'] ? String(row['auth_url']) : undefined,
     tokenUrl: String(row['token_url']),
     scopes: String(row['scopes'] ?? ''),
-    redirectUri: String(row['redirect_uri'] ?? 'http://localhost:9876/callback')
+    redirectUri: String(row['redirect_uri'])
   }
 }
 
@@ -32,14 +32,16 @@ export function registerOAuthHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri?: string }) => {
+  ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri: string }) => {
     try {
+      if (!args.redirectUri) return { error: 'redirectUri is required' }
+      try { new URL(args.redirectUri) } catch { return { error: 'redirectUri must be a valid absolute URL' } }
       const id = crypto.randomUUID(); const now = Date.now()
       run(
         `INSERT INTO oauth_configs (id, name, grant_type, client_id, client_secret, auth_url, token_url, scopes, redirect_uri, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, args.name, args.grantType, args.clientId, args.clientSecret ?? null, args.authUrl ?? null,
-         args.tokenUrl, args.scopes ?? '', args.redirectUri ?? 'http://localhost:9876/callback', now, now]
+         args.tokenUrl, args.scopes ?? '', args.redirectUri, now, now]
       )
       const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])
       return { data: row ? rowToConfig(row) : null }

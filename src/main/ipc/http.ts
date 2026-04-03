@@ -147,11 +147,15 @@ export function registerHttpHandlers(): void {
           authUrl: resolvedAuthConfig.authUrl || undefined,
           tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
           scopes: resolvedAuthConfig.scopes ?? '',
-          redirectUri: resolvedAuthConfig.redirectUri || 'http://localhost:9876/callback',
+          redirectUri: resolvedAuthConfig.redirectUri ?? '',
         }
         if (!cfg.clientId || !cfg.tokenUrl) {
           log('error', 'OAuth 2.0: clientId and tokenUrl are required')
           return { error: 'OAuth 2.0: clientId and tokenUrl are required.', logs }
+        }
+        if (cfg.grantType === 'authorization_code' && !cfg.redirectUri) {
+          log('error', 'OAuth 2.0: redirectUri is required for authorization_code flow')
+          return { error: 'OAuth 2.0: redirectUri is required for authorization_code flow.', logs }
         }
         let token = await getValidTokenForConfig(cfg, sslVerification)
         if (token) {
