@@ -127,6 +127,15 @@ export function RequestEditor() {
     return () => window.removeEventListener('keydown', handler)
   }, []) // stable refs — no deps needed
 
+  // Stable callbacks for tab components — must be before early return (Rules of Hooks)
+  const onParamsChange = useCallback((p: KeyValuePair[]) => updateField('params', p), [updateField])
+  const onHeadersChange = useCallback((h: KeyValuePair[]) => updateField('headers', h), [updateField])
+  const onBodyTypeChange = useCallback((t: BodyType) => updateField('bodyType', t), [updateField])
+  const onBodyContentChange = useCallback((c: string) => updateField('bodyContent', c), [updateField])
+  const onAuthTypeChange = useCallback((t: AuthType) => updateField('authType', t), [updateField])
+  const onAuthConfigChange = useCallback((c: Record<string, string>) => updateField('authConfig', c), [updateField])
+  const onSslChange = useCallback((v: SslVerification) => updateField('sslVerification', v), [updateField])
+
   if (!editingRequest) {
     return (
       <div className="flex h-full flex-col bg-th-bg">
@@ -141,22 +150,15 @@ export function RequestEditor() {
   const protocol = (editingRequest.protocol ?? 'http') as ProtocolType
   const pc = editingRequest.protocolConfig ?? {}
 
-  const updatePc = useCallback((key: string, value: string) => {
-    updateField('protocolConfig', { ...(pc), [key]: value })
-  }, [updateField, pc])
+  // updatePc depends on `pc` which is derived after the early return — keep as regular function
+  // (it's only called on explicit user gestures, so inline re-creation is fine here)
+  const updatePc = (key: string, value: string) => {
+    updateField('protocolConfig', { ...pc, [key]: value })
+  }
 
   const metadataFromPc = (): KeyValuePair[] => {
     try { return JSON.parse(pc.metadata ?? '[]') } catch { return [] }
   }
-
-  // Stable callbacks for tab components — prevents memo'd tabs from re-rendering
-  const onParamsChange = useCallback((p: KeyValuePair[]) => updateField('params', p), [updateField])
-  const onHeadersChange = useCallback((h: KeyValuePair[]) => updateField('headers', h), [updateField])
-  const onBodyTypeChange = useCallback((t: BodyType) => updateField('bodyType', t), [updateField])
-  const onBodyContentChange = useCallback((c: string) => updateField('bodyContent', c), [updateField])
-  const onAuthTypeChange = useCallback((t: AuthType) => updateField('authType', t), [updateField])
-  const onAuthConfigChange = useCallback((c: Record<string, string>) => updateField('authConfig', c), [updateField])
-  const onSslChange = useCallback((v: SslVerification) => updateField('sslVerification', v), [updateField])
 
   return (
     <div className="flex h-full flex-col bg-th-bg">
