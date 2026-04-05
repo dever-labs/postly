@@ -14,7 +14,7 @@ const ROOT = join(__dirname, '..')
 const BIN_DIR = join(ROOT, 'bin')
 const MOCKLY_VERSION = 'v0.1.0'
 
-const ARCH_MAP: Record<string, string> = { 'x64': 'amd64', 'arm64': 'arm64' }
+const ARCH_MAP = { 'x64': 'amd64', 'arm64': 'arm64' }
 const arch = ARCH_MAP[process.arch]
 if (!arch) {
   console.error(`Unsupported architecture: ${process.arch}. Supported: x64 (amd64), arm64`)
