@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+/**
+ * Downloads the mockly binary for the current platform into ./bin/.
+ * Run before integration tests: node scripts/download-mockly.mjs
+ */
+
+import { createWriteStream, mkdirSync, chmodSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import https from 'https'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT = join(__dirname, '..')
+const BIN_DIR = join(ROOT, 'bin')
+const MOCKLY_VERSION = 'v0.1.0'
+
+function assetName() {
+  const os = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
+  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64'
+  return `mockly-${os}-${arch}${process.platform === 'win32' ? '.exe' : ''}`
+}
+
+const binName = process.platform === 'win32' ? 'mockly.exe' : 'mockly'
+const binPath = join(BIN_DIR, binName)
+
+if (existsSync(binPath)) {
+  console.log(`mockly already present at ${binPath}`)
+  process.exit(0)
+}
+
+mkdirSync(BIN_DIR, { recursive: true })
+
+const url = `https://github.com/dever-labs/mockly/releases/download/${MOCKLY_VERSION}/${assetName()}`
+console.log(`Downloading ${assetName()} …`)
+
+function download(url, dest) {
+  return new Promise((resolve, reject) => {
+    const get = (u) => {
+      https.get(u, { headers: { 'User-Agent': 'postly-test-setup' } }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) { get(res.headers.location); return }
+        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return }
+        const ws = createWriteStream(dest)
+        res.pipe(ws)
+        ws.on('finish', resolve)
+        ws.on('error', reject)
+      }).on('error', reject)
+    }
+    get(url)
+  })
+}
+
+try {
+  await download(url, binPath)
+  if (process.platform !== 'win32') chmodSync(binPath, 0o755)
+  console.log(`mockly downloaded to ${binPath}`)
+} catch (err) {
+  console.error(`Failed to download mockly: ${err.message}`)
+  process.exit(1)
+}

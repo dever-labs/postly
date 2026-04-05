@@ -36,3 +36,6 @@ Thumbs.db
 
 playwright-report/
 test-results/
+
+# Downloaded test binaries
+bin/
