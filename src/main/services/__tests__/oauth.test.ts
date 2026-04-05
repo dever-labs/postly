@@ -48,9 +48,17 @@ vi.mock('electron', () => {
             ;(wcListeners[event] ??= []).push(handler)
           },
         ),
+        off: vi.fn().mockImplementation(
+          (event: string, handler: (evt: { preventDefault: () => void }, url: string) => void) => {
+            const list = wcListeners[event]; if (list) { const i = list.indexOf(handler); if (i !== -1) list.splice(i, 1) }
+          },
+        ),
       },
       on: vi.fn().mockImplementation((event: string, handler: () => void) => {
         ;(winListeners[event] ??= []).push(handler)
+      }),
+      off: vi.fn().mockImplementation((event: string, handler: () => void) => {
+        const list = winListeners[event]; if (list) { const i = list.indexOf(handler); if (i !== -1) list.splice(i, 1) }
       }),
       isDestroyed: vi.fn().mockReturnValue(false),
       close: vi.fn(),
@@ -312,10 +320,12 @@ describe('OAuth integration', () => {
             on: vi.fn().mockImplementation((event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
               ;(wcListeners[event] ??= []).push(handler)
             }),
+            off: vi.fn(),
           },
           on: vi.fn().mockImplementation((event: string, handler: () => void) => {
             ;(winListeners[event] ??= []).push(handler)
           }),
+          off: vi.fn(),
           isDestroyed: vi.fn().mockReturnValue(false),
           close: vi.fn(),
         }
@@ -349,10 +359,12 @@ describe('OAuth integration', () => {
             on: vi.fn().mockImplementation((event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
               ;(wcListeners[event] ??= []).push(handler)
             }),
+            off: vi.fn(),
           },
           on: vi.fn().mockImplementation((event: string, handler: () => void) => {
             ;(winListeners[event] ??= []).push(handler)
           }),
+          off: vi.fn(),
           isDestroyed: vi.fn().mockReturnValue(false),
           close: vi.fn(),
         }
@@ -386,10 +398,12 @@ describe('OAuth integration', () => {
               callOrder.push(`webContents.on(${event})`)
               ;(wcListeners[event] ??= []).push(handler)
             }),
+            off: vi.fn(),
           },
           on: vi.fn().mockImplementation((event: string, handler: () => void) => {
             ;(winListeners[event] ??= []).push(handler)
           }),
+          off: vi.fn(),
           isDestroyed: vi.fn().mockReturnValue(false),
           close: vi.fn(),
         }
@@ -426,10 +440,11 @@ describe('OAuth integration', () => {
             // Simulate the user closing the window instead of completing auth
             setTimeout(() => winListeners['closed']?.forEach((fn) => fn()), 20)
           }),
-          webContents: { on: vi.fn() },
+          webContents: { on: vi.fn(), off: vi.fn() },
           on: vi.fn().mockImplementation((event: string, handler: () => void) => {
             ;(winListeners[event] ??= []).push(handler)
           }),
+          off: vi.fn(),
           isDestroyed: vi.fn().mockReturnValue(true),
           close: vi.fn(),
         }
