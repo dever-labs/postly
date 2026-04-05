@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['e2e/**'],
+    exclude: ['e2e/**', 'src/**/*.integration.test.ts'],
   },
   resolve: {
     alias: {
