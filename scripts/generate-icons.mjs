@@ -34,13 +34,15 @@ console.log('✓ icon.png (1024x1024)')
 // 2. Generate Windows .ico (multi-size: 16, 24, 32, 48, 64, 128, 256)
 
 // Write .ico using png2icons
+// NUM_COLORS = 0 disables color quantization, preserving full color depth.
+const NUM_COLORS = 0
 const largeBuffer = await sharp(Buffer.from(svg)).resize(256, 256).png().toBuffer()
-const icoBuffer = png2icons.createICO(largeBuffer, png2icons.BILINEAR, 0, true)
+const icoBuffer = png2icons.createICO(largeBuffer, png2icons.BILINEAR, NUM_COLORS, true)
 writeFileSync(join(resourcesDir, 'icon.ico'), icoBuffer)
 console.log('✓ icon.ico (multi-size up to 256x256)')
 
 // 3. Generate macOS .icns
-const icnsBuffer = png2icons.createICNS(largeBuffer, png2icons.BILINEAR, 0)
+const icnsBuffer = png2icons.createICNS(largeBuffer, png2icons.BILINEAR, NUM_COLORS)
 writeFileSync(join(resourcesDir, 'icon.icns'), icnsBuffer)
 console.log('✓ icon.icns (macOS)')
 
