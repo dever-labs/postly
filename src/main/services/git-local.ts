@@ -130,6 +130,10 @@ export async function commitAndPush(
 ): Promise<void> {
   const localPath = getRepoPath(integrationId)
   const fullPath = path.join(localPath, filePath)
+  const resolvedBase = path.resolve(localPath)
+  if (!path.resolve(fullPath).startsWith(resolvedBase + path.sep)) {
+    throw new Error('Invalid file path: must be within the repository directory')
+  }
   fs.mkdirSync(path.dirname(fullPath), { recursive: true })
   fs.writeFileSync(fullPath, content, 'utf8')
   const git = simpleGit(localPath)
@@ -351,6 +355,10 @@ export async function deleteCollectionFile(
 ): Promise<void> {
   const localPath = getRepoPath(integrationId)
   const fullPath = path.join(localPath, fileName)
+  const resolvedBase = path.resolve(localPath)
+  if (!path.resolve(fullPath).startsWith(resolvedBase + path.sep)) {
+    throw new Error('Invalid file path: must be within the repository directory')
+  }
   if (!fs.existsSync(localPath)) return
   const git = simpleGit(localPath)
   if (fs.existsSync(fullPath)) {

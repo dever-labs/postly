@@ -18,6 +18,16 @@ export function registerIntegrationHandlers(): void {
     type: string; name: string; baseUrl: string; clientId?: string; clientSecret?: string; repo?: string; branch?: string
   }) => {
     try {
+      if (args.repo) {
+        try { new URL(args.repo) } catch {
+          return { error: 'Invalid repository URL' }
+        }
+      }
+      if (args.baseUrl) {
+        try { new URL(args.baseUrl) } catch {
+          return { error: 'Invalid base URL' }
+        }
+      }
       const id = crypto.randomUUID()
       const now = Date.now()
       run(`INSERT INTO integrations (id, type, name, base_url, client_id, client_secret, repo, branch, status, created_at, updated_at)

@@ -156,7 +156,7 @@ const api = {
     import: (data: { integrationId: string; collectionId?: string; collectionName: string }) => ipcRenderer.invoke('postly:git:import', data),
   },
   ai: {
-    chat: (data: { requestId: string; provider: string; apiKey: string; model: string; messages: unknown[] }) =>
+    chat: (data: { requestId: string; provider: string; model: string; messages: unknown[] }) =>
       ipcRenderer.invoke('postly:ai:chat', data),
     cancel: (data: { requestId: string }) => ipcRenderer.invoke('postly:ai:cancel', data),
     onChunk: (cb: (payload: { requestId: string; text: string; done: boolean; error?: string }) => void) => {

@@ -81,7 +81,6 @@ export function GitCommitOverlay() {
     await window.api.ai.chat({
       requestId: AI_SESSION_ID,
       provider: ai.provider,
-      apiKey: ai.apiKey,
       model: ai.model,
       messages: [
         {

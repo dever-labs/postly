@@ -121,7 +121,10 @@ export async function executeRequest(
           try {
             const fs = require('fs') as typeof import('fs')
             if (fs.existsSync(value)) {
-              const blob = new Blob([fs.readFileSync(value)])
+              const stats = fs.statSync(value)
+              if (stats.size > 100 * 1024 * 1024) throw new Error('File too large (max 100 MB)')
+              const fileBuffer = await require('fs/promises').readFile(value)
+              const blob = new Blob([fileBuffer])
               formData.append(key, blob, require('path').basename(value))
               continue
             }
@@ -148,7 +151,9 @@ export async function executeRequest(
     try {
       const fs = require('fs') as typeof import('fs')
       if (fs.existsSync(req.body)) {
-        data = fs.readFileSync(req.body)
+        const stats = fs.statSync(req.body)
+        if (stats.size > 100 * 1024 * 1024) throw new Error('File too large (max 100 MB)')
+        data = await require('fs/promises').readFile(req.body)
       }
     } catch { /* skip */ }
   }

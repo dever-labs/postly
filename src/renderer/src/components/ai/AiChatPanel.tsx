@@ -112,7 +112,6 @@ export function AiChatPanel({ context, groupId }: Props) {
     setStreaming(true)
     streamBufferRef.current = ''
     const provider = aiSettings?.provider || 'openai'
-    const apiKey = aiSettings?.apiKey || ''
     const model = aiSettings?.model || ''
     const requestId = crypto.randomUUID()
     requestIdRef.current = requestId
@@ -121,7 +120,7 @@ export function AiChatPanel({ context, groupId }: Props) {
       { role: 'system', content: systemPrompt },
       ...newMessages.map((m) => ({ role: m.role, content: m.content })),
     ]
-    await window.api.ai.chat({ requestId, provider, apiKey, model, messages: apiMessages })
+    await window.api.ai.chat({ requestId, provider, model, messages: apiMessages })
   }
 
   const cancel = () => { window.api.ai.cancel({ requestId: requestIdRef.current }); setStreaming(false) }
