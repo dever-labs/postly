@@ -49,9 +49,16 @@ console.log(`Downloading ${assetName()} …`)
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
-    const get = (u) => {
+    const get = (u, redirectsLeft = 10) => {
       https.get(u, { headers: { 'User-Agent': 'postly-test-setup' } }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) { get(res.headers.location); return }
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          res.resume() // consume body to free the socket
+          const location = res.headers.location
+          if (!location) { reject(new Error('Redirect with no Location header')); return }
+          if (redirectsLeft <= 0) { reject(new Error('Too many redirects')); return }
+          get(location, redirectsLeft - 1)
+          return
+        }
         if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return }
         const ws = createWriteStream(dest)
         res.pipe(ws)
