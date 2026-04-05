@@ -197,17 +197,22 @@ describe('timeout', () => {
 
 // ─── Duration measurement ─────────────────────────────────────────────────────
 
+// Allow 20% timing slack: CI runners can be slow, so we accept ≥80% of the
+// configured delay rather than the exact value.
+const DELAY_MS = 50
+const DELAY_TOLERANCE_MS = DELAY_MS * 0.8
+
 describe('duration', () => {
   it('measures response duration in milliseconds', async () => {
     await server.addMock({
       id: 'timed',
       request: { method: 'GET', path: '/timed' },
-      response: { status: 200, body: 'ok', delay: '50ms' },
+      response: { status: 200, body: 'ok', delay: `${DELAY_MS}ms` },
     })
 
     const result = await executeRequest(req({ url: `${server.httpBase}/timed` }))
 
-    expect(result.duration).toBeGreaterThanOrEqual(40)
+    expect(result.duration).toBeGreaterThanOrEqual(DELAY_TOLERANCE_MS)
     expect(result.status).toBe(200)
   })
 })
