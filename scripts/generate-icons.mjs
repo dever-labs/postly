@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import { readFileSync, writeFileSync } from 'fs'
+import { writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import png2icons from 'png2icons'
