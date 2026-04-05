@@ -166,6 +166,7 @@ export async function executeRequest(
     timeout,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
+    // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
   }
 
@@ -230,6 +231,7 @@ async function executeNtlmRequest(
     domain: req.authConfig.domain ?? '',
     workstation: req.authConfig.workstation ?? '',
     headers,
+    // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     rejectUnauthorized: options.sslVerification ?? true,
   }
   if (req.body) ntlmOpts['body'] = req.body

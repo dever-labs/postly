@@ -75,6 +75,7 @@ export function generateCodeChallenge(verifier: string): string {
  */
 async function postTokenRequest(url: string, params: URLSearchParams, sslVerification = true): Promise<Record<string, unknown>> {
   try {
+    // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     const httpsAgent = sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
     const response = await axios.post(url, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
