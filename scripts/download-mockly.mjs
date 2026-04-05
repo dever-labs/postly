@@ -15,15 +15,23 @@ const BIN_DIR = join(ROOT, 'bin')
 const MOCKLY_VERSION = 'v0.1.0'
 
 const ARCH_MAP = { 'x64': 'amd64', 'arm64': 'arm64' }
+const PLATFORM_MAP = { 'win32': 'windows', 'darwin': 'darwin', 'linux': 'linux' }
+
 const arch = ARCH_MAP[process.arch]
 if (!arch) {
   console.error(`Unsupported architecture: ${process.arch}. Supported: x64 (amd64), arm64`)
   process.exit(1)
 }
 
+const platform = PLATFORM_MAP[process.platform]
+if (!platform) {
+  console.error(`Unsupported platform: ${process.platform}. Supported: win32, darwin, linux`)
+  process.exit(1)
+}
+
 function assetName() {
-  const os = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
-  return `mockly-${os}-${arch}${process.platform === 'win32' ? '.exe' : ''}`
+  const ext = process.platform === 'win32' ? '.exe' : ''
+  return `mockly-${platform}-${arch}${ext}`
 }
 
 const binName = process.platform === 'win32' ? 'mockly.exe' : 'mockly'
