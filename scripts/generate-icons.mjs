@@ -32,10 +32,6 @@ await sharp(Buffer.from(svg)).png().toFile(pngPath)
 console.log('✓ icon.png (1024x1024)')
 
 // 2. Generate Windows .ico (multi-size: 16, 24, 32, 48, 64, 128, 256)
-const icoSizes = [16, 24, 32, 48, 64, 128, 256]
-const icoBuffers = await Promise.all(
-  icoSizes.map((s) => sharp(Buffer.from(svg)).resize(s, s).png().toBuffer())
-)
 
 // Write .ico using png2icons
 const largeBuffer = await sharp(Buffer.from(svg)).resize(256, 256).png().toBuffer()
