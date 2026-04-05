@@ -11,6 +11,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 import net from 'net'
+import yaml from 'js-yaml'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -73,13 +74,22 @@ export class MocklyServer {
   get apiBase()  { return `http://127.0.0.1:${this.apiPort}` }
 
   /**
-   * Allocates free ports, writes a minimal YAML config (optionally including
-   * a scenario definition), starts the binary, and waits until ready.
+   * Allocates free ports sequentially (avoids TOCTOU race with parallel
+   * allocation), writes config, starts the binary, and waits until ready.
+   * Cleans up the spawned process if startup fails.
    */
   static async create(opts: { scenarios?: Scenario[] } = {}): Promise<MocklyServer> {
-    const [httpPort, apiPort] = await Promise.all([getFreePort(), getFreePort()])
+    // Sequential allocation: parallel Promise.all risks both calls getting the
+    // same port before either is bound.
+    const httpPort = await getFreePort()
+    const apiPort = await getFreePort()
     const server = new MocklyServer(httpPort, apiPort)
-    await server._start(opts.scenarios ?? [])
+    try {
+      await server._start(opts.scenarios ?? [])
+    } catch (err) {
+      await server.stop()
+      throw err
+    }
     return server
   }
 
@@ -154,24 +164,28 @@ export class MocklyServer {
     mkdirSync(dir, { recursive: true })
     const cfgPath = join(dir, 'mockly.yaml')
 
-    const scenarioBlock = scenarios.length === 0 ? '' :
-      'scenarios:\n' + scenarios.map((s) =>
-        `  - id: ${s.id}\n    name: ${s.name}\n    patches:\n` +
-        s.patches.map((p) =>
-          `      - mock_id: ${p.mock_id}\n` +
-          (p.status !== undefined ? `        status: ${p.status}\n` : '') +
-          (p.body !== undefined ? `        body: '${p.body.replace(/'/g, "''")}'\n` : '') +
-          (p.delay !== undefined ? `        delay: ${p.delay}\n` : '')
-        ).join('')
-      ).join('')
+    // Use js-yaml to serialize — avoids YAML injection from special characters
+    // in body strings (colons, quotes, newlines, etc.)
+    const config: Record<string, unknown> = {
+      mockly: { api: { port: this.apiPort } },
+      protocols: { http: { enabled: true, port: this.httpPort } },
+    }
 
-    const yaml = [
-      `mockly:\n  api:\n    port: ${this.apiPort}`,
-      `protocols:\n  http:\n    enabled: true\n    port: ${this.httpPort}`,
-      scenarioBlock,
-    ].filter(Boolean).join('\n')
+    if (scenarios.length > 0) {
+      config.scenarios = scenarios.map((s) => ({
+        id: s.id,
+        name: s.name,
+        patches: s.patches.map((p) => {
+          const patch: Record<string, unknown> = { mock_id: p.mock_id }
+          if (p.status !== undefined) patch.status = p.status
+          if (p.body !== undefined) patch.body = p.body
+          if (p.delay !== undefined) patch.delay = p.delay
+          return patch
+        }),
+      }))
+    }
 
-    writeFileSync(cfgPath, yaml, 'utf-8')
+    writeFileSync(cfgPath, yaml.dump(config), 'utf-8')
     return cfgPath
   }
 

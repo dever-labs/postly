@@ -166,6 +166,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
+    "js-yaml": "^4.1.1",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.8",
     "selfsigned": "^5.5.0",

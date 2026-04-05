@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { executeRequest, HttpRequest } from '../http-executor'
-import { MocklyServer } from './helpers/mockly'
+import { MocklyServer, getFreePort } from './helpers/mockly'
 
 // ─── Shared server setup ─────────────────────────────────────────────────────
 
@@ -262,41 +262,49 @@ describe('body types', () => {
 // ─── Auth headers ────────────────────────────────────────────────────────────
 
 describe('auth', () => {
-  it('attaches Bearer token to Authorization header', async () => {
+  it('attaches Bearer token and it is received by the server', async () => {
+    // Mockly uses exact header value matching — use the token we'll send
     await server.addMock({
-      id: 'bearer-endpoint',
-      request: { method: 'GET', path: '/bearer' },
+      id: 'bearer-authed',
+      request: { method: 'GET', path: '/bearer', headers: { Authorization: 'Bearer test-token' } },
       response: { status: 200, body: 'authorized' },
     })
+    await server.addMock({
+      id: 'bearer-unauthed',
+      request: { method: 'GET', path: '/bearer' },
+      response: { status: 401, body: 'unauthorized' },
+    })
 
-    const result = await executeRequest(
-      req({
-        url: `${server.httpBase}/bearer`,
-        authType: 'bearer',
-        authConfig: { token: 'my-secret-token' },
-      }),
+    const withAuth = await executeRequest(
+      req({ url: `${server.httpBase}/bearer`, authType: 'bearer', authConfig: { token: 'test-token' } }),
     )
+    expect(withAuth.status).toBe(200)
 
-    // 200 confirms the request reached the server (header value verified in unit tests)
-    expect(result.status).toBe(200)
+    const withoutAuth = await executeRequest(req({ url: `${server.httpBase}/bearer` }))
+    expect(withoutAuth.status).toBe(401)
   })
 
-  it('attaches Basic auth credentials to Authorization header', async () => {
+  it('attaches Basic auth credentials and they are received by the server', async () => {
+    // Pre-compute Basic header: base64('alice:secret') = YWxpY2U6c2VjcmV0
+    const encoded = Buffer.from('alice:secret').toString('base64')
     await server.addMock({
-      id: 'basic-endpoint',
-      request: { method: 'GET', path: '/basic' },
+      id: 'basic-authed',
+      request: { method: 'GET', path: '/basic', headers: { Authorization: `Basic ${encoded}` } },
       response: { status: 200, body: 'authorized' },
     })
+    await server.addMock({
+      id: 'basic-unauthed',
+      request: { method: 'GET', path: '/basic' },
+      response: { status: 401, body: 'unauthorized' },
+    })
 
-    const result = await executeRequest(
-      req({
-        url: `${server.httpBase}/basic`,
-        authType: 'basic',
-        authConfig: { username: 'alice', password: 'secret' },
-      }),
+    const withAuth = await executeRequest(
+      req({ url: `${server.httpBase}/basic`, authType: 'basic', authConfig: { username: 'alice', password: 'secret' } }),
     )
+    expect(withAuth.status).toBe(200)
 
-    expect(result.status).toBe(200)
+    const withoutAuth = await executeRequest(req({ url: `${server.httpBase}/basic` }))
+    expect(withoutAuth.status).toBe(401)
   })
 })
 
@@ -333,7 +341,28 @@ describe('fault injection', () => {
   })
 })
 
-// ─── Scenario activation ─────────────────────────────────────────────────────
+// ─── Network failures ────────────────────────────────────────────────────────
+
+describe('network failures', () => {
+  it('returns status 0 for connection refused', async () => {
+    // Allocate a port and immediately release it — nothing binds to it
+    const deadPort = await getFreePort()
+    const result = await executeRequest(req({ url: `http://127.0.0.1:${deadPort}` }))
+
+    expect(result.status).toBe(0)
+    expect(result.statusText).toMatch(/ECONNREFUSED|connect/i)
+  })
+})
+
+// ─── HTTPS / TLS ─────────────────────────────────────────────────────────────
+
+describe('HTTPS', () => {
+  // Mockly v0.1.0 does not expose an HTTPS protocol in the HTTP mock server,
+  // so real TLS integration tests are not possible yet.
+  // The sslVerification option (http-executor.ts:164) is covered at the unit
+  // test level only.
+  it.todo('sslVerification: false bypasses certificate validation (requires Mockly HTTPS support)')
+})
 
 describe('scenario activation', () => {
   it('activating a scenario overrides mock responses', async () => {

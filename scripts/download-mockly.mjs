@@ -14,9 +14,15 @@ const ROOT = join(__dirname, '..')
 const BIN_DIR = join(ROOT, 'bin')
 const MOCKLY_VERSION = 'v0.1.0'
 
+const ARCH_MAP: Record<string, string> = { 'x64': 'amd64', 'arm64': 'arm64' }
+const arch = ARCH_MAP[process.arch]
+if (!arch) {
+  console.error(`Unsupported architecture: ${process.arch}. Supported: x64 (amd64), arm64`)
+  process.exit(1)
+}
+
 function assetName() {
   const os = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux'
-  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64'
   return `mockly-${os}-${arch}${process.platform === 'win32' ? '.exe' : ''}`
 }
 
