@@ -42,6 +42,22 @@ async function waitForRedirect(
   const { origin: expectedOrigin } = new URL(redirectUri)
 
   return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      win.webContents.off('will-redirect', tryCapture)
+      win.webContents.off('will-navigate', tryCapture)
+      win.off('closed', onClosed)
+      clearTimeout(timer)
+    }
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn()
+    }
+
     const tryCapture = (event: Electron.Event, url: string) => {
       try {
         const { origin, searchParams } = new URL(url)
@@ -49,14 +65,19 @@ async function waitForRedirect(
         const code = searchParams.get('code')
         if (!code) return
         event.preventDefault()
-        resolve({ code, state: searchParams.get('state') ?? '' })
+        settle(() => resolve({ code, state: searchParams.get('state') ?? '' }))
       } catch { /* ignore unparseable URLs */ }
     }
 
+    const onClosed = () => settle(() => reject(new Error('Authorization window closed')))
+    const timer = setTimeout(
+      () => settle(() => reject(new Error('OAuth authorization timed out'))),
+      OAUTH_AUTHORIZATION_TIMEOUT_MS
+    )
+
     win.webContents.on('will-redirect', tryCapture)
     win.webContents.on('will-navigate', tryCapture)
-    win.on('closed', () => reject(new Error('Authorization window closed')))
-    setTimeout(() => reject(new Error('OAuth authorization timed out')), OAUTH_AUTHORIZATION_TIMEOUT_MS)
+    win.on('closed', onClosed)
   })
 }
 
