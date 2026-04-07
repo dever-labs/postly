@@ -10,17 +10,7 @@ import {
   configHashKey,
   OAuthConfig
 } from '../services/oauth'
-
-function getGlobalSslVerification(): boolean {
-  const row = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
-  if (row) {
-    try {
-      const parsed = JSON.parse(row.value) as Record<string, unknown>
-      if (typeof parsed['sslVerification'] === 'boolean') return parsed['sslVerification']
-    } catch { /* use default */ }
-  }
-  return true
-}
+import { getGeneralSettings } from './settings-utils'
 
 function rowToConfig(row: Record<string, unknown>): OAuthConfig {
   return {
@@ -69,7 +59,7 @@ export function registerOAuthHandlers(): void {
       const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [args.configId])
       if (!row) return { error: 'OAuth config not found' }
       const config = rowToConfig(row)
-      const sslVerification = getGlobalSslVerification()
+      const sslVerification = getGeneralSettings().sslVerification
       const token = config.grantType === 'authorization_code'
         ? await authorizeAuthCode(config, sslVerification)
         : await clientCredentials(config, sslVerification)
@@ -78,7 +68,7 @@ export function registerOAuthHandlers(): void {
   })
 
   ipcMain.handle('postly:oauth:token:get', async (_, args: { configId: string }) => {
-    try { return { data: await getValidToken(args.configId, getGlobalSslVerification()) } }
+    try { return { data: await getValidToken(args.configId, getGeneralSettings().sslVerification) } }
     catch (err) { return { error: String(err) } }
   })
 
@@ -90,12 +80,12 @@ export function registerOAuthHandlers(): void {
   // ── Inline config handlers (config stored directly on entity, no oauth_configs row) ──
 
   ipcMain.handle('postly:oauth:inline:authorize', async (_, config: OAuthConfig) => {
-    try { return { data: await authorizeInline(config, getGlobalSslVerification()) } }
+    try { return { data: await authorizeInline(config, getGeneralSettings().sslVerification) } }
     catch (err) { return { error: String(err) } }
   })
 
   ipcMain.handle('postly:oauth:inline:token:get', async (_, config: OAuthConfig) => {
-    try { return { data: await getValidTokenForConfig(config, getGlobalSslVerification()) } }
+    try { return { data: await getValidTokenForConfig(config, getGeneralSettings().sslVerification) } }
     catch (err) { return { error: String(err) } }
   })
 
