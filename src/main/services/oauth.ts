@@ -45,8 +45,10 @@ async function waitForRedirect(
     let settled = false
 
     const cleanup = () => {
-      win.webContents.off('will-redirect', tryCapture)
-      win.webContents.off('will-navigate', tryCapture)
+      if (!win.isDestroyed()) {
+        win.webContents.off('will-redirect', tryCapture)
+        win.webContents.off('will-navigate', tryCapture)
+      }
       win.off('closed', onClosed)
       clearTimeout(timer)
     }
