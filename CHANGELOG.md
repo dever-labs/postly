@@ -4,6 +4,61 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-04-07
+
+### Fixed
+
+- **OAuth 2.0 SSL verification** — `sslVerification: false` in Settings was silently ignored by all four OAuth IPC handlers; certificate errors were thrown even when SSL verification was disabled. Now correctly respected across `authorize`, `token:get`, `inline:authorize`, and `inline:token:get` (closes #29).
+- **OAuth window crash** — `TypeError: object has been destroyed` thrown when the user closes the authorization window early; `webContents` event listeners are now only removed while the window is still alive.
+- **OAuth refresh token grant** — missing `await` on the `DELETE` query in the refresh grant; `saveToken` now runs inside a transaction to prevent partial writes.
+- **Integration tests** — Mockly-based integration tests added for the HTTP executor; integration tests excluded from the default unit test run.
+
+### Security
+
+- **PreviewTab iframe** — sandbox policy tightened to block script execution and same-origin access in the response preview iframe.
+- **Multiple vulnerabilities** — XSS, path traversal, API key exposure, and arbitrary file-read issues resolved.
+
+---
+
+## [0.4.0] — 2026-04-03
+
+### Added
+
+- **Draft cache** — all editors (URL, headers, body, auth) now persist unsaved changes; navigating away and back restores the draft automatically.
+- **Undo history** — Ctrl+Z restores the previous draft state across all editors.
+- **Sidebar collapse persistence** — expanded/collapsed state of collections and groups is saved and restored across app restarts.
+
+### Changed
+
+- **URL bar performance** — decoupled from the global request store to eliminate typing lag on large collections.
+- **Electron** — updated from 35 → 41.
+
+### Fixed
+
+- Dirty indicator flash and Ctrl+Z clear in URL and body inputs.
+- `setActiveRequest` race condition; draft flush and error-handling edge cases.
+
+### Security
+
+- OAuth `redirectUri` no longer exposed as a shared constant; removed `DEFAULT_OAUTH_REDIRECT_URI`.
+- CodeQL security and quality alerts resolved across `oauth.ts`.
+
+---
+
+## [0.3.0] — 2026-04-02
+
+### Added
+
+- **Per-request SSL verification** — individual requests, groups, and collections can override the global SSL setting; the hierarchy (request → group → collection → global) is resolved at execution time.
+- **OAuth SSL support** — when SSL verification is disabled, the OAuth authorization window runs in a dedicated in-memory session partition with certificate verification bypassed, so login pages on self-signed endpoints load correctly.
+- **Commitlint** — conventional commit enforcement added to CI; all commit messages are now validated on push.
+
+### Changed
+
+- **CI** — `release-please` automation removed in favour of manual version bumps driven by git tags.
+
+---
+
 ## [0.2.1] — 2026-03-31
 
 ### Added
