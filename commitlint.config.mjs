@@ -1,6 +1,7 @@
 /** @type {import('@commitlint/types').UserConfig} */
 export default {
   extends: ['@commitlint/config-conventional'],
+  ignores: [(message) => /^Signed-off-by: dependabot\[bot\]/m.test(message)],
   rules: {
     // Allowed types — must match the table in .github/copilot-instructions.md
     'type-enum': [
