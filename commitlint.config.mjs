@@ -1,6 +1,13 @@
 /** @type {import('@commitlint/types').UserConfig} */
 export default {
   extends: ['@commitlint/config-conventional'],
+  ignores: [(message) => {
+    const header = message.split('\n', 1)[0] ?? ''
+    const hasDependabotHeader = /^(build|chore)\(deps(?:-dev)?\): bump .+/.test(header)
+    const hasDependabotSignoff =
+      /^Signed-off-by: dependabot\[bot\] <49699333\+dependabot\[bot\]@users\.noreply\.github\.com>$/m.test(message)
+    return hasDependabotHeader && hasDependabotSignoff
+  }],
   rules: {
     // Allowed types — must match the table in .github/copilot-instructions.md
     'type-enum': [

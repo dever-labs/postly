@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
+import { getGeneralSettings } from './settings-utils'
 
 type LogLevel = 'info' | 'warn' | 'error'
 
@@ -106,16 +107,10 @@ export function registerHttpHandlers(): void {
       }
 
       // ── Settings ─────────────────────────────────────────────────────────────
-      const settingsRow = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['general'])
-      let sslVerification = true, followRedirects = true, timeout = 30000
-      if (settingsRow) {
-        try {
-          const parsed = JSON.parse(settingsRow.value) as Record<string, unknown>
-          if (typeof parsed['sslVerification'] === 'boolean') sslVerification = parsed['sslVerification']
-          if (typeof parsed['followRedirects'] === 'boolean') followRedirects = parsed['followRedirects']
-          if (typeof parsed['defaultTimeout'] === 'number') timeout = parsed['defaultTimeout']
-        } catch { /* use defaults */ }
-      }
+      const generalSettings = getGeneralSettings()
+      let sslVerification = generalSettings.sslVerification
+      const followRedirects = generalSettings.followRedirects
+      const timeout = generalSettings.defaultTimeout
 
       // ── SSL resolution ────────────────────────────────────────────────────────
       const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
