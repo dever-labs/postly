@@ -8,7 +8,7 @@ export function PreviewTab({ body }: PreviewTabProps) {
   return (
     <iframe
       srcDoc={body}
-      sandbox=""
+      sandbox="allow-same-origin"
       className="h-full w-full border-0 bg-white"
       title="response preview"
     />
