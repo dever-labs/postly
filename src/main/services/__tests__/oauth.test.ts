@@ -27,6 +27,14 @@ vi.mock('electron', () => {
   const BrowserWindowMock = vi.fn().mockImplementation(function () {
     const wcListeners: Record<string, Array<(event: { preventDefault: () => void }, url: string) => void>> = {}
     const winListeners: Record<string, Array<() => void>> = {}
+    const removeListener = <T>(listeners: Record<string, Array<T>>, event: string, handler: T) => {
+      const list = listeners[event]
+      if (!list) return
+      const index = list.indexOf(handler)
+      if (index !== -1) {
+        list.splice(index, 1)
+      }
+    }
     return {
       loadURL: vi.fn().mockImplementation((url: string) => {
         const authUrl = new URL(url)
@@ -50,7 +58,7 @@ vi.mock('electron', () => {
         ),
         off: vi.fn().mockImplementation(
           (event: string, handler: (evt: { preventDefault: () => void }, url: string) => void) => {
-            const list = wcListeners[event]; if (list) { const i = list.indexOf(handler); if (i !== -1) list.splice(i, 1) }
+            removeListener(wcListeners, event, handler)
           },
         ),
       },
@@ -58,7 +66,7 @@ vi.mock('electron', () => {
         ;(winListeners[event] ??= []).push(handler)
       }),
       off: vi.fn().mockImplementation((event: string, handler: () => void) => {
-        const list = winListeners[event]; if (list) { const i = list.indexOf(handler); if (i !== -1) list.splice(i, 1) }
+        removeListener(winListeners, event, handler)
       }),
       isDestroyed: vi.fn().mockReturnValue(false),
       close: vi.fn(),
