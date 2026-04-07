@@ -5,6 +5,30 @@ import axios from 'axios'
 import { queryOne, run } from '../database'
 
 const OAUTH_AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1000
+const TOKEN_EXPIRY_BUFFER_MS = 60_000
+
+async function beginTransaction(): Promise<void> {
+  await run('BEGIN TRANSACTION')
+}
+
+async function commitTransaction(): Promise<void> {
+  await run('COMMIT')
+}
+
+async function rollbackTransaction(): Promise<void> {
+  await run('ROLLBACK')
+}
+
+type DbTokenRow = {
+  id: string
+  oauth_config_id: string
+  access_token: string
+  refresh_token: string | null
+  token_type: string
+  expires_at: number | null
+  scope: string | null
+  created_at: number
+}
 
 export interface OAuthConfig {
   id: string
@@ -194,30 +218,40 @@ export async function refreshTokenGrant(token: Token, config: OAuthConfig, sslVe
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  run('DELETE FROM tokens WHERE oauth_config_id = ?', [config.id])
   return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
 }
 
-function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token {
+async function saveToken(oauthConfigId: string, data: Record<string, unknown>): Promise<Token> {
   const id = crypto.randomUUID()
   const now = Date.now()
   const expiresAt = data['expires_in'] ? now + Number(data['expires_in']) * 1000 : undefined
 
-  run('DELETE FROM tokens WHERE oauth_config_id = ?', [oauthConfigId])
-  run(
-    `INSERT INTO tokens (id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scope, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      oauthConfigId,
-      String(data['access_token'] ?? ''),
-      data['refresh_token'] ? String(data['refresh_token']) : null,
-      String(data['token_type'] ?? 'Bearer'),
-      expiresAt ?? null,
-      data['scope'] ? String(data['scope']) : null,
-      now
-    ]
-  )
+  await beginTransaction()
+  try {
+    await run('DELETE FROM tokens WHERE oauth_config_id = ?', [oauthConfigId])
+    await run(
+      `INSERT INTO tokens (id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scope, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        oauthConfigId,
+        String(data['access_token'] ?? ''),
+        data['refresh_token'] ? String(data['refresh_token']) : null,
+        String(data['token_type'] ?? 'Bearer'),
+        expiresAt ?? null,
+        data['scope'] ? String(data['scope']) : null,
+        now
+      ]
+    )
+    await commitTransaction()
+  } catch (err) {
+    try {
+      await rollbackTransaction()
+    } catch {
+      // ignore rollback errors
+    }
+    throw err
+  }
 
   return {
     id,
@@ -232,8 +266,7 @@ function saveToken(oauthConfigId: string, data: Record<string, unknown>): Token 
 }
 
 export async function getValidToken(oauthConfigId: string, sslVerification = true): Promise<Token | null> {
-  type TokenRow = { id: string; oauth_config_id: string; access_token: string; refresh_token: string | null; token_type: string; expires_at: number | null; scope: string | null; created_at: number }
-  const row = queryOne<TokenRow>(
+  const row = queryOne<DbTokenRow>(
     'SELECT * FROM tokens WHERE oauth_config_id = ? ORDER BY created_at DESC LIMIT 1',
     [oauthConfigId]
   )
@@ -251,10 +284,9 @@ export async function getValidToken(oauthConfigId: string, sslVerification = tru
     createdAt: row.created_at
   }
 
-  if (token.expiresAt && token.expiresAt < Date.now() + 60_000) {
+  if (token.expiresAt && token.expiresAt < Date.now() + TOKEN_EXPIRY_BUFFER_MS) {
     if (token.refreshToken) {
-      type ConfigRow = { id: string; name: string; grant_type: string; client_id: string; client_secret: string | null; auth_url: string | null; token_url: string; scopes: string; redirect_uri: string }
-      const configRow = queryOne<ConfigRow>('SELECT * FROM oauth_configs WHERE id = ?', [oauthConfigId])
+      const configRow = queryOne<OAuthConfigRow>('SELECT * FROM oauth_configs WHERE id = ?', [oauthConfigId])
       if (configRow) {
         try {
           return await refreshTokenGrant(token, rowToOAuthConfig(configRow), sslVerification)
@@ -299,8 +331,7 @@ export function configHashKey(config: Pick<OAuthConfig, 'clientId' | 'tokenUrl' 
  */
 export async function getValidTokenForConfig(config: OAuthConfig, sslVerification = true): Promise<Token | null> {
   const key = configHashKey(config)
-  type TokenRow = { id: string; oauth_config_id: string; access_token: string; refresh_token: string | null; token_type: string; expires_at: number | null; scope: string | null; created_at: number }
-  const row = queryOne<TokenRow>(
+  const row = queryOne<DbTokenRow>(
     'SELECT * FROM tokens WHERE oauth_config_id = ? ORDER BY created_at DESC LIMIT 1',
     [key]
   )
@@ -317,7 +348,7 @@ export async function getValidTokenForConfig(config: OAuthConfig, sslVerificatio
     createdAt: row.created_at
   }
 
-  if (token.expiresAt && token.expiresAt < Date.now() + 60_000) {
+  if (token.expiresAt && token.expiresAt < Date.now() + TOKEN_EXPIRY_BUFFER_MS) {
     if (token.refreshToken) {
       try {
         // Temporarily assign key as id for saveToken to use correct bucket
