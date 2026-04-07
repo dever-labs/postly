@@ -50,7 +50,7 @@ console.log(`Downloading ${assetName()} …`)
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const get = (u, redirectsLeft = 10) => {
-      https.get(u, { headers: { 'User-Agent': 'postly-test-setup' } }, (res) => {
+      https.get(u, { headers: { 'User-Agent': 'mockly-test-setup' } }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
           res.resume() // consume body to free the socket
           const location = res.headers.location
@@ -59,8 +59,9 @@ function download(url, dest) {
           get(location, redirectsLeft - 1)
           return
         }
-        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return }
+        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode} while fetching ${u}`)); return }
         const ws = createWriteStream(dest)
+        res.on('error', reject)
         res.pipe(ws)
         ws.on('finish', resolve)
         ws.on('error', reject)
