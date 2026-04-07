@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const resourcesDir = join(__dirname, '..', 'resources')
 
 const size = 1024
+const ICO_MAX_SIZE = 256
 
 const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -34,15 +35,15 @@ console.log('✓ icon.png (1024x1024)')
 // 2. Generate Windows .ico (multi-size: 16, 24, 32, 48, 64, 128, 256)
 
 // Write .ico using png2icons
-// NUM_COLORS = 0 disables color quantization, preserving full color depth.
-const NUM_COLORS = 0
-const largeBuffer = await sharp(Buffer.from(svg)).resize(256, 256).png().toBuffer()
-const icoBuffer = png2icons.createICO(largeBuffer, png2icons.BILINEAR, NUM_COLORS, true)
+// numColors = 0 disables color quantization, preserving full color depth.
+const numColors = 0
+const largeBuffer = await sharp(Buffer.from(svg)).resize(ICO_MAX_SIZE, ICO_MAX_SIZE).png().toBuffer()
+const icoBuffer = png2icons.createICO(largeBuffer, png2icons.BILINEAR, numColors, true)
 writeFileSync(join(resourcesDir, 'icon.ico'), icoBuffer)
-console.log('✓ icon.ico (multi-size up to 256x256)')
+console.log(`✓ icon.ico (multi-size up to ${ICO_MAX_SIZE}x${ICO_MAX_SIZE})`)
 
 // 3. Generate macOS .icns
-const icnsBuffer = png2icons.createICNS(largeBuffer, png2icons.BILINEAR, NUM_COLORS)
+const icnsBuffer = png2icons.createICNS(largeBuffer, png2icons.BILINEAR, numColors)
 writeFileSync(join(resourcesDir, 'icon.icns'), icnsBuffer)
 console.log('✓ icon.icns (macOS)')
 
