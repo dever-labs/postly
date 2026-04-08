@@ -9,6 +9,7 @@ export interface BackstageSettings {
   baseUrl: string
   token: string
   autoSync: boolean
+  integrationId?: string
   authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
 }
@@ -132,11 +133,11 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
     let collectionId: string
     if (existing) {
       collectionId = existing.id
-      run('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?', [col.label, now, collectionId])
+      run('UPDATE collections SET name = ?, integration_id = ?, updated_at = ? WHERE id = ?', [col.label, settings.integrationId ?? null, now, collectionId])
     } else {
       collectionId = crypto.randomUUID()
-      run(`INSERT INTO collections (id, name, source, source_meta, created_at, updated_at) VALUES (?, ?, 'backstage', ?, ?, ?)`,
-        [collectionId, col.label, col.sourceMeta, now, now])
+    run(`INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'backstage', ?, ?, ?, ?)`,
+        [collectionId, col.label, col.sourceMeta, settings.integrationId ?? null, now, now])
     }
 
     // Clear old groups + requests before re-importing
