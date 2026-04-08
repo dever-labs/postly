@@ -104,7 +104,7 @@ export function AppShell() {
           </div>
         ) : selectedItem?.type === 'edit-integration' ? (
           <div className="no-drag flex flex-1 overflow-hidden">
-            <IntegrationEditPage integrationId={selectedItem.id} />
+            <IntegrationEditPage key={selectedItem.id} integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'export-page' ? (
           <div className="no-drag flex flex-1 overflow-y-auto">
