@@ -128,7 +128,9 @@ export function registerIntegrationHandlers(): void {
         ['error', String(err), Date.now(), args.id])
       return { error: String(err) }
     }
-  })async (_, args: { id: string }) => {
+  })
+
+  ipcMain.handle('postly:integrations:disconnect', async (_, args: { id: string }) => {
     try {
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, updated_at = ? WHERE id = ?',
         ['', '', 'disconnected', Date.now(), args.id])
