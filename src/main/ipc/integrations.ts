@@ -70,6 +70,7 @@ export function registerIntegrationHandlers(): void {
 
       const type = integration.type as string
       let token = '', connectedUserJson = ''
+      let authProvider = 'token'
 
       if (type === 'git') {
         // Uses system git credentials — test connectivity and detect default branch
@@ -96,7 +97,7 @@ export function registerIntegrationHandlers(): void {
         connectedUserJson = JSON.stringify(result.user)
       } else if (type === 'backstage') {
         // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google')
-        const authProvider = (integration.client_id as string) || 'token'
+        authProvider = (integration.client_id as string) || 'token'
         const baseUrl = integration.base_url as string
 
         if (authProvider === 'guest') {
