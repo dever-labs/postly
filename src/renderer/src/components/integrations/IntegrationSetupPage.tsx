@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, Github, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -16,7 +16,7 @@ const BS_PROVIDERS: { value: BsProvider; icon: React.ReactNode; label: string }[
   { value: 'guest',  icon: <UserRound className="h-4 w-4" />,  label: 'Guest'  },
   { value: 'token',  icon: <KeyRound className="h-4 w-4" />,   label: 'Token'  },
   { value: 'gitlab', icon: <GitBranch className="h-4 w-4" />,  label: 'GitLab' },
-  { value: 'github', icon: <Github className="h-4 w-4" />,     label: 'GitHub' },
+  { value: 'github', icon: <GitFork className="h-4 w-4" />,     label: 'GitHub' },
   { value: 'google', icon: <Globe className="h-4 w-4" />,      label: 'Google' },
 ]
 
