@@ -96,6 +96,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
         if (!spec) { result.skipped++; continue }
 
         const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
+        run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
         run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
 
         for (const g of groups) {
@@ -115,6 +116,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
         }
       } else {
         // graphql / grpc / asyncapi — store the raw definition as a single reference request
+        run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
         run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
         const groupId = crypto.randomUUID()
         const label = apiType === 'graphql' ? 'GraphQL' : apiType === 'grpc' ? 'gRPC' : apiType.toUpperCase()

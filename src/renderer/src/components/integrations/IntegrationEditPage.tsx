@@ -132,11 +132,23 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
         await loadIntegrations(); await loadCollections()
       } else if (type === 'backstage') {
         if (token) await window.api.integrations.update({ id: integrationId, token })
-        const { data, error: connErr, syncError } = await window.api.integrations.connect({ id: integrationId }) as { data: unknown; error?: string; syncError?: string }
+        const { data, error: connErr, syncError, syncResult } = await window.api.integrations.connect({ id: integrationId }) as {
+          data: unknown; error?: string; syncError?: string
+          syncResult?: { entitiesFound: number; synced: number; skipped: number; errors: string[] }
+        }
         if (connErr) { setError(connErr); setReconnecting(false); return }
         const u = (data as Record<string, unknown>)?.connected_user
         try { setConnectedUser(typeof u === 'string' ? JSON.parse(u) : null) } catch { /* empty */ }
-        if (syncError) setError(`Connected but catalog sync failed: ${syncError}`)
+        if (syncError) {
+          setError(`Catalog sync failed: ${syncError}`)
+        } else if (syncResult) {
+          if (syncResult.synced === 0) {
+            const detail = syncResult.errors.length ? syncResult.errors.join('; ') : `${syncResult.skipped} entities skipped`
+            setError(`Connected but no APIs imported. ${detail}`)
+          } else if (syncResult.errors.length) {
+            console.warn('Backstage sync partial errors:', syncResult.errors)
+          }
+        }
         await loadIntegrations(); await loadCollections()
       } else {
         // github / gitlab — device flow

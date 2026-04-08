@@ -120,7 +120,8 @@ export function registerIntegrationHandlers(): void {
       // For Backstage, immediately sync the catalog with the fresh token
       if (type === 'backstage') {
         try {
-          await syncCatalog({ baseUrl: integration.base_url as string, token, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'] })
+          const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'] })
+          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncResult }
         } catch (syncErr) {
           run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
             [String(syncErr), Date.now(), args.id])
