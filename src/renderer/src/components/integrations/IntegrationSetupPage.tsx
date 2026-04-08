@@ -43,6 +43,8 @@ function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v
     </div>
   )
 }
+
+function inferRepoName(raw: string): string {
   try {
     const clean = raw.trim().replace(/\.git$/, '')
     const parts = clean.replace(/^git@[^:]+:/, 'https://fake/').split('/').filter(Boolean)
