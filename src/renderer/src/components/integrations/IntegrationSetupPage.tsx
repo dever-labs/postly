@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, Loader2 } from 'lucide-react'
+import { Check, Database, GitBranch, Github, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -10,7 +10,39 @@ import { useUIStore } from '@/store/ui'
 type Phase = 'url' | 'collection' | 'importing' | 'done'
 type Mode = 'git' | 'backstage'
 
-function repoNameFromUrl(raw: string): string {
+type BsProvider = 'guest' | 'token' | 'gitlab' | 'github' | 'google'
+
+const BS_PROVIDERS: { value: BsProvider; icon: React.ReactNode; label: string }[] = [
+  { value: 'guest',  icon: <UserRound className="h-4 w-4" />,  label: 'Guest'  },
+  { value: 'token',  icon: <KeyRound className="h-4 w-4" />,   label: 'Token'  },
+  { value: 'gitlab', icon: <GitBranch className="h-4 w-4" />,  label: 'GitLab' },
+  { value: 'github', icon: <Github className="h-4 w-4" />,     label: 'GitHub' },
+  { value: 'google', icon: <Globe className="h-4 w-4" />,      label: 'Google' },
+]
+
+function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v: BsProvider) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {BS_PROVIDERS.map((p) => (
+        <button
+          key={p.value}
+          type="button"
+          onClick={() => onChange(p.value)}
+          title={p.label}
+          className={[
+            'flex flex-1 flex-col items-center gap-1 rounded-sm border px-2 py-2 text-[10px] font-medium transition-colors focus:outline-hidden',
+            value === p.value
+              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+              : 'border-th-border text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary',
+          ].join(' ')}
+        >
+          {p.icon}
+          {p.label}
+        </button>
+      ))}
+    </div>
+  )
+}
   try {
     const clean = raw.trim().replace(/\.git$/, '')
     const parts = clean.replace(/^git@[^:]+:/, 'https://fake/').split('/').filter(Boolean)
@@ -345,17 +377,7 @@ export function IntegrationSetupPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
-                <select
-                  className="w-full rounded-sm border border-th-border bg-th-bg-secondary px-2 py-1.5 text-sm text-th-text-primary focus:outline-hidden focus:ring-1 focus:ring-blue-500"
-                  value={bsProvider}
-                  onChange={(e) => setBsProvider(e.target.value as typeof bsProvider)}
-                >
-                  <option value="guest">Guest (local dev)</option>
-                  <option value="token">Static token</option>
-                  <option value="gitlab">GitLab</option>
-                  <option value="github">GitHub</option>
-                  <option value="google">Google</option>
-                </select>
+                <BsProviderPicker value={bsProvider} onChange={setBsProvider} />
               </div>
               {bsProvider === 'token' && (
                 <div>
@@ -364,7 +386,7 @@ export function IntegrationSetupPage() {
                 </div>
               )}
               {bsProvider !== 'token' && bsProvider !== 'guest' && (
-                <p className="text-xs text-th-text-subtle">A browser window will open for you to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
+                <p className="text-xs text-th-text-subtle">A browser window will open to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
               )}
 
               {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
