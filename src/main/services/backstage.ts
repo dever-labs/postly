@@ -20,7 +20,7 @@ export interface SyncResult {
   errors: string[]
 }
 
-interface BackstageEntity {
+interface BackstageApiEntity {
   metadata: {
     name: string
     namespace?: string
@@ -28,9 +28,20 @@ interface BackstageEntity {
   }
   spec?: {
     type?: string
-    // Backstage returns definition as a raw string (YAML, proto, GraphQL SDL, etc.)
     definition?: string | Record<string, unknown>
   }
+}
+
+interface BackstageComponentEntity {
+  metadata: {
+    name: string
+    namespace?: string
+    description?: string
+  }
+  spec?: {
+    providesApis?: string[]
+  }
+  relations?: Array<{ type: string; targetRef: string }>
 }
 
 function resolveOpenApiSpec(definition: string | Record<string, unknown>): object | null {
@@ -43,6 +54,14 @@ function resolveOpenApiSpec(definition: string | Record<string, unknown>): objec
   return null
 }
 
+/** Normalise a Backstage entity ref to just the name portion */
+function refName(ref: string): string {
+  // e.g. 'api:default/user-management-api' → 'user-management-api'
+  //       'default/user-management-api'    → 'user-management-api'
+  //       'user-management-api'            → 'user-management-api'
+  return ref.replace(/^[^:]+:/i, '').split('/').pop() ?? ref
+}
+
 export async function syncCatalog(settings: BackstageSettings): Promise<SyncResult> {
   if (!settings.baseUrl) throw new Error('Backstage base URL is not configured')
   if (!settings.token && settings.authProvider === 'token') throw new Error('Backstage token is not configured')
@@ -52,96 +71,137 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   const headers: Record<string, string> = {}
   if (settings.token) headers['Authorization'] = `Bearer ${settings.token}`
 
-  const response = await axios.get<BackstageEntity[]>(
-    `${settings.baseUrl}/api/catalog/entities?filter=kind=API`,
-    { headers }
-  )
+  // Fetch all API + Component entities in parallel
+  const [apisRes, compsRes] = await Promise.all([
+    axios.get<BackstageApiEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=API`, { headers }),
+    axios.get<BackstageComponentEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=Component`, { headers }),
+  ])
 
-  result.entitiesFound = response.data.length
+  const allApis = Array.isArray(apisRes.data) ? apisRes.data : []
+  const allComponents = Array.isArray(compsRes.data) ? compsRes.data : []
 
-  for (const entity of response.data) {
-    const entityName = entity.metadata.name
-    const entityNamespace = entity.metadata.namespace ?? 'default'
-    const apiType = entity.spec?.type ?? 'openapi'
-    const rawDefinition = entity.spec?.definition
+  // Build fast-lookup: name → API entity
+  const apiByName = new Map<string, BackstageApiEntity>()
+  for (const api of allApis) apiByName.set(api.metadata.name, api)
 
-    const sourceMeta = JSON.stringify({ entityName, entityNamespace })
-    const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'backstage' AND source_meta = ?`, [sourceMeta])
+  // Group APIs by component using spec.providesApis or relations
+  const componentApis = new Map<BackstageComponentEntity, BackstageApiEntity[]>()
+  const claimedApiNames = new Set<string>()
 
-    let collectionId: string
-    if (existing) {
-      collectionId = existing.id
-      run('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?', [entityName, now, collectionId])
-    } else {
-      collectionId = crypto.randomUUID()
-      run(`INSERT INTO collections (id, name, source, source_meta, created_at, updated_at) VALUES (?, ?, 'backstage', ?, ?, ?)`,
-        [collectionId, entityName, sourceMeta, now, now])
+  for (const comp of allComponents) {
+    // Collect API names via spec.providesApis
+    const providedRefs: string[] = comp.spec?.providesApis ?? []
+    // Also collect via relations (type: 'providesApi')
+    for (const rel of comp.relations ?? []) {
+      if (rel.type === 'providesApi') providedRefs.push(rel.targetRef)
     }
+    const apis = [...new Set(providedRefs.map(refName))]
+      .map(name => apiByName.get(name))
+      .filter((a): a is BackstageApiEntity => !!a)
 
-    try {
-      if (apiType === 'openapi' || apiType === 'swagger') {
-        let spec: object | null = rawDefinition ? resolveOpenApiSpec(rawDefinition) : null
-
-        if (!spec) {
-          const specUrl = entity.metadata.annotations?.['backstage.io/api-spec']
-          if (specUrl) {
-            try { spec = (await axios.get(specUrl, { headers })).data }
-            catch (err) {
-              result.skipped++
-              result.errors.push(`${entityName}: failed to fetch spec — ${String(err)}`)
-              continue
-            }
-          }
-        }
-        if (!spec) { result.skipped++; continue }
-
-        const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
-        run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
-        run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
-
-        for (const g of groups) {
-          run(
-            `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt]
-          )
-        }
-        for (const req of requests) {
-          run(
-            `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
-             req.bodyContent, req.authType, req.authConfig, req.description ?? null, req.scmPath ?? null,
-             req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt]
-          )
-        }
-      } else {
-        // graphql / grpc / asyncapi — store the raw definition as a single reference request
-        run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
-        run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
-        const groupId = crypto.randomUUID()
-        const label = apiType === 'graphql' ? 'GraphQL' : apiType === 'grpc' ? 'gRPC' : apiType.toUpperCase()
-        run(
-          `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
-          [groupId, collectionId, `${label} Schema`, `${label} API definition from Backstage`, now, now]
-        )
-        const requestId = crypto.randomUUID()
-        const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
-        const definitionStr = typeof rawDefinition === 'string' ? rawDefinition : JSON.stringify(rawDefinition ?? '', null, 2)
-        run(
-          `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-          [requestId, groupId, `${entityName} schema`, protocol === 'grpc' ? 'POST' : 'POST',
-           settings.baseUrl, '[]', '[]', protocol === 'graphql' ? 'graphql' : 'raw-text',
-           definitionStr, 'none', '{}', `${label} definition synced from Backstage catalog`, null, null, now, now]
-        )
-      }
-      result.synced++
-    } catch (err) {
-      result.skipped++
-      result.errors.push(`${entityName}: failed to parse spec — ${String(err)}`)
+    if (apis.length > 0) {
+      componentApis.set(comp, apis)
+      apis.forEach(a => claimedApiNames.add(a.metadata.name))
     }
   }
 
+  // APIs with no owning component become standalone collections
+  const standaloneApis = allApis.filter(a => !claimedApiNames.has(a.metadata.name))
+
+  // Build collection list: [{ label, apis }]
+  type CollectionSpec = { label: string; sourceMeta: string; apis: BackstageApiEntity[] }
+  const collections: CollectionSpec[] = [
+    ...Array.from(componentApis.entries()).map(([comp, apis]) => ({
+      label: comp.metadata.name,
+      sourceMeta: JSON.stringify({ component: comp.metadata.name, namespace: comp.metadata.namespace ?? 'default' }),
+      apis,
+    })),
+    ...standaloneApis.map(api => ({
+      label: api.metadata.name,
+      sourceMeta: JSON.stringify({ entityName: api.metadata.name, entityNamespace: api.metadata.namespace ?? 'default' }),
+      apis: [api],
+    })),
+  ]
+
+  result.entitiesFound = collections.length
+  console.log(`[Backstage] syncCatalog: ${allComponents.length} components, ${allApis.length} APIs → ${collections.length} collections`)
+
+  for (const col of collections) {
+    // Upsert the collection row
+    const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'backstage' AND source_meta = ?`, [col.sourceMeta])
+    let collectionId: string
+    if (existing) {
+      collectionId = existing.id
+      run('UPDATE collections SET name = ?, updated_at = ? WHERE id = ?', [col.label, now, collectionId])
+    } else {
+      collectionId = crypto.randomUUID()
+      run(`INSERT INTO collections (id, name, source, source_meta, created_at, updated_at) VALUES (?, ?, 'backstage', ?, ?, ?)`,
+        [collectionId, col.label, col.sourceMeta, now, now])
+    }
+
+    // Clear old groups + requests before re-importing
+    run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
+    run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+
+    let anySucceeded = false
+    for (const api of col.apis) {
+      const apiName = api.metadata.name
+      const apiType = api.spec?.type ?? 'openapi'
+      const rawDefinition = api.spec?.definition
+      console.log(`[Backstage] ${col.label}/${apiName} type=${apiType} hasDefinition=${!!rawDefinition}`)
+
+      try {
+        if (apiType === 'openapi' || apiType === 'swagger') {
+          let spec: object | null = rawDefinition ? resolveOpenApiSpec(rawDefinition) : null
+          if (!spec) {
+            const specUrl = api.metadata.annotations?.['backstage.io/api-spec']
+            if (specUrl) {
+              try { spec = (await axios.get(specUrl, { headers })).data }
+              catch (err) { result.errors.push(`${col.label}/${apiName}: failed to fetch spec — ${String(err)}`); continue }
+            }
+          }
+          if (!spec) {
+            result.errors.push(`${col.label}/${apiName}: no definition found (definition=${JSON.stringify(rawDefinition)?.slice(0, 100)})`)
+            continue
+          }
+          const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
+          for (const g of groups) {
+            run(`INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt])
+          }
+          for (const req of requests) {
+            run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
+               req.bodyContent, req.authType, req.authConfig, req.description ?? null, req.scmPath ?? null,
+               req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt])
+          }
+          anySucceeded = true
+        } else {
+          // graphql / grpc / asyncapi — store raw definition as a schema request
+          const groupId = crypto.randomUUID()
+          const label = apiType === 'graphql' ? 'GraphQL' : apiType === 'grpc' ? 'gRPC' : apiType.toUpperCase()
+          run(`INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
+            [groupId, collectionId, `${label} Schema`, `${label} API from Backstage`, now, now])
+          const requestId = crypto.randomUUID()
+          const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
+          const definitionStr = typeof rawDefinition === 'string' ? rawDefinition : JSON.stringify(rawDefinition ?? '', null, 2)
+          run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+            [requestId, groupId, `${apiName}`, 'POST', settings.baseUrl, '[]', '[]',
+             protocol === 'graphql' ? 'graphql' : 'raw-text', definitionStr, 'none', '{}',
+             `${label} definition synced from Backstage`, null, null, now, now])
+          anySucceeded = true
+        }
+      } catch (err) {
+        console.error(`[Backstage] failed to process ${col.label}/${apiName}:`, err)
+        result.errors.push(`${col.label}/${apiName}: ${String(err)}`)
+      }
+    }
+
+    if (anySucceeded) result.synced++
+    else result.skipped++
+  }
+
+  console.log(`[Backstage] sync done — synced=${result.synced} skipped=${result.skipped} errors=${result.errors.length}`)
   return result
 }
 
