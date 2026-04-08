@@ -181,9 +181,28 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                     <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
-                    <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
+                    <select
+                      className="w-full rounded-sm border border-th-border bg-th-bg-secondary px-2 py-1.5 text-sm text-th-text-primary focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      value={clientId || 'guest'}
+                      onChange={(e) => setClientId(e.target.value)}
+                    >
+                      <option value="guest">Guest (local dev)</option>
+                      <option value="token">Static token</option>
+                      <option value="gitlab">GitLab</option>
+                      <option value="github">GitHub</option>
+                      <option value="google">Google</option>
+                    </select>
                   </div>
+                  {(clientId === 'token' || (!clientId)) && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
+                      <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+                    </div>
+                  )}
+                  {connectedUser && (
+                    <p className="text-xs text-th-text-subtle">Connected as <span className="text-th-text-secondary">{connectedUser.name}</span></p>
+                  )}
                 </>
               )}
 

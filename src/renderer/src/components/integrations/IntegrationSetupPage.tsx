@@ -47,6 +47,7 @@ export function IntegrationSetupPage() {
   const [bsUrl, setBsUrl] = useState('http://localhost:7007')
   const [bsName, setBsName] = useState('Backstage')
   const [bsToken, setBsToken] = useState('')
+  const [bsProvider, setBsProvider] = useState<'token' | 'guest' | 'gitlab' | 'github' | 'google'>('guest')
 
   const [error, setError] = useState<string | null>(null)
 
@@ -108,10 +109,11 @@ export function IntegrationSetupPage() {
           baseUrl: bsUrl.trim(),
           repo: '',
           branch: 'main',
+          clientId: bsProvider,
         })
         if (createErr) { setError(createErr); setConnecting(false); return }
         const id = (createData as Record<string, unknown>).id as string
-        if (bsToken) await api.integrations.update({ id, token: bsToken })
+        if (bsProvider === 'token' && bsToken) await api.integrations.update({ id, token: bsToken })
         const { error: connErr } = await api.integrations.connect({ id })
         if (connErr) { setError(connErr); setConnecting(false); return }
         setConnectedUser({ name: 'Backstage', avatarUrl: '' })
@@ -342,9 +344,28 @@ export function IntegrationSetupPage() {
                 <Input placeholder="Backstage" value={bsName} onChange={(e) => setBsName(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
-                <Input type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
+                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
+                <select
+                  className="w-full rounded-sm border border-th-border bg-th-bg-secondary px-2 py-1.5 text-sm text-th-text-primary focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                  value={bsProvider}
+                  onChange={(e) => setBsProvider(e.target.value as typeof bsProvider)}
+                >
+                  <option value="guest">Guest (local dev)</option>
+                  <option value="token">Static token</option>
+                  <option value="gitlab">GitLab</option>
+                  <option value="github">GitHub</option>
+                  <option value="google">Google</option>
+                </select>
               </div>
+              {bsProvider === 'token' && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
+                  <Input type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
+                </div>
+              )}
+              {bsProvider !== 'token' && bsProvider !== 'guest' && (
+                <p className="text-xs text-th-text-subtle">A browser window will open for you to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
+              )}
 
               {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 

@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
 import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHubDeviceToken, requestGitLabDeviceCode, pollGitLabDeviceToken } from '../services/scm-oauth'
 import { testConnectivity } from '../services/git-local'
+import { authenticateWithBackstage, authenticateWithBackstageGuest, syncCatalog } from '../services/backstage'
 
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
@@ -93,21 +94,41 @@ export function registerIntegrationHandlers(): void {
         token = result.token
         connectedUserJson = JSON.stringify(result.user)
       } else if (type === 'backstage') {
-        token = (integration.token as string) ?? ''
-        connectedUserJson = JSON.stringify({ login: 'backstage', name: 'Backstage', avatarUrl: '' })
+        // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google')
+        const authProvider = (integration.client_id as string) || 'token'
+        const baseUrl = integration.base_url as string
+
+        if (authProvider === 'guest') {
+          const result = await authenticateWithBackstageGuest(baseUrl)
+          token = result.token
+          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+        } else if (authProvider !== 'token') {
+          const result = await authenticateWithBackstage(baseUrl, authProvider)
+          token = result.token
+          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+        } else {
+          token = (integration.token as string) ?? ''
+          connectedUserJson = JSON.stringify({ name: 'Backstage', avatarUrl: '' })
+        }
       }
 
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
         [token, connectedUserJson, 'connected', '', Date.now(), args.id])
+
+      // For Backstage, immediately sync the catalog with the fresh token
+      if (type === 'backstage') {
+        try {
+          await syncCatalog({ baseUrl: integration.base_url as string, token, autoSync: false, authProvider: 'token' })
+        } catch { /* sync failure should not block connect */ }
+      }
+
       return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
     } catch (err) {
       run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
         ['error', String(err), Date.now(), args.id])
       return { error: String(err) }
     }
-  })
-
-  ipcMain.handle('postly:integrations:disconnect', async (_, args: { id: string }) => {
+  })async (_, args: { id: string }) => {
     try {
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, updated_at = ? WHERE id = ?',
         ['', '', 'disconnected', Date.now(), args.id])
