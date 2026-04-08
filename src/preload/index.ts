@@ -55,6 +55,8 @@ const api = {
   },
   backstage: {
     sync: () => ipcRenderer.invoke('postly:backstage:sync'),
+    auth: (data: { baseUrl: string; provider: string }) => ipcRenderer.invoke('postly:backstage:auth', data),
+    disconnect: () => ipcRenderer.invoke('postly:backstage:disconnect'),
   },
   github: {
     sync: () => ipcRenderer.invoke('postly:github:sync'),

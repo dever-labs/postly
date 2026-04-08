@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import axios from 'axios'
 import crypto from 'crypto'
 import { queryOne, run } from '../database'
@@ -7,6 +8,15 @@ export interface BackstageSettings {
   baseUrl: string
   token: string
   autoSync: boolean
+  authProvider?: 'token' | 'gitlab' | 'github' | 'google'
+  connectedUser?: { name: string; email?: string; picture?: string }
+}
+
+export interface SyncResult {
+  entitiesFound: number
+  synced: number
+  skipped: number
+  errors: string[]
 }
 
 interface BackstageEntity {
@@ -23,7 +33,11 @@ interface BackstageEntity {
   }
 }
 
-export async function syncCatalog(settings: BackstageSettings): Promise<void> {
+export async function syncCatalog(settings: BackstageSettings): Promise<SyncResult> {
+  if (!settings.baseUrl) throw new Error('Backstage base URL is not configured')
+  if (!settings.token && settings.authProvider === 'token') throw new Error('Backstage token is not configured')
+
+  const result: SyncResult = { entitiesFound: 0, synced: 0, skipped: 0, errors: [] }
   const now = Date.now()
   const headers: Record<string, string> = {}
   if (settings.token) headers['Authorization'] = `Bearer ${settings.token}`
@@ -32,6 +46,8 @@ export async function syncCatalog(settings: BackstageSettings): Promise<void> {
     `${settings.baseUrl}/api/catalog/entities?filter=kind=API`,
     { headers }
   )
+
+  result.entitiesFound = response.data.length
 
   for (const entity of response.data) {
     const entityName = entity.metadata.name
@@ -45,10 +61,17 @@ export async function syncCatalog(settings: BackstageSettings): Promise<void> {
       const specUrl = entity.metadata.annotations?.['backstage.io/api-spec']
       if (specUrl) {
         try { spec = (await axios.get(specUrl, { headers })).data }
-        catch { continue }
+        catch (err) {
+          result.skipped++
+          result.errors.push(`${entityName}: failed to fetch spec — ${String(err)}`)
+          continue
+        }
       }
     }
-    if (!spec) continue
+    if (!spec) {
+      result.skipped++
+      continue
+    }
 
     const sourceMeta = JSON.stringify({ entityName, entityNamespace })
     const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'backstage' AND source_meta = ?`, [sourceMeta])
@@ -83,6 +106,95 @@ export async function syncCatalog(settings: BackstageSettings): Promise<void> {
            req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt]
         )
       }
-    } catch { /* skip unparseable specs */ }
+      result.synced++
+    } catch (err) {
+      result.skipped++
+      result.errors.push(`${entityName}: failed to parse spec — ${String(err)}`)
+    }
   }
+
+  return result
+}
+
+const AUTH_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * Opens a BrowserWindow to the Backstage auth start endpoint for the given
+ * provider (e.g. 'gitlab', 'github', 'google'). After the OAuth dance
+ * completes and Backstage sets a session, the window's JavaScript context
+ * calls the Backstage refresh endpoint (with the session cookies) to
+ * retrieve the Backstage-signed token.
+ */
+export async function authenticateWithBackstage(
+  baseUrl: string,
+  provider: string,
+): Promise<{ token: string; user: { name: string; email?: string; picture?: string } }> {
+  const base = baseUrl.replace(/\/$/, '')
+
+  const win = new BrowserWindow({
+    width: 1000,
+    height: 700,
+    title: `Sign in to Backstage via ${provider}`,
+    autoHideMenuBar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  })
+
+  win.loadURL(`${base}/api/auth/${provider}/start?env=production`)
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      if (!win.isDestroyed()) win.webContents.off('did-finish-load', tryExtract)
+      win.off('closed', onClosed)
+      clearTimeout(timer)
+    }
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      fn()
+    }
+
+    const tryExtract = async () => {
+      const url = win.webContents.getURL()
+      // Skip while still in the OAuth redirect dance
+      if (url.includes('/api/auth/') || url.includes('/oauth/') || url.includes('/login')) return
+      try {
+        const result = await win.webContents.executeJavaScript(`
+          (async () => {
+            try {
+              const resp = await fetch('/api/auth/${provider}/refresh', { credentials: 'include' })
+              if (!resp.ok) return null
+              return await resp.json()
+            } catch { return null }
+          })()
+        `) as { backstageIdentity?: { token?: string }; profile?: { displayName?: string; email?: string; picture?: string } } | null
+
+        const token = result?.backstageIdentity?.token
+        if (token) {
+          settle(() => resolve({
+            token,
+            user: {
+              name: result?.profile?.displayName ?? provider,
+              email: result?.profile?.email,
+              picture: result?.profile?.picture,
+            },
+          }))
+        }
+      } catch { /* keep waiting for next navigation */ }
+    }
+
+    const onClosed = () => settle(() => reject(new Error('Authentication window closed')))
+    const timer = setTimeout(
+      () => settle(() => reject(new Error('Backstage authentication timed out'))),
+      AUTH_TIMEOUT_MS,
+    )
+
+    win.webContents.on('did-finish-load', tryExtract)
+    win.on('closed', onClosed)
+  }).finally(() => {
+    if (!win.isDestroyed()) win.close()
+  }) as Promise<{ token: string; user: { name: string; email?: string; picture?: string } }>
 }
