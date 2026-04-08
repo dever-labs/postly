@@ -34,6 +34,24 @@ export interface ParsedRequest {
   updatedAt: number
 }
 
+/** Build a minimal JSON skeleton from an OpenAPI schema object */
+function buildJsonSkeleton(schema: Record<string, unknown>, depth = 0): string {
+  if (depth > 4) return 'null'
+  const type = schema['type'] as string | undefined
+  if (type === 'object' || schema['properties']) {
+    const props = (schema['properties'] ?? {}) as Record<string, Record<string, unknown>>
+    const pairs = Object.entries(props).map(([k, v]) => `  "${k}": ${buildJsonSkeleton(v, depth + 1)}`)
+    return pairs.length > 0 ? `{\n${pairs.join(',\n')}\n}` : '{}'
+  }
+  if (type === 'array' && schema['items']) {
+    return `[${buildJsonSkeleton(schema['items'] as Record<string, unknown>, depth + 1)}]`
+  }
+  if (type === 'string') return '"string"'
+  if (type === 'integer' || type === 'number') return '0'
+  if (type === 'boolean') return 'false'
+  return 'null'
+}
+
 export async function parseOpenApiToRequests(
   spec: object,
   collectionId: string
@@ -104,11 +122,30 @@ export async function parseOpenApiToRequests(
 
       const queryParams = parameters
         .filter((p) => p['in'] === 'query')
-        .map((p) => ({ key: String(p['name'] ?? ''), value: '', enabled: true }))
+        .map((p) => ({ id: crypto.randomUUID(), key: String(p['name'] ?? ''), value: '', enabled: true }))
 
       const headerParams = parameters
         .filter((p) => p['in'] === 'header')
-        .map((p) => ({ key: String(p['name'] ?? ''), value: '', enabled: true }))
+        .map((p) => ({ id: crypto.randomUUID(), key: String(p['name'] ?? ''), value: '', enabled: true }))
+
+      // Derive body type and content from requestBody
+      let bodyType: string = 'none'
+      let bodyContent = ''
+      const requestBody = operation['requestBody'] as { content?: Record<string, { schema?: unknown }> } | undefined
+      if (requestBody?.content) {
+        if (requestBody.content['application/json']) {
+          bodyType = 'raw-json'
+          const schema = requestBody.content['application/json'].schema
+          bodyContent = schema ? buildJsonSkeleton(schema as Record<string, unknown>) : '{}'
+        } else if (requestBody.content['application/xml']) {
+          bodyType = 'raw-xml'
+        } else if (requestBody.content['text/plain']) {
+          bodyType = 'raw-text'
+        } else {
+          bodyType = 'raw-json'
+          bodyContent = '{}'
+        }
+      }
 
       requests.push({
         id: crypto.randomUUID(),
@@ -118,8 +155,8 @@ export async function parseOpenApiToRequests(
         url: `${baseUrl}${pathKey}`,
         params: JSON.stringify(queryParams),
         headers: JSON.stringify(headerParams),
-        bodyType: 'none',
-        bodyContent: '',
+        bodyType,
+        bodyContent,
         authType: 'none',
         authConfig: '{}',
         description,

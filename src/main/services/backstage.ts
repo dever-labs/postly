@@ -184,11 +184,18 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
           run(`INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
             [groupId, collectionId, `${label} Schema`, `${label} API from Backstage`, now, now])
           const requestId = crypto.randomUUID()
-          const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
           const definitionStr = typeof rawDefinition === 'string' ? rawDefinition : JSON.stringify(rawDefinition ?? '', null, 2)
-          run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-            [requestId, groupId, `${apiName}`, 'POST', settings.baseUrl, '[]', '[]',
-             protocol === 'graphql' ? 'graphql' : 'raw-text', definitionStr, 'none', '{}',
+          const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
+          // GraphQL: store SDL in protocol_config.schema so it's visible in the schema tab
+          // gRPC: store proto in protocol_config.protoContent (matches GrpcView prop)
+          const protocolConfig = apiType === 'graphql'
+            ? JSON.stringify({ schema: definitionStr })
+            : apiType === 'grpc'
+              ? JSON.stringify({ protoContent: definitionStr })
+              : '{}'
+          run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, protocol, protocol_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+            [requestId, groupId, apiName, 'POST', settings.baseUrl, '[]', '[]',
+             'none', '', 'none', '{}', protocol, protocolConfig,
              `${label} definition synced from Backstage`, null, null, now, now])
           anySucceeded = true
         }
