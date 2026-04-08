@@ -162,7 +162,7 @@ export interface BackstageSettings {
   baseUrl: string
   token: string
   autoSync: boolean
-  authProvider?: 'token' | 'gitlab' | 'github' | 'google'
+  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
 }
 

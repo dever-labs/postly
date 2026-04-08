@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import axios from 'axios'
 import crypto from 'crypto'
+import yaml from 'js-yaml'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 
@@ -8,7 +9,7 @@ export interface BackstageSettings {
   baseUrl: string
   token: string
   autoSync: boolean
-  authProvider?: 'token' | 'gitlab' | 'github' | 'google'
+  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
 }
 
@@ -26,11 +27,20 @@ interface BackstageEntity {
     annotations?: Record<string, string>
   }
   spec?: {
-    definition?: {
-      openapi?: object
-      swagger?: object
-    }
+    type?: string
+    // Backstage returns definition as a raw string (YAML, proto, GraphQL SDL, etc.)
+    definition?: string | Record<string, unknown>
   }
+}
+
+function resolveOpenApiSpec(definition: string | Record<string, unknown>): object | null {
+  if (typeof definition === 'object' && definition !== null) return definition
+  if (typeof definition !== 'string' || !definition.trim()) return null
+  try {
+    const parsed = yaml.load(definition)
+    if (parsed && typeof parsed === 'object') return parsed as object
+  } catch { /* not valid YAML/JSON */ }
+  return null
 }
 
 export async function syncCatalog(settings: BackstageSettings): Promise<SyncResult> {
@@ -52,26 +62,8 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   for (const entity of response.data) {
     const entityName = entity.metadata.name
     const entityNamespace = entity.metadata.namespace ?? 'default'
-
-    let spec: object | null = null
-    if (entity.spec?.definition?.openapi) spec = entity.spec.definition.openapi
-    else if (entity.spec?.definition?.swagger) spec = entity.spec.definition.swagger
-
-    if (!spec) {
-      const specUrl = entity.metadata.annotations?.['backstage.io/api-spec']
-      if (specUrl) {
-        try { spec = (await axios.get(specUrl, { headers })).data }
-        catch (err) {
-          result.skipped++
-          result.errors.push(`${entityName}: failed to fetch spec — ${String(err)}`)
-          continue
-        }
-      }
-    }
-    if (!spec) {
-      result.skipped++
-      continue
-    }
+    const apiType = entity.spec?.type ?? 'openapi'
+    const rawDefinition = entity.spec?.definition
 
     const sourceMeta = JSON.stringify({ entityName, entityNamespace })
     const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'backstage' AND source_meta = ?`, [sourceMeta])
@@ -87,23 +79,58 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
     }
 
     try {
-      const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
-      run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+      if (apiType === 'openapi' || apiType === 'swagger') {
+        let spec: object | null = rawDefinition ? resolveOpenApiSpec(rawDefinition) : null
 
-      for (const g of groups) {
+        if (!spec) {
+          const specUrl = entity.metadata.annotations?.['backstage.io/api-spec']
+          if (specUrl) {
+            try { spec = (await axios.get(specUrl, { headers })).data }
+            catch (err) {
+              result.skipped++
+              result.errors.push(`${entityName}: failed to fetch spec — ${String(err)}`)
+              continue
+            }
+          }
+        }
+        if (!spec) { result.skipped++; continue }
+
+        const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
+        run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+
+        for (const g of groups) {
+          run(
+            `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt]
+          )
+        }
+        for (const req of requests) {
+          run(
+            `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
+             req.bodyContent, req.authType, req.authConfig, req.description ?? null, req.scmPath ?? null,
+             req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt]
+          )
+        }
+      } else {
+        // graphql / grpc / asyncapi — store the raw definition as a single reference request
+        run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+        const groupId = crypto.randomUUID()
+        const label = apiType === 'graphql' ? 'GraphQL' : apiType === 'grpc' ? 'gRPC' : apiType.toUpperCase()
         run(
-          `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt]
+          `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
+          [groupId, collectionId, `${label} Schema`, `${label} API definition from Backstage`, now, now]
         )
-      }
-
-      for (const req of requests) {
+        const requestId = crypto.randomUUID()
+        const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
+        const definitionStr = typeof rawDefinition === 'string' ? rawDefinition : JSON.stringify(rawDefinition ?? '', null, 2)
         run(
           `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
-           req.bodyContent, req.authType, req.authConfig, req.description ?? null, req.scmPath ?? null,
-           req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt]
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+          [requestId, groupId, `${entityName} schema`, protocol === 'grpc' ? 'POST' : 'POST',
+           settings.baseUrl, '[]', '[]', protocol === 'graphql' ? 'graphql' : 'raw-text',
+           definitionStr, 'none', '{}', `${label} definition synced from Backstage catalog`, null, null, now, now]
         )
       }
       result.synced++
@@ -117,6 +144,32 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
 }
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * Fetch a Backstage guest token. No browser window — just a direct HTTP call
+ * to /api/auth/guest/refresh. Works when dangerouslyAllowOutsideDevelopment is true.
+ */
+export async function authenticateWithBackstageGuest(
+  baseUrl: string,
+): Promise<{ token: string; user: { name: string; email?: string; picture?: string } }> {
+  const base = baseUrl.replace(/\/$/, '')
+  const resp = await axios.post<{
+    backstageIdentity?: { token?: string }
+    profile?: { displayName?: string; email?: string; picture?: string }
+  }>(`${base}/api/auth/guest/refresh`, {}, { headers: { 'Content-Type': 'application/json' } })
+
+  const token = resp.data?.backstageIdentity?.token
+  if (!token) throw new Error('Guest refresh did not return a token')
+
+  return {
+    token,
+    user: {
+      name: resp.data?.profile?.displayName ?? 'Guest',
+      email: resp.data?.profile?.email,
+      picture: resp.data?.profile?.picture,
+    },
+  }
+}
 
 /**
  * Opens a BrowserWindow to the Backstage auth start endpoint for the given

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { queryOne, run } from '../database'
-import { syncCatalog, authenticateWithBackstage, BackstageSettings } from '../services/backstage'
+import { syncCatalog, authenticateWithBackstage, authenticateWithBackstageGuest, BackstageSettings } from '../services/backstage'
 
 export function registerBackstageHandlers(): void {
   ipcMain.handle('postly:backstage:sync', async () => {
@@ -14,7 +14,9 @@ export function registerBackstageHandlers(): void {
 
   ipcMain.handle('postly:backstage:auth', async (_, args: { baseUrl: string; provider: string }) => {
     try {
-      const result = await authenticateWithBackstage(args.baseUrl, args.provider)
+      const result = args.provider === 'guest'
+        ? await authenticateWithBackstageGuest(args.baseUrl)
+        : await authenticateWithBackstage(args.baseUrl, args.provider)
       const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['backstage'])
       const current: BackstageSettings = existing ? JSON.parse(existing.value) : { baseUrl: args.baseUrl, token: '', autoSync: false }
       run(

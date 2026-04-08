@@ -9,6 +9,7 @@ const DEFAULTS: BackstageSettings = { baseUrl: '', token: '', autoSync: false, a
 
 const PROVIDER_LABELS: Record<string, string> = {
   token: 'Static token',
+  guest: 'Guest (local dev)',
   gitlab: 'GitLab',
   github: 'GitHub',
   google: 'Google',
@@ -145,7 +146,9 @@ export function BackstageSettings() {
               </>
             ) : (
               <Button size="sm" onClick={signIn} disabled={signingIn}>
-                {signingIn ? 'Signing in…' : `Sign in via ${PROVIDER_LABELS[settings.authProvider ?? 'gitlab']}`}
+                {signingIn
+                  ? (settings.authProvider === 'guest' ? 'Connecting…' : 'Signing in…')
+                  : (settings.authProvider === 'guest' ? 'Connect as Guest' : `Sign in via ${PROVIDER_LABELS[settings.authProvider ?? 'gitlab']}`)}
               </Button>
             )}
           </div>
