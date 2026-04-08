@@ -132,9 +132,11 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
         await loadIntegrations(); await loadCollections()
       } else if (type === 'backstage') {
         if (token) await window.api.integrations.update({ id: integrationId, token })
-        const { error: connErr } = await window.api.integrations.connect({ id: integrationId })
+        const { data, error: connErr, syncError } = await window.api.integrations.connect({ id: integrationId }) as { data: unknown; error?: string; syncError?: string }
         if (connErr) { setError(connErr); setReconnecting(false); return }
-        setConnectedUser({ name: 'Backstage', avatarUrl: '' })
+        const u = (data as Record<string, unknown>)?.connected_user
+        try { setConnectedUser(typeof u === 'string' ? JSON.parse(u) : null) } catch { /* empty */ }
+        if (syncError) setError(`Connected but catalog sync failed: ${syncError}`)
         await loadIntegrations(); await loadCollections()
       } else {
         // github / gitlab — device flow

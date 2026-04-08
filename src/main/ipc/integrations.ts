@@ -4,6 +4,7 @@ import { queryAll, queryOne, run } from '../database'
 import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHubDeviceToken, requestGitLabDeviceCode, pollGitLabDeviceToken } from '../services/scm-oauth'
 import { testConnectivity } from '../services/git-local'
 import { authenticateWithBackstage, authenticateWithBackstageGuest, syncCatalog } from '../services/backstage'
+import type { BackstageSettings } from '../services/backstage'
 
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
@@ -118,8 +119,12 @@ export function registerIntegrationHandlers(): void {
       // For Backstage, immediately sync the catalog with the fresh token
       if (type === 'backstage') {
         try {
-          await syncCatalog({ baseUrl: integration.base_url as string, token, autoSync: false, authProvider: 'token' })
-        } catch { /* sync failure should not block connect */ }
+          await syncCatalog({ baseUrl: integration.base_url as string, token, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'] })
+        } catch (syncErr) {
+          run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
+            [String(syncErr), Date.now(), args.id])
+          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncError: String(syncErr) }
+        }
       }
 
       return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
