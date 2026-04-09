@@ -107,11 +107,11 @@ export function AppShell() {
             <IntegrationEditPage integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'export-page' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <ExportPage />
           </div>
         ) : selectedItem?.type === 'import-page' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <ImportPage />
           </div>
         ) : selectedItem?.type === 'git-source' ? (
@@ -119,11 +119,11 @@ export function AppShell() {
             <GitSourceView integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'collection' ? (
-          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
+          <div className="no-drag flex min-h-0 flex-1 flex-col overflow-hidden">
             <CollectionEditor collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'group' ? (
-          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
+          <div className="no-drag flex min-h-0 flex-1 flex-col overflow-hidden">
             <GroupEditor groupId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-collection' ? (
