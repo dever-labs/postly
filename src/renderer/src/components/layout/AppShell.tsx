@@ -93,9 +93,6 @@ export function AppShell() {
       {/* Right pane — drag-region on the wrapper so there's always some
           drag area; individual views add more via their own headers */}
       <div className="drag-region relative flex flex-1 flex-col overflow-hidden">
-        {/* Custom window controls — must be a DOM child of drag-region so
-            no-drag cancels the drag region at these coordinates */}
-        {window.api.platform !== 'darwin' && <WindowControls />}
         <ErrorBoundary>
 
         {sidebarTab === 'environments' ? (
@@ -160,6 +157,9 @@ export function AppShell() {
           </div>
         )}
         </ErrorBoundary>
+        {/* Window controls rendered LAST so no-drag wins over any inner
+            drag-region elements in DOM/paint order. Positioned absolute. */}
+        {window.api.platform !== 'darwin' && <WindowControls />}
       </div>
     </div>
   )
