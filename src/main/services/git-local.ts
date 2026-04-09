@@ -16,23 +16,26 @@ export function getRepoPath(integrationId: string): string {
   return path.join(getDataDir(), 'repos', integrationId)
 }
 
+/** Environment variables applied to all git network operations.
+ *
+ *  GIT_TERMINAL_PROMPT=0        — suppresses terminal-level prompts (git 2.3+)
+ *  GCM_INTERACTIVE=never        — prevents Windows GCM GUI dialogs
+ *  GIT_SSH_COMMAND              — auto-accept new SSH host keys (e.g. first-time
+ *                                 github.com connection from within Electron where
+ *                                 the process may have a different HOME/known_hosts).
+ *                                 `accept-new` accepts unknown hosts but still
+ *                                 rejects changed keys (TOFU — trust on first use). */
+const GIT_ENV = {
+  ...process.env,
+  GIT_TERMINAL_PROMPT: '0',
+  GCM_INTERACTIVE: 'never',
+  GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=accept-new',
+}
+
 /** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).
- *  Also detects the default branch via `ls-remote --symref`.
- *
- *  We run git with interactive credential prompts disabled so that:
- *  - repos accessible via cached credentials (SSH agent, OS keychain, GCM stored
- *    tokens) connect instantly and silently, and
- *  - repos that would require a credential dialog fail immediately with an error
- *    rather than hanging indefinitely waiting for user input.
- *
- *  GIT_TERMINAL_PROMPT=0  — suppresses terminal-level prompts (git 2.3+, all platforms)
- *  GCM_INTERACTIVE=never  — prevents Windows Git Credential Manager from opening its GUI */
+ *  Also detects the default branch via `ls-remote --symref`. */
 export async function testConnectivity(repoUrl: string): Promise<{ name: string; defaultBranch: string }> {
-  const nonInteractiveEnv = {
-    ...process.env,
-    GIT_TERMINAL_PROMPT: '0',
-    GCM_INTERACTIVE: 'never',
-  }
+  const nonInteractiveEnv = GIT_ENV
   let defaultBranch = 'main'
   try {
     const raw = await simpleGit().env(nonInteractiveEnv).raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
@@ -54,7 +57,7 @@ export async function testConnectivity(repoUrl: string): Promise<{ name: string;
 export async function cloneOrPull(integrationId: string, repoUrl: string, branch: string): Promise<void> {
   const localPath = getRepoPath(integrationId)
   if (fs.existsSync(path.join(localPath, '.git'))) {
-    const git = simpleGit(localPath)
+    const git = simpleGit(localPath).env(GIT_ENV)
     await git.fetch()
     try {
       await git.checkout(branch)
@@ -64,8 +67,8 @@ export async function cloneOrPull(integrationId: string, repoUrl: string, branch
     }
   } else {
     fs.mkdirSync(localPath, { recursive: true })
-    await simpleGit().clone(repoUrl, localPath)
-    const git = simpleGit(localPath)
+    await simpleGit().env(GIT_ENV).clone(repoUrl, localPath)
+    const git = simpleGit(localPath).env(GIT_ENV)
     try { await git.checkout(branch) } catch { /* fallback to default */ }
   }
 }
@@ -73,7 +76,7 @@ export async function cloneOrPull(integrationId: string, repoUrl: string, branch
 /** List remote branch names for an already-cloned repo. */
 export async function listBranches(integrationId: string): Promise<string[]> {
   const localPath = getRepoPath(integrationId)
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.fetch()
   const result = await git.branch(['-r'])
   return Object.values(result.branches)
@@ -88,7 +91,7 @@ export async function createAndPushBranch(
   fromBranch: string
 ): Promise<void> {
   const localPath = getRepoPath(integrationId)
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.checkout(fromBranch)
   await git.checkoutLocalBranch(newBranch)
   await git.push(['-u', 'origin', newBranch])
@@ -150,7 +153,7 @@ export async function commitAndPush(
   }
   fs.mkdirSync(path.dirname(fullPath), { recursive: true })
   fs.writeFileSync(fullPath, content, 'utf8')
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.checkout(branch)
   await git.add(filePath)
   await git.commit(message)
@@ -374,7 +377,7 @@ export async function deleteCollectionFile(
     throw new Error('Invalid file path: must be within the repository directory')
   }
   if (!fs.existsSync(localPath)) return
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath)
     await git.rm([fileName]).catch(() => {})
