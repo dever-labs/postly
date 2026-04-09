@@ -19,7 +19,9 @@ export function registerIntegrationHandlers(): void {
   }) => {
     try {
       if (args.repo) {
-        try { new URL(args.repo) } catch {
+        const isHttpUrl = (() => { try { new URL(args.repo!); return true } catch { return false } })()
+        const isSshUrl = /^git@[^:]+:.+\/.+/.test(args.repo)
+        if (!isHttpUrl && !isSshUrl) {
           return { error: 'Invalid repository URL' }
         }
       }
