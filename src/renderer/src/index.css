@@ -1,6 +1,9 @@
 @config "../../../tailwind.config.js";
 @import "tailwindcss";
 
+/* Custom variant that applies when html.light is set */
+@custom-variant light (.light &);
+
 :root {
   color-scheme: dark;
   --color-background:     #030712;
