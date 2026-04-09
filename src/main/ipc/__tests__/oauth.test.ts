@@ -14,6 +14,7 @@ vi.mock('../../database', () => ({
   queryOne: vi.fn(),
   queryAll: vi.fn(),
   run: vi.fn(),
+  runTransaction: vi.fn(),
 }))
 
 vi.mock('../../services/oauth', () => ({
