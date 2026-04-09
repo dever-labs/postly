@@ -17,6 +17,8 @@ import { registerExportImportHandlers } from './export-import'
 import { registerDraftHandlers } from './drafts'
 import { registerWindowHandlers } from './window'
 
+export { attachWindowEvents } from './window'
+
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
   registerRequestHandlers()

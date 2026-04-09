@@ -1,14 +1,30 @@
 import { ipcMain, BrowserWindow, nativeTheme } from 'electron'
-import { platform } from 'process'
 
 export function registerWindowHandlers(): void {
-  ipcMain.handle('postly:window:set-title-bar-overlay', (_event, data: { color: string; symbolColor: string; theme: 'dark' | 'light' }) => {
-    // Keep nativeTheme in sync so Windows DWM renders caption button
-    // hover effects correctly for the current color scheme.
-    nativeTheme.themeSource = data.theme
-
-    if (platform !== 'win32') return
-    const win = BrowserWindow.getAllWindows()[0]
-    win?.setTitleBarOverlay({ color: data.color, symbolColor: data.symbolColor, height: 44 })
+  ipcMain.handle('postly:window:set-theme', (_event, theme: 'dark' | 'light') => {
+    nativeTheme.themeSource = theme
   })
+
+  ipcMain.handle('postly:window:minimize', () => {
+    BrowserWindow.getAllWindows()[0]?.minimize()
+  })
+
+  ipcMain.handle('postly:window:maximize', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win?.isMaximized()) win.unmaximize()
+    else win?.maximize()
+  })
+
+  ipcMain.handle('postly:window:close', () => {
+    BrowserWindow.getAllWindows()[0]?.close()
+  })
+
+  ipcMain.handle('postly:window:is-maximized', () => {
+    return BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false
+  })
+}
+
+export function attachWindowEvents(win: BrowserWindow): void {
+  win.on('maximize', () => win.webContents.send('postly:window:maximize-change', true))
+  win.on('unmaximize', () => win.webContents.send('postly:window:maximize-change', false))
 }

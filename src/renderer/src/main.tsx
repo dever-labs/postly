@@ -7,7 +7,7 @@ import './index.css'
 const stored = localStorage.getItem('postly-theme')
 if (stored === 'light') {
   document.documentElement.classList.add('light')
-  window.api.window.setTitleBarOverlay({ color: '#f9fafb', symbolColor: '#374151', theme: 'light' })
+  window.api.window.setTheme('light')
 }
 
 // Monaco internally rejects promises when completions are cancelled (e.g. user keeps typing).

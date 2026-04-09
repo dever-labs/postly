@@ -3,18 +3,13 @@ import type { CollectionSource } from '../types'
 
 export type Theme = 'dark' | 'light'
 
-const TITLE_BAR_COLORS = {
-  dark:  { color: '#030712', symbolColor: '#d1d5db' },
-  light: { color: '#f9fafb', symbolColor: '#374151' },
-}
-
 function applyThemeClass(theme: Theme) {
   if (theme === 'light') {
     document.documentElement.classList.add('light')
   } else {
     document.documentElement.classList.remove('light')
   }
-  window.api.window.setTitleBarOverlay({ ...TITLE_BAR_COLORS[theme], theme })
+  window.api.window.setTheme(theme)
 }
 
 const storedTheme = localStorage.getItem('postly-theme') as Theme | null

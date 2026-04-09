@@ -13,6 +13,7 @@ import { GitSourceView } from '@/components/git/GitSourceView'
 import { ExportPage } from '@/components/export-import/ExportPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
+import { WindowControls } from '@/components/layout/WindowControls'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
 import type { AiContext } from '@/lib/aiContext'
@@ -77,6 +78,8 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
+      {/* Custom window controls — shown on all platforms except macOS which has native traffic lights */}
+      {window.api.platform !== 'darwin' && <WindowControls />}
       {/* Sidebar */}
       <div
         style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }}
