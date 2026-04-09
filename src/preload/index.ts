@@ -171,7 +171,7 @@ const api = {
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
   },
   window: {
-    setTitleBarOverlay: (data: { color: string; symbolColor: string }) =>
+    setTitleBarOverlay: (data: { color: string; symbolColor: string; theme: 'dark' | 'light' }) =>
       ipcRenderer.invoke('postly:window:set-title-bar-overlay', data),
   },
   reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>

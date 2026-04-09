@@ -14,7 +14,7 @@ function applyThemeClass(theme: Theme) {
   } else {
     document.documentElement.classList.remove('light')
   }
-  window.api.window.setTitleBarOverlay(TITLE_BAR_COLORS[theme])
+  window.api.window.setTitleBarOverlay({ ...TITLE_BAR_COLORS[theme], theme })
 }
 
 const storedTheme = localStorage.getItem('postly-theme') as Theme | null
