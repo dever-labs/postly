@@ -24,7 +24,7 @@ export function getRepoPath(integrationId: string): string {
  *    (common on macOS when launched from the Dock, or on Windows)
  *
  *  Key search order mirrors OpenSSH defaults: ed25519 → ecdsa → rsa → dsa. */
-function buildSshCommand(): string {
+export function buildSshCommand(): string {
   const sshDir = path.join(os.homedir(), '.ssh')
   const keyNames = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
   const identityArgs = keyNames
