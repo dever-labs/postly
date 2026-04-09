@@ -1,6 +1,7 @@
 import simpleGit from 'simple-git'
 import { app } from 'electron'
 import path from 'path'
+import os from 'os'
 import fs from 'fs'
 import crypto from 'crypto'
 import SwaggerParser from '@apidevtools/swagger-parser'
@@ -16,20 +17,37 @@ export function getRepoPath(integrationId: string): string {
   return path.join(getDataDir(), 'repos', integrationId)
 }
 
+/** Build a GIT_SSH_COMMAND that:
+ *  - accepts new host keys on first connection (TOFU / StrictHostKeyChecking=accept-new)
+ *  - explicitly loads the user's default SSH identity files so the command works
+ *    even when Electron is launched outside a shell that has an SSH agent running
+ *    (common on macOS when launched from the Dock, or on Windows)
+ *
+ *  Key search order mirrors OpenSSH defaults: ed25519 → ecdsa → rsa → dsa. */
+function buildSshCommand(): string {
+  const sshDir = path.join(os.homedir(), '.ssh')
+  const keyNames = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
+  const identityArgs = keyNames
+    .map((name) => path.join(sshDir, name))
+    .filter((keyPath) => { try { return fs.existsSync(keyPath) } catch { return false } })
+    // SSH -i expects forward slashes even on Windows
+    .map((keyPath) => `-i "${keyPath.replace(/\\/g, '/')}"`)
+    .join(' ')
+
+  return `ssh -o StrictHostKeyChecking=accept-new${identityArgs ? ' ' + identityArgs : ''}`
+}
+
 /** Environment variables applied to all git network operations.
  *
- *  GIT_TERMINAL_PROMPT=0        — suppresses terminal-level prompts (git 2.3+)
- *  GCM_INTERACTIVE=never        — prevents Windows GCM GUI dialogs
- *  GIT_SSH_COMMAND              — auto-accept new SSH host keys (e.g. first-time
- *                                 github.com connection from within Electron where
- *                                 the process may have a different HOME/known_hosts).
- *                                 `accept-new` accepts unknown hosts but still
- *                                 rejects changed keys (TOFU — trust on first use). */
+ *  GIT_TERMINAL_PROMPT=0     — suppresses terminal-level prompts (git 2.3+)
+ *  GCM_INTERACTIVE=never     — prevents Windows GCM GUI dialogs
+ *  GIT_SSH_COMMAND           — TOFU host key acceptance + explicit identity files
+ *                              so SSH URLs work when Electron has no SSH agent */
 const GIT_ENV = {
   ...process.env,
   GIT_TERMINAL_PROMPT: '0',
   GCM_INTERACTIVE: 'never',
-  GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=accept-new',
+  GIT_SSH_COMMAND: buildSshCommand(),
 }
 
 /** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).

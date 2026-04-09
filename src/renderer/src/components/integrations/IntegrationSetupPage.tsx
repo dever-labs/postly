@@ -20,16 +20,6 @@ function repoNameFromUrl(raw: string): string {
   }
 }
 
-/** Convert SSH clone URLs to HTTPS so git operations work inside Electron
- *  (no SSH agent available).  HTTPS + system credential helpers work fine.
- *  e.g. git@github.com:org/repo.git  →  https://github.com/org/repo.git */
-function normalizeSshUrl(raw: string): string {
-  const trimmed = raw.trim()
-  const sshMatch = trimmed.match(/^git@([^:]+):(.+)$/)
-  if (!sshMatch) return trimmed
-  return `https://${sshMatch[1]}/${sshMatch[2]}`
-}
-
 export function IntegrationSetupPage() {
   const { load: loadIntegrations } = useIntegrationsStore()
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -71,11 +61,9 @@ export function IntegrationSetupPage() {
       if (mode === 'git') {
         if (!repoUrl.trim()) { setError('Repository URL is required'); setConnecting(false); return }
 
-        const normalizedUrl = normalizeSshUrl(repoUrl)
-
         // Reuse an existing integration for the same repo URL to avoid duplicates
         const existingIntegration = integrations.find(
-          (i) => (i.repo === normalizedUrl || i.repo === repoUrl.trim()) && i.type === 'git'
+          (i) => i.repo === repoUrl.trim() && i.type === 'git'
         )
 
         let id: string
@@ -84,9 +72,9 @@ export function IntegrationSetupPage() {
         } else {
           const { data: createData, error: createErr } = await api.integrations.create({
             type: 'git',
-            name: repoNameFromUrl(normalizedUrl),
+            name: repoNameFromUrl(repoUrl),
             baseUrl: '',
-            repo: normalizedUrl,
+            repo: repoUrl.trim(),
             branch: 'main',
           })
           if (createErr) { setError(createErr); setConnecting(false); return }
@@ -109,7 +97,7 @@ export function IntegrationSetupPage() {
         try { setConnectedUser(typeof u === 'string' ? JSON.parse(u) : null) } catch { /* ok */ }
 
         // Pre-fill collection name from URL
-        setTarget({ mode: 'new', name: repoNameFromUrl(normalizedUrl) })
+        setTarget({ mode: 'new', name: repoNameFromUrl(repoUrl) })
         await loadIntegrations()
         setPhase('collection')
 
@@ -223,17 +211,9 @@ export function IntegrationSetupPage() {
                   onChange={(e) => setRepoUrl(e.target.value)}
                   className="font-mono text-xs"
                 />
-                {/^git@/.test(repoUrl.trim()) && (
-                  <p className="mt-1 text-[11px] text-amber-400">
-                    SSH URLs are converted to HTTPS automatically (SSH auth is not available in Electron).
-                    Will use: <span className="font-mono">{normalizeSshUrl(repoUrl)}</span>
-                  </p>
-                )}
-                {!/^git@/.test(repoUrl.trim()) && (
-                  <p className="mt-1 text-[11px] text-th-text-faint">
-                    Uses your local git credentials — no token or OAuth app needed.
-                  </p>
-                )}
+                <p className="mt-1 text-[11px] text-th-text-faint">
+                  Uses your local git credentials — HTTPS tokens, SSH keys, or system credential helpers.
+                </p>
               </div>
 
               {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
