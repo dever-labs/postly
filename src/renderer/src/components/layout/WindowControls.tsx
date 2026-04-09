@@ -34,6 +34,8 @@ function CloseIcon() {
 }
 
 const NO_DRAG_STYLE = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
+
+export function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
