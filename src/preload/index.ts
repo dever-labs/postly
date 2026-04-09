@@ -170,6 +170,10 @@ const api = {
     import: () => ipcRenderer.invoke('postly:import'),
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
   },
+  window: {
+    setTitleBarOverlay: (data: { color: string; symbolColor: string }) =>
+      ipcRenderer.invoke('postly:window:set-title-bar-overlay', data),
+  },
   reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
     ipcRenderer.invoke('postly:reorder', data),
   drafts: {

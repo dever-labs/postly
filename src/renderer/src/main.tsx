@@ -5,7 +5,10 @@ import './index.css'
 
 // Apply stored theme class before React renders to prevent flash
 const stored = localStorage.getItem('postly-theme')
-if (stored === 'light') document.documentElement.classList.add('light')
+if (stored === 'light') {
+  document.documentElement.classList.add('light')
+  window.api.window.setTitleBarOverlay({ color: '#f9fafb', symbolColor: '#374151' })
+}
 
 // Monaco internally rejects promises when completions are cancelled (e.g. user keeps typing).
 // This is harmless but pollutes the console — swallow it here.

@@ -15,6 +15,7 @@ import { registerMqttHandlers } from './mqtt'
 import { registerAiHandlers } from './ai'
 import { registerExportImportHandlers } from './export-import'
 import { registerDraftHandlers } from './drafts'
+import { registerWindowHandlers } from './window'
 
 export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
@@ -34,4 +35,5 @@ export function registerAllIpcHandlers(): void {
   registerAiHandlers()
   registerExportImportHandlers()
   registerDraftHandlers()
+  registerWindowHandlers()
 }
