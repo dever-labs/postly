@@ -176,10 +176,10 @@ const api = {
     maximize: () => ipcRenderer.invoke('postly:window:maximize'),
     close: () => ipcRenderer.invoke('postly:window:close'),
     isMaximized: () => ipcRenderer.invoke('postly:window:is-maximized') as Promise<boolean>,
-    onMaximizeChange: (cb: (isMaximized: boolean) => void) => {
+    onMaximizeChange: (cb: (isMaximized: boolean) => void): (() => void) => {
       const handler = (_: unknown, isMaximized: boolean) => cb(isMaximized)
       ipcRenderer.on('postly:window:maximize-change', handler)
-      return () => ipcRenderer.removeListener('postly:window:maximize-change', handler)
+      return () => { ipcRenderer.removeListener('postly:window:maximize-change', handler) }
     },
   },
   reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
