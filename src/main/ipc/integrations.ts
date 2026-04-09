@@ -101,9 +101,12 @@ export function registerIntegrationHandlers(): void {
         [token, connectedUserJson, 'connected', '', Date.now(), args.id])
       return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
     } catch (err) {
+      const message = String(err).includes('block timeout reached')
+        ? 'Connection timed out. The credential dialog may have been cancelled or the server is unreachable.'
+        : String(err)
       run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
-        ['error', String(err), Date.now(), args.id])
-      return { error: String(err) }
+        ['error', message, Date.now(), args.id])
+      return { error: message }
     }
   })
 

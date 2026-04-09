@@ -17,16 +17,21 @@ export function getRepoPath(integrationId: string): string {
 }
 
 /** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).
- *  Also detects the default branch via `ls-remote --symref`. */
+ *  Also detects the default branch via `ls-remote --symref`.
+ *  Uses a 30-second inactivity timeout so that cancelling the OS credential
+ *  dialog (which can leave the git process hanging) unblocks the caller. */
 export async function testConnectivity(repoUrl: string): Promise<{ name: string; defaultBranch: string }> {
+  // Kill the git process after 30 s of silence — covers the case where the
+  // user dismisses the credential dialog and git stops producing output.
+  const gitOpts = { timeout: { block: 30_000 } };
   let defaultBranch = 'main'
   try {
-    const raw = await simpleGit().raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
+    const raw = await simpleGit(gitOpts).raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
     const match = raw.match(/ref: refs\/heads\/(\S+)\s+HEAD/)
     if (match) defaultBranch = match[1]
   } catch {
     // Some servers don't support --symref; fall back to plain ls-remote
-    await simpleGit().listRemote([repoUrl])
+    await simpleGit(gitOpts).listRemote([repoUrl])
   }
   let name = repoUrl
   try {
