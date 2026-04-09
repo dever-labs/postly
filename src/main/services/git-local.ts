@@ -17,16 +17,30 @@ export function getRepoPath(integrationId: string): string {
 }
 
 /** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).
- *  Also detects the default branch via `ls-remote --symref`. */
+ *  Also detects the default branch via `ls-remote --symref`.
+ *
+ *  We run git with interactive credential prompts disabled so that:
+ *  - repos accessible via cached credentials (SSH agent, OS keychain, GCM stored
+ *    tokens) connect instantly and silently, and
+ *  - repos that would require a credential dialog fail immediately with an error
+ *    rather than hanging indefinitely waiting for user input.
+ *
+ *  GIT_TERMINAL_PROMPT=0  — suppresses terminal-level prompts (git 2.3+, all platforms)
+ *  GCM_INTERACTIVE=never  — prevents Windows Git Credential Manager from opening its GUI */
 export async function testConnectivity(repoUrl: string): Promise<{ name: string; defaultBranch: string }> {
+  const nonInteractiveEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GCM_INTERACTIVE: 'never',
+  }
   let defaultBranch = 'main'
   try {
-    const raw = await simpleGit().raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
+    const raw = await simpleGit().env(nonInteractiveEnv).raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
     const match = raw.match(/ref: refs\/heads\/(\S+)\s+HEAD/)
     if (match) defaultBranch = match[1]
   } catch {
     // Some servers don't support --symref; fall back to plain ls-remote
-    await simpleGit().listRemote([repoUrl])
+    await simpleGit().env(nonInteractiveEnv).listRemote([repoUrl])
   }
   let name = repoUrl
   try {
