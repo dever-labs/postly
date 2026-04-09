@@ -78,8 +78,6 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
-      {/* Custom window controls — shown on all platforms except macOS which has native traffic lights */}
-      {window.api.platform !== 'darwin' && <WindowControls />}
       {/* Sidebar */}
       <div
         style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }}
@@ -94,7 +92,10 @@ export function AppShell() {
 
       {/* Right pane — drag-region on the wrapper so there's always some
           drag area; individual views add more via their own headers */}
-      <div className="drag-region flex flex-1 flex-col overflow-hidden">
+      <div className="drag-region relative flex flex-1 flex-col overflow-hidden">
+        {/* Custom window controls — must be a DOM child of drag-region so
+            no-drag cancels the drag region at these coordinates */}
+        {window.api.platform !== 'darwin' && <WindowControls />}
         <ErrorBoundary>
 
         {sidebarTab === 'environments' ? (
