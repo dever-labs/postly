@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 function MinimizeIcon() {
   return (
@@ -33,8 +33,6 @@ function CloseIcon() {
   )
 }
 
-const NO_DRAG_STYLE = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
-
 export function WindowControls() {
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -44,28 +42,28 @@ export function WindowControls() {
   }, [])
 
   return (
-    <div className="no-drag absolute right-0 top-0 z-[100] flex" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+    <div className="no-drag absolute right-0 top-0 z-[100] flex">
       <button
-        style={NO_DRAG_STYLE}
         className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
         onClick={() => window.api.window.minimize()}
         title="Minimize"
+        aria-label="Minimize"
       >
         <MinimizeIcon />
       </button>
       <button
-        style={NO_DRAG_STYLE}
         className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
         onClick={() => window.api.window.maximize()}
         title={isMaximized ? 'Restore' : 'Maximize'}
+        aria-label={isMaximized ? 'Restore' : 'Maximize'}
       >
         {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
       </button>
       <button
-        style={NO_DRAG_STYLE}
         className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-red-500 hover:text-white"
         onClick={() => window.api.window.close()}
         title="Close"
+        aria-label="Close"
       >
         <CloseIcon />
       </button>

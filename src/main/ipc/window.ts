@@ -5,22 +5,22 @@ export function registerWindowHandlers(): void {
     nativeTheme.themeSource = theme
   })
 
-  ipcMain.handle('postly:window:minimize', () => {
-    BrowserWindow.getAllWindows()[0]?.minimize()
+  ipcMain.handle('postly:window:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
   })
 
-  ipcMain.handle('postly:window:maximize', () => {
-    const win = BrowserWindow.getAllWindows()[0]
+  ipcMain.handle('postly:window:maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (win?.isMaximized()) win.unmaximize()
     else win?.maximize()
   })
 
-  ipcMain.handle('postly:window:close', () => {
-    BrowserWindow.getAllWindows()[0]?.close()
+  ipcMain.handle('postly:window:close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
   })
 
-  ipcMain.handle('postly:window:is-maximized', () => {
-    return BrowserWindow.getAllWindows()[0]?.isMaximized() ?? false
+  ipcMain.handle('postly:window:is-maximized', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
   })
 }
 
