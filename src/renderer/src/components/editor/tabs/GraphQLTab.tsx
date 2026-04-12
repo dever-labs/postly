@@ -1,5 +1,5 @@
 import Editor, { useMonaco } from '@monaco-editor/react'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '@/store/ui'
 
 interface GraphQLTabProps {
@@ -165,27 +165,6 @@ export function GraphQLTab({
     return () => disposable.dispose()
   }, [monaco])
 
-  // Only auto-trigger immediately after '{' — all other triggers are user-initiated
-  // (Ctrl+Space). This avoids suggestions blocking Enter on every keystroke.
-  const attachGraphQLSuggest = useCallback(
-    (editor: Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0]) => {
-      editor.onDidChangeModelContent(() => {
-        const pos = editor.getPosition()
-        if (!pos) return
-        const model = editor.getModel()
-        if (!model) return
-        const lastChar = model.getValueInRange({
-          startLineNumber: pos.lineNumber, startColumn: Math.max(1, pos.column - 1),
-          endLineNumber: pos.lineNumber, endColumn: pos.column,
-        })
-        if (lastChar === '{') {
-          editor.trigger('postly', 'editor.action.triggerSuggest', {})
-        }
-      })
-    },
-    []
-  )
-
   const monacoOptions = {
     minimap: { enabled: false },
     fontSize: 12,
@@ -193,12 +172,10 @@ export function GraphQLTab({
     scrollBeyondLastLine: false,
     wordWrap: 'on' as const,
     padding: { top: 8 },
-    // Don't auto-show on every keystroke — only on '{' (via onDidChangeModelContent)
-    // or Ctrl+Space. Prevents suggestions blocking the Enter key.
     quickSuggestions: false,
     suggestOnTriggerCharacters: false,
     // Enter always inserts a newline; Tab accepts the selected suggestion.
-    acceptSuggestionOnEnter: 'smart' as const,
+    acceptSuggestionOnEnter: 'off' as const,
   }
 
   const monacoTheme = theme === 'light' ? 'vs' : 'vs-dark'
@@ -251,13 +228,13 @@ export function GraphQLTab({
                 theme={monacoTheme}
                 value={query}
                 onChange={(v) => onQueryChange(v ?? '')}
-                onMount={attachGraphQLSuggest}
+                onMount={undefined}
                 options={monacoOptions}
               />
             </div>
             {schema && (
               <p className="mt-1 text-xs text-th-text-faint">
-                Schema loaded — type <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">{'{'}</kbd> to autocomplete fields, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Tab</kbd> to accept, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> to re-open
+                Schema loaded — press <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> to autocomplete fields, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Tab</kbd> to accept
               </p>
             )}
           </div>
