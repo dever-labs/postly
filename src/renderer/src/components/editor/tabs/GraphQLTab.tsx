@@ -198,7 +198,7 @@ export function GraphQLTab({
     quickSuggestions: false,
     suggestOnTriggerCharacters: false,
     // Enter always inserts a newline; Tab accepts the selected suggestion.
-    acceptSuggestionOnEnter: 'off' as const,
+    acceptSuggestionOnEnter: 'smart' as const,
   }
 
   const monacoTheme = theme === 'light' ? 'vs' : 'vs-dark'
