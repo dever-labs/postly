@@ -165,6 +165,8 @@ export function AppShell() {
               direction="vertical"
               targetRef={editorRef}
               onCommit={setEditorHeight}
+              minSize={150}
+              maxSize={800}
             />
             <div className="flex-1 overflow-hidden">
               <ResponseViewer />

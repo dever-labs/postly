@@ -10,10 +10,14 @@ interface ResizablePanelProps {
   targetRef?: React.RefObject<HTMLDivElement | null>
   /** Called once on mouseup with the final pixel size. Requires targetRef. */
   onCommit?: (size: number) => void
+  /** Minimum size in pixels when using targetRef. Default: 50. */
+  minSize?: number
+  /** Maximum size in pixels when using targetRef. Default: unlimited. */
+  maxSize?: number
   className?: string
 }
 
-export function ResizablePanel({ direction, onResize, targetRef, onCommit, className }: ResizablePanelProps) {
+export function ResizablePanel({ direction, onResize, targetRef, onCommit, minSize = 50, maxSize = Infinity, className }: ResizablePanelProps) {
   const isHorizontal = direction === 'horizontal'
 
   const handleMouseDown = useCallback(
@@ -31,7 +35,8 @@ export function ResizablePanel({ direction, onResize, targetRef, onCommit, class
           // Direct DOM mutation — no React re-render on every mousemove
           const sizeProp = isHorizontal ? 'offsetWidth' : 'offsetHeight'
           const styleProp = isHorizontal ? 'width' : 'height'
-          targetRef.current.style[styleProp] = `${targetRef.current[sizeProp] + delta}px`
+          const clamped = Math.min(Math.max(targetRef.current[sizeProp] + delta, minSize), maxSize)
+          targetRef.current.style[styleProp] = `${clamped}px`
         } else {
           onResize?.(delta)
         }

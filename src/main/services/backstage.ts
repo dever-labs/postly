@@ -252,17 +252,23 @@ export async function authenticateWithBackstage(
   baseUrl: string,
   provider: string,
 ): Promise<{ token: string; user: { name: string; email?: string; picture?: string } }> {
+  const ALLOWED = ['gitlab', 'github', 'google'] as const
+  type OAuthProvider = typeof ALLOWED[number]
+  if (!ALLOWED.includes(provider as OAuthProvider)) {
+    throw new Error(`Unsupported Backstage OAuth provider: ${JSON.stringify(provider)}`)
+  }
+  const safeProvider = provider as OAuthProvider
   const base = baseUrl.replace(/\/$/, '')
 
   const win = new BrowserWindow({
     width: 1000,
     height: 700,
-    title: `Sign in to Backstage via ${provider}`,
+    title: `Sign in to Backstage via ${safeProvider}`,
     autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   })
 
-  win.loadURL(`${base}/api/auth/${provider}/start?env=production`)
+  win.loadURL(`${base}/api/auth/${safeProvider}/start?env=production`)
 
   return new Promise((resolve, reject) => {
     let settled = false
@@ -288,7 +294,7 @@ export async function authenticateWithBackstage(
         const result = await win.webContents.executeJavaScript(`
           (async () => {
             try {
-              const resp = await fetch('/api/auth/${provider}/refresh', { credentials: 'include' })
+              const resp = await fetch('/api/auth/${safeProvider}/refresh', { credentials: 'include' })
               if (!resp.ok) return null
               return await resp.json()
             } catch { return null }
@@ -300,7 +306,7 @@ export async function authenticateWithBackstage(
           settle(() => resolve({
             token,
             user: {
-              name: result?.profile?.displayName ?? provider,
+              name: result?.profile?.displayName ?? safeProvider,
               email: result?.profile?.email,
               picture: result?.profile?.picture,
             },

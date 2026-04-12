@@ -14,14 +14,20 @@ export function registerBackstageHandlers(): void {
 
   ipcMain.handle('postly:backstage:auth', async (_, args: { baseUrl: string; provider: string }) => {
     try {
-      const result = args.provider === 'guest'
+      const ALLOWED_PROVIDERS = ['guest', 'gitlab', 'github', 'google'] as const
+      type OAuthProvider = typeof ALLOWED_PROVIDERS[number]
+      if (!ALLOWED_PROVIDERS.includes(args.provider as OAuthProvider)) {
+        return { error: `Unsupported auth provider: ${JSON.stringify(args.provider)}` }
+      }
+      const provider = args.provider as OAuthProvider
+      const result = provider === 'guest'
         ? await authenticateWithBackstageGuest(args.baseUrl)
-        : await authenticateWithBackstage(args.baseUrl, args.provider)
+        : await authenticateWithBackstage(args.baseUrl, provider)
       const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['backstage'])
       const current: BackstageSettings = existing ? JSON.parse(existing.value) : { baseUrl: args.baseUrl, token: '', autoSync: false }
       run(
         'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-        ['backstage', JSON.stringify({ ...current, baseUrl: args.baseUrl, authProvider: args.provider, token: result.token, connectedUser: result.user })]
+        ['backstage', JSON.stringify({ ...current, baseUrl: args.baseUrl, authProvider: provider, token: result.token, connectedUser: result.user })]
       )
       return { data: { user: result.user } }
     } catch (err) { return { error: String(err) } }

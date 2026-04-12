@@ -174,7 +174,8 @@ export function GraphQLTab({
     padding: { top: 8 },
     quickSuggestions: false,
     suggestOnTriggerCharacters: false,
-    // Enter always inserts a newline; Tab accepts the selected suggestion.
+    // Enter inserts a newline unless the suggest widget is open, where Enter
+    // accepts the selected suggestion (same as Tab).
     acceptSuggestionOnEnter: 'on' as const,
   }
 

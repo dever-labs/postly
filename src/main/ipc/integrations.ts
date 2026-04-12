@@ -98,7 +98,10 @@ export function registerIntegrationHandlers(): void {
         connectedUserJson = JSON.stringify(result.user)
       } else if (type === 'backstage') {
         // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google')
-        authProvider = (integration.client_id as string) || 'token'
+        const ALLOWED_BS_PROVIDERS = ['token', 'guest', 'gitlab', 'github', 'google'] as const
+        type BsProvider = typeof ALLOWED_BS_PROVIDERS[number]
+        const raw = (integration.client_id as string) || 'token'
+        authProvider = ALLOWED_BS_PROVIDERS.includes(raw as BsProvider) ? raw : 'token'
         const baseUrl = integration.base_url as string
 
         if (authProvider === 'guest') {

@@ -40,7 +40,7 @@ export function BackstageSettings() {
 
   const signIn = async () => {
     if (!settings.baseUrl) { addToast('Enter a Base URL first', 'error'); return }
-    const provider = settings.authProvider ?? 'gitlab'
+    const provider = settings.authProvider ?? 'token'
     setSigningIn(true)
     const { data, error } = await window.api.backstage.auth({ baseUrl: settings.baseUrl, provider })
     setSigningIn(false)
@@ -85,7 +85,7 @@ export function BackstageSettings() {
     }
   }
 
-  const useOAuth = settings.authProvider !== 'token'
+  const useOAuth = (settings.authProvider ?? 'token') !== 'token'
   const isConnected = !!settings.connectedUser
 
   return (
