@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { CollectionsSidebar } from '@/components/sidebar/CollectionsSidebar'
 import { RequestEditor } from '@/components/editor/RequestEditor'
 import { CollectionEditor } from '@/components/editor/CollectionEditor'
@@ -46,40 +46,57 @@ function AiRequestPage({ requestId }: { requestId: string }) {
   return <AiChatPanel context={ctx} groupId={request.groupId} />
 }
 
-function useDrag(direction: 'horizontal' | 'vertical', onResize: (delta: number) => void) {  return useCallback((e: React.MouseEvent) => {
+function useDrag(direction: 'horizontal' | 'vertical', containerRef: React.RefObject<HTMLDivElement | null>, min: number, max: number, onCommit: (size: number) => void) {
+  return useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     let last = direction === 'horizontal' ? e.clientX : e.clientY
+    const styleProp = direction === 'horizontal' ? 'width' : 'height'
+    const sizeProp = direction === 'horizontal' ? 'offsetWidth' : 'offsetHeight'
+
     const onMove = (ev: MouseEvent) => {
       const pos = direction === 'horizontal' ? ev.clientX : ev.clientY
       const d = pos - last; last = pos
-      if (d !== 0) onResize(d)
+      if (d !== 0 && containerRef.current) {
+        const next = Math.max(min, Math.min(max, containerRef.current[sizeProp] + d))
+        containerRef.current.style[styleProp] = `${next}px`
+      }
     }
     const onUp = () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+      if (containerRef.current) onCommit(containerRef.current[sizeProp])
     }
     document.body.style.cursor = direction === 'horizontal' ? 'col-resize' : 'row-resize'
     document.body.style.userSelect = 'none'
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
-  }, [direction, onResize])
+  }, [direction, containerRef, min, max, onCommit])
 }
 
 export function AppShell() {
-  const { sidebarWidth, setSidebarWidth, editorHeight, setEditorHeight, sidebarTab, selectedItem } = useUIStore()
+  // Only subscribe to values that affect rendering — not sidebarWidth/editorHeight,
+  // which are managed via DOM refs during drag and committed to the store on mouseup.
+  const sidebarTab = useUIStore((s) => s.sidebarTab)
+  const selectedItem = useUIStore((s) => s.selectedItem)
+  const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
+  const setEditorHeight = useUIStore((s) => s.setEditorHeight)
 
-  const sidebarDrag = useDrag('horizontal', useCallback((d: number) => {
-    const w = useUIStore.getState().sidebarWidth
-    setSidebarWidth(Math.max(180, Math.min(600, w + d)))
-  }, [setSidebarWidth]))
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+
+  const sidebarDrag = useDrag('horizontal', sidebarRef, 180, 600, setSidebarWidth)
+
+  // Read initial sizes once without subscribing — DOM refs own the size during drag.
+  const { sidebarWidth, editorHeight } = useUIStore.getState()
 
   return (
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
       {/* Sidebar */}
       <div
-        style={{ width: typeof sidebarWidth === 'number' ? sidebarWidth : 280 }}
+        ref={sidebarRef}
+        style={{ width: sidebarWidth ?? 280 }}
         className="relative shrink-0 overflow-hidden border-r border-th-border backdrop-blur-md"
       >
         <CollectionsSidebar />
@@ -140,15 +157,13 @@ export function AppShell() {
           </div>
         ) : (
           <div className="no-drag flex flex-1 flex-col overflow-hidden">
-            <div style={{ height: typeof editorHeight === 'number' ? editorHeight : 300 }} className="overflow-hidden">
+            <div ref={editorRef} style={{ height: editorHeight ?? 300 }} className="overflow-hidden">
               <RequestEditor />
             </div>
             <ResizablePanel
               direction="vertical"
-              onResize={(d) => {
-                const h = useUIStore.getState().editorHeight
-                setEditorHeight(Math.max(150, Math.min(800, h + d)))
-              }}
+              targetRef={editorRef}
+              onCommit={setEditorHeight}
             />
             <div className="flex-1 overflow-hidden">
               <ResponseViewer />
