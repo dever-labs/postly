@@ -3,6 +3,8 @@ import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
 import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHubDeviceToken, requestGitLabDeviceCode, pollGitLabDeviceToken } from '../services/scm-oauth'
 import { testConnectivity } from '../services/git-local'
+import { authenticateWithBackstage, authenticateWithBackstageGuest, syncCatalog } from '../services/backstage'
+import type { BackstageSettings } from '../services/backstage'
 
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
@@ -69,6 +71,7 @@ export function registerIntegrationHandlers(): void {
 
       const type = integration.type as string
       let token = '', connectedUserJson = ''
+      let authProvider = 'token'
 
       if (type === 'git') {
         // Uses system git credentials — test connectivity and detect default branch
@@ -94,12 +97,42 @@ export function registerIntegrationHandlers(): void {
         token = result.token
         connectedUserJson = JSON.stringify(result.user)
       } else if (type === 'backstage') {
-        token = (integration.token as string) ?? ''
-        connectedUserJson = JSON.stringify({ login: 'backstage', name: 'Backstage', avatarUrl: '' })
+        // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google')
+        const ALLOWED_BS_PROVIDERS = ['token', 'guest', 'gitlab', 'github', 'google'] as const
+        type BsProvider = typeof ALLOWED_BS_PROVIDERS[number]
+        const raw = (integration.client_id as string) || 'token'
+        authProvider = ALLOWED_BS_PROVIDERS.includes(raw as BsProvider) ? raw : 'token'
+        const baseUrl = integration.base_url as string
+
+        if (authProvider === 'guest') {
+          const result = await authenticateWithBackstageGuest(baseUrl)
+          token = result.token
+          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+        } else if (authProvider !== 'token') {
+          const result = await authenticateWithBackstage(baseUrl, authProvider)
+          token = result.token
+          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+        } else {
+          token = (integration.token as string) ?? ''
+          connectedUserJson = JSON.stringify({ name: 'Backstage', avatarUrl: '' })
+        }
       }
 
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
         [token, connectedUserJson, 'connected', '', Date.now(), args.id])
+
+      // For Backstage, immediately sync the catalog with the fresh token
+      if (type === 'backstage') {
+        try {
+          const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'] })
+          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncResult }
+        } catch (syncErr) {
+          run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
+            [String(syncErr), Date.now(), args.id])
+          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncError: String(syncErr) }
+        }
+      }
+
       return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
     } catch (err) {
       run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',

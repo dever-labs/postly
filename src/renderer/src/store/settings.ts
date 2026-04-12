@@ -24,7 +24,7 @@ const DEFAULT_GENERAL: GeneralSettings = {
   followRedirects: true,
   sslVerification: true,
 }
-const DEFAULT_BACKSTAGE: BackstageSettings = { baseUrl: '', token: '', autoSync: false }
+const DEFAULT_BACKSTAGE: BackstageSettings = { baseUrl: '', token: '', autoSync: false, authProvider: 'token' }
 const DEFAULT_GITHUB: GitHubSettings = { baseUrl: 'https://github.com', clientId: '', clientSecret: '', token: '', repo: '', orgs: [] }
 const DEFAULT_GITLAB: GitLabSettings = { baseUrl: 'https://gitlab.com', clientId: '', token: '', repo: '', groups: [] }
 const DEFAULT_AI: AiSettings = { provider: 'openai', apiKey: '', model: '' }

@@ -101,6 +101,8 @@ export function RequestEditor() {
   undoRequestRef.current = undoRequest
   const triggerGitSaveRef = useRef(triggerGitSave)
   triggerGitSaveRef.current = triggerGitSave
+  const breadcrumbRef = useRef(breadcrumb)
+  breadcrumbRef.current = breadcrumb
 
   // Ctrl+S: save; Ctrl+Z (when not in a text field): app-level undo
   useEffect(() => {
@@ -108,6 +110,7 @@ export function RequestEditor() {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
         e.preventDefault()
         if (!editingRequestRef.current) return
+        if (breadcrumbRef.current?.sourceType === 'backstage') return
         saveRequestRef.current().then(() => triggerGitSaveRef.current())
         return
       }
@@ -204,7 +207,6 @@ export function RequestEditor() {
           value={protocol}
           onChange={(p) => {
             updateField('protocol', p)
-            // set sensible default URL scheme prefix hint
           }}
         />
         {protocol === 'http' && (
@@ -221,28 +223,44 @@ export function RequestEditor() {
         {(protocol === 'http' || protocol === 'graphql') && (
           <SendButton onClick={sendRequest} isLoading={isLoading} />
         )}
-        <button
-          onClick={async () => {
-            await saveRequest()
-            triggerGitSave()
-          }}
-          data-testid="request-save-button"
-          className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
-          title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
-        >
-          <Save className="h-4 w-4" />
-        </button>
-        {editingRequest.isDirty && (
-          <button
-            onClick={discardDraft}
-            data-testid="request-discard-button"
-            className="rounded-sm px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
-            title="Discard unsaved changes"
-          >
-            Discard
-          </button>
+        {breadcrumb?.sourceType !== 'backstage' && (
+          <>
+            <button
+              onClick={async () => {
+                await saveRequest()
+                triggerGitSave()
+              }}
+              data-testid="request-save-button"
+              className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
+              title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
+            >
+              <Save className="h-4 w-4" />
+            </button>
+            {editingRequest.isDirty && (
+              <button
+                onClick={discardDraft}
+                data-testid="request-discard-button"
+                className="rounded-sm px-2 py-1 text-xs text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary focus:outline-hidden"
+                title="Discard unsaved changes"
+              >
+                Discard
+              </button>
+            )}
+          </>
         )}
       </div>
+
+      {/* gRPC URL validation */}
+      {protocol === 'grpc' && /^https?:\/\//i.test(editingRequest.url) && (
+        <div className="mx-3 mt-2 rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+          gRPC expects <span className="font-mono">host:port</span> — remove the{' '}
+          <span className="font-mono">
+            {editingRequest.url.match(/^https?:\/\//i)?.[0]}
+          </span>{' '}
+          prefix (e.g.{' '}
+          <span className="font-mono">{editingRequest.url.replace(/^https?:\/\//i, '')}</span>)
+        </div>
+      )}
 
       {/* Protocol-specific content area */}
       <div className="flex-1 overflow-hidden">
@@ -304,6 +322,7 @@ export function RequestEditor() {
                   query={editingRequest.bodyContent}
                   variables={pcGet(pc, 'variables')}
                   operationName={pcGet(pc, 'operationName')}
+                  schema={pcGet(pc, 'schema') || undefined}
                   onQueryChange={(v) => updateField('bodyContent', v)}
                   onVariablesChange={(v) => updatePc('variables', v)}
                   onOperationNameChange={(v) => updatePc('operationName', v)}

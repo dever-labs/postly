@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, Loader2 } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -10,7 +10,40 @@ import { useUIStore } from '@/store/ui'
 type Phase = 'url' | 'collection' | 'importing' | 'done'
 type Mode = 'git' | 'backstage'
 
-function repoNameFromUrl(raw: string): string {
+type BsProvider = 'guest' | 'token' | 'gitlab' | 'github' | 'google'
+
+const BS_PROVIDERS: { value: BsProvider; icon: React.ReactNode; label: string }[] = [
+  { value: 'guest',  icon: <UserRound className="h-4 w-4" />,  label: 'Guest'  },
+  { value: 'token',  icon: <KeyRound className="h-4 w-4" />,   label: 'Token'  },
+  { value: 'gitlab', icon: <GitBranch className="h-4 w-4" />,  label: 'GitLab' },
+  { value: 'github', icon: <GitFork className="h-4 w-4" />,     label: 'GitHub' },
+  { value: 'google', icon: <Globe className="h-4 w-4" />,      label: 'Google' },
+]
+
+function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v: BsProvider) => void }) {
+  return (
+    <div className="flex gap-1.5">
+      {BS_PROVIDERS.map((p) => (
+        <button
+          key={p.value}
+          type="button"
+          onClick={() => onChange(p.value)}
+          title={p.label}
+          className={[
+            'flex flex-1 flex-col items-center gap-1 rounded-sm border px-2 py-2 text-[10px] font-medium transition-colors focus:outline-hidden',
+            value === p.value
+              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+              : 'border-th-border text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary',
+          ].join(' ')}
+        >
+          {p.icon}
+          {p.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+function repoNameFromUrl(raw: string): string {
   try {
     const clean = raw.trim().replace(/\.git$/, '')
     const parts = clean.replace(/^git@[^:]+:/, 'https://fake/').split('/').filter(Boolean)
@@ -47,6 +80,7 @@ export function IntegrationSetupPage() {
   const [bsUrl, setBsUrl] = useState('http://localhost:7007')
   const [bsName, setBsName] = useState('Backstage')
   const [bsToken, setBsToken] = useState('')
+  const [bsProvider, setBsProvider] = useState<'token' | 'guest' | 'gitlab' | 'github' | 'google'>('guest')
 
   const [error, setError] = useState<string | null>(null)
 
@@ -108,10 +142,11 @@ export function IntegrationSetupPage() {
           baseUrl: bsUrl.trim(),
           repo: '',
           branch: 'main',
+          clientId: bsProvider,
         })
         if (createErr) { setError(createErr); setConnecting(false); return }
         const id = (createData as Record<string, unknown>).id as string
-        if (bsToken) await api.integrations.update({ id, token: bsToken })
+        if (bsProvider === 'token' && bsToken) await api.integrations.update({ id, token: bsToken })
         const { error: connErr } = await api.integrations.connect({ id })
         if (connErr) { setError(connErr); setConnecting(false); return }
         setConnectedUser({ name: 'Backstage', avatarUrl: '' })
@@ -212,7 +247,7 @@ export function IntegrationSetupPage() {
                   className="font-mono text-xs"
                 />
                 <p className="mt-1 text-[11px] text-th-text-faint">
-                  Uses your local git credentials — HTTPS tokens, SSH keys, or system credential helpers.
+                  Uses your local git credentials — no token or OAuth app needed.
                 </p>
               </div>
 
@@ -342,9 +377,18 @@ export function IntegrationSetupPage() {
                 <Input placeholder="Backstage" value={bsName} onChange={(e) => setBsName(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
-                <Input type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
+                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
+                <BsProviderPicker value={bsProvider} onChange={setBsProvider} />
               </div>
+              {bsProvider === 'token' && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
+                  <Input type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
+                </div>
+              )}
+              {bsProvider !== 'token' && bsProvider !== 'guest' && (
+                <p className="text-xs text-th-text-subtle">A browser window will open to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
+              )}
 
               {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 
