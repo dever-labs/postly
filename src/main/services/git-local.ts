@@ -1,6 +1,7 @@
 import simpleGit from 'simple-git'
 import { app } from 'electron'
 import path from 'path'
+import os from 'os'
 import fs from 'fs'
 import crypto from 'crypto'
 import SwaggerParser from '@apidevtools/swagger-parser'
@@ -16,17 +17,51 @@ export function getRepoPath(integrationId: string): string {
   return path.join(getDataDir(), 'repos', integrationId)
 }
 
+/** Build a GIT_SSH_COMMAND that:
+ *  - accepts new host keys on first connection (TOFU / StrictHostKeyChecking=accept-new)
+ *  - explicitly loads the user's default SSH identity files so the command works
+ *    even when Electron is launched outside a shell that has an SSH agent running
+ *    (common on macOS when launched from the Dock, or on Windows)
+ *
+ *  Key search order mirrors OpenSSH defaults: ed25519 → ecdsa → rsa → dsa. */
+export function buildSshCommand(): string {
+  const sshDir = path.join(os.homedir(), '.ssh')
+  const keyNames = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
+  const identityArgs = keyNames
+    .map((name) => path.join(sshDir, name))
+    .filter((keyPath) => { try { return fs.existsSync(keyPath) } catch { return false } })
+    // SSH -i expects forward slashes even on Windows
+    .map((keyPath) => `-i "${keyPath.replace(/\\/g, '/')}"`)
+    .join(' ')
+
+  return `ssh -o StrictHostKeyChecking=accept-new${identityArgs ? ' ' + identityArgs : ''}`
+}
+
+/** Environment variables applied to all git network operations.
+ *
+ *  GIT_TERMINAL_PROMPT=0     — suppresses terminal-level prompts (git 2.3+)
+ *  GCM_INTERACTIVE=never     — prevents Windows GCM GUI dialogs
+ *  GIT_SSH_COMMAND           — TOFU host key acceptance + explicit identity files
+ *                              so SSH URLs work when Electron has no SSH agent */
+const GIT_ENV = {
+  ...process.env,
+  GIT_TERMINAL_PROMPT: '0',
+  GCM_INTERACTIVE: 'never',
+  GIT_SSH_COMMAND: buildSshCommand(),
+}
+
 /** Verify the URL is reachable using system credentials (GCM / SSH agent / etc.).
  *  Also detects the default branch via `ls-remote --symref`. */
 export async function testConnectivity(repoUrl: string): Promise<{ name: string; defaultBranch: string }> {
+  const nonInteractiveEnv = GIT_ENV
   let defaultBranch = 'main'
   try {
-    const raw = await simpleGit().raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
+    const raw = await simpleGit().env(nonInteractiveEnv).raw(['ls-remote', '--symref', repoUrl, 'HEAD'])
     const match = raw.match(/ref: refs\/heads\/(\S+)\s+HEAD/)
     if (match) defaultBranch = match[1]
   } catch {
     // Some servers don't support --symref; fall back to plain ls-remote
-    await simpleGit().listRemote([repoUrl])
+    await simpleGit().env(nonInteractiveEnv).listRemote([repoUrl])
   }
   let name = repoUrl
   try {
@@ -40,7 +75,7 @@ export async function testConnectivity(repoUrl: string): Promise<{ name: string;
 export async function cloneOrPull(integrationId: string, repoUrl: string, branch: string): Promise<void> {
   const localPath = getRepoPath(integrationId)
   if (fs.existsSync(path.join(localPath, '.git'))) {
-    const git = simpleGit(localPath)
+    const git = simpleGit(localPath).env(GIT_ENV)
     await git.fetch()
     try {
       await git.checkout(branch)
@@ -50,8 +85,8 @@ export async function cloneOrPull(integrationId: string, repoUrl: string, branch
     }
   } else {
     fs.mkdirSync(localPath, { recursive: true })
-    await simpleGit().clone(repoUrl, localPath)
-    const git = simpleGit(localPath)
+    await simpleGit().env(GIT_ENV).clone(repoUrl, localPath)
+    const git = simpleGit(localPath).env(GIT_ENV)
     try { await git.checkout(branch) } catch { /* fallback to default */ }
   }
 }
@@ -59,7 +94,7 @@ export async function cloneOrPull(integrationId: string, repoUrl: string, branch
 /** List remote branch names for an already-cloned repo. */
 export async function listBranches(integrationId: string): Promise<string[]> {
   const localPath = getRepoPath(integrationId)
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.fetch()
   const result = await git.branch(['-r'])
   return Object.values(result.branches)
@@ -74,7 +109,7 @@ export async function createAndPushBranch(
   fromBranch: string
 ): Promise<void> {
   const localPath = getRepoPath(integrationId)
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.checkout(fromBranch)
   await git.checkoutLocalBranch(newBranch)
   await git.push(['-u', 'origin', newBranch])
@@ -136,7 +171,7 @@ export async function commitAndPush(
   }
   fs.mkdirSync(path.dirname(fullPath), { recursive: true })
   fs.writeFileSync(fullPath, content, 'utf8')
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   await git.checkout(branch)
   await git.add(filePath)
   await git.commit(message)
@@ -360,7 +395,7 @@ export async function deleteCollectionFile(
     throw new Error('Invalid file path: must be within the repository directory')
   }
   if (!fs.existsSync(localPath)) return
-  const git = simpleGit(localPath)
+  const git = simpleGit(localPath).env(GIT_ENV)
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath)
     await git.rm([fileName]).catch(() => {})

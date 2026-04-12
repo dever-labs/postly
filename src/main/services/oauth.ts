@@ -2,22 +2,10 @@ import { BrowserWindow, session } from 'electron'
 import crypto from 'crypto'
 import https from 'https'
 import axios from 'axios'
-import { queryOne, run } from '../database'
+import { queryOne, runTransaction } from '../database'
 
 const OAUTH_AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1000
 const TOKEN_EXPIRY_BUFFER_MS = 60_000
-
-async function beginTransaction(): Promise<void> {
-  await run('BEGIN TRANSACTION')
-}
-
-async function commitTransaction(): Promise<void> {
-  await run('COMMIT')
-}
-
-async function rollbackTransaction(): Promise<void> {
-  await run('ROLLBACK')
-}
 
 type DbTokenRow = {
   id: string
@@ -228,13 +216,12 @@ async function saveToken(oauthConfigId: string, data: Record<string, unknown>): 
   const now = Date.now()
   const expiresAt = data['expires_in'] ? now + Number(data['expires_in']) * 1000 : undefined
 
-  await beginTransaction()
-  try {
-    await run('DELETE FROM tokens WHERE oauth_config_id = ?', [oauthConfigId])
-    await run(
-      `INSERT INTO tokens (id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scope, created_at)
+  runTransaction([
+    { sql: 'DELETE FROM tokens WHERE oauth_config_id = ?', params: [oauthConfigId] },
+    {
+      sql: `INSERT INTO tokens (id, oauth_config_id, access_token, refresh_token, token_type, expires_at, scope, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
+      params: [
         id,
         oauthConfigId,
         String(data['access_token'] ?? ''),
@@ -244,16 +231,8 @@ async function saveToken(oauthConfigId: string, data: Record<string, unknown>): 
         data['scope'] ? String(data['scope']) : null,
         now
       ]
-    )
-    await commitTransaction()
-  } catch (err) {
-    try {
-      await rollbackTransaction()
-    } catch {
-      // ignore rollback errors
     }
-    throw err
-  }
+  ])
 
   return {
     id,

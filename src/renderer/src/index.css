@@ -1,6 +1,9 @@
 @config "../../../tailwind.config.js";
 @import "tailwindcss";
 
+/* Custom variant that applies when html.light is set */
+@custom-variant light (.light &);
+
 :root {
   color-scheme: dark;
   --color-background:     #030712;
@@ -13,8 +16,8 @@
   --color-text-primary:   #f9fafb;
   --color-text-secondary: #d1d5db;
   --color-text-muted:     #9ca3af;
-  --color-text-subtle:    #6b7280;
-  --color-text-faint:     #4b5563;
+  --color-text-subtle:    #8b949e;
+  --color-text-faint:     #6b7280;
 }
 
 html.light {
@@ -28,9 +31,9 @@ html.light {
   --color-border-strong:  #d1d5db;
   --color-text-primary:   #111827;
   --color-text-secondary: #374151;
-  --color-text-muted:     #6b7280;
-  --color-text-subtle:    #9ca3af;
-  --color-text-faint:     #d1d5db;
+  --color-text-muted:     #4b5563;
+  --color-text-subtle:    #6b7280;
+  --color-text-faint:     #9ca3af;
 }
 
 html, body {

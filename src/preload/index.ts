@@ -172,6 +172,18 @@ const api = {
     import: () => ipcRenderer.invoke('postly:import'),
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
   },
+  window: {
+    setTheme: (theme: 'dark' | 'light') => ipcRenderer.invoke('postly:window:set-theme', theme),
+    minimize: () => ipcRenderer.invoke('postly:window:minimize'),
+    maximize: () => ipcRenderer.invoke('postly:window:maximize'),
+    close: () => ipcRenderer.invoke('postly:window:close'),
+    isMaximized: () => ipcRenderer.invoke('postly:window:is-maximized') as Promise<boolean>,
+    onMaximizeChange: (cb: (isMaximized: boolean) => void): (() => void) => {
+      const handler = (_: unknown, isMaximized: boolean) => cb(isMaximized)
+      ipcRenderer.on('postly:window:maximize-change', handler)
+      return () => { ipcRenderer.removeListener('postly:window:maximize-change', handler) }
+    },
+  },
   reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
     ipcRenderer.invoke('postly:reorder', data),
   drafts: {
@@ -199,6 +211,7 @@ const api = {
       delete: (data: { envId: string }) => ipcRenderer.invoke('postly:drafts:env:delete', data),
     },
   },
+  platform: process.platform,
 }
 
 contextBridge.exposeInMainWorld('api', api)

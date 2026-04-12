@@ -142,6 +142,26 @@ export function run(sql: string, params?: unknown[]): void {
 }
 
 /**
+ * Execute multiple write statements inside a single SQLite transaction.
+ * Unlike calling `run` multiple times, this does NOT call `persistDb()` between
+ * statements — it calls it exactly once after a successful COMMIT.
+ * Rolls back automatically on error.
+ */
+export function runTransaction(statements: Array<{ sql: string; params?: unknown[] }>): void {
+  db.run('BEGIN TRANSACTION')
+  try {
+    for (const { sql, params } of statements) {
+      db.run(sql, params as Parameters<typeof db.run>[1])
+    }
+    db.run('COMMIT')
+  } catch (err) {
+    try { db.run('ROLLBACK') } catch { /* ignore rollback errors */ }
+    throw err
+  }
+  persistDb()
+}
+
+/**
  * Execute an INSERT / UPDATE / DELETE and schedule a debounced persist.
  * Use for draft upserts that fire on every keystroke to avoid frequent full-DB flushes.
  */

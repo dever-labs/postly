@@ -128,7 +128,7 @@ export function ImportPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="mb-6">
           <input
             ref={fileInputRef}

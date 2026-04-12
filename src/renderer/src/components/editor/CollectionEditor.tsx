@@ -262,12 +262,13 @@ export function CollectionEditor({ collectionId }: Props) {
   }
 
   return (
-    <div className="bg-th-bg w-full" onKeyDown={onKeyDown}>
+    <div className="flex h-full flex-col bg-th-bg" onKeyDown={onKeyDown}>
       {/* Thin drag strip — window drag target only, no content */}
       <div className="drag-region shrink-0 pt-8 pb-4" />
 
-      {/* Content */}
-      <div className="no-drag px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
+      {/* Scrollable content */}
+      <div className="no-drag flex-1 overflow-y-auto">
+      <div className="px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
 
         {/* Title */}
         <div className="no-drag">
@@ -357,6 +358,7 @@ export function CollectionEditor({ collectionId }: Props) {
         </Section>
 
       </div>
+      </div>{/* end scroll wrapper */}
 
       {/* Save bar */}
       <div className="no-drag flex items-center justify-end gap-2 border-t border-th-border px-8 py-3">

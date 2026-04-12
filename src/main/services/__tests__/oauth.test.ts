@@ -9,6 +9,7 @@ import { generate as generateCert } from 'selfsigned'
 vi.mock('../../database', () => ({
   queryOne: vi.fn(),
   run: vi.fn(),
+  runTransaction: vi.fn(),
 }))
 
 // Expose session mock references so SSL tests can assert on them.
@@ -79,7 +80,7 @@ vi.mock('electron', () => {
 })
 
 import { authorizeAuthCode, clientCredentials, authorizeInline, type OAuthConfig } from '../oauth'
-import { run } from '../../database'
+import { runTransaction } from '../../database'
 import { BrowserWindow } from 'electron'
 
 // ─── Fake IDP ────────────────────────────────────────────────────────────────
@@ -238,15 +239,12 @@ describe('OAuth integration', () => {
     it('saves the token to the database', async () => {
       await clientCredentials(makeConfig({ tokenUrl: idp.tokenUrl }))
 
-      const mockRun = vi.mocked(run)
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM tokens'),
-        ['test-config'],
-      )
-      expect(mockRun).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO tokens'),
-        expect.arrayContaining(['test-config', 'test_access_token', 'Bearer']),
-      )
+      expect(vi.mocked(runTransaction)).toHaveBeenCalledOnce()
+      const [statements] = vi.mocked(runTransaction).mock.calls[0]
+      expect(statements.some((s) => s.sql.includes('DELETE FROM tokens'))).toBe(true)
+      expect(statements.some((s) => s.sql.includes('INSERT INTO tokens'))).toBe(true)
+      const insertStmt = statements.find((s) => s.sql.includes('INSERT INTO tokens'))
+      expect(insertStmt?.params).toEqual(expect.arrayContaining(['test-config', 'test_access_token', 'Bearer']))
     })
   })
 
@@ -298,10 +296,11 @@ describe('OAuth integration', () => {
     it('saves the token to the database', async () => {
       await authorizeAuthCode(cfg())
 
-      expect(vi.mocked(run)).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO tokens'),
-        expect.arrayContaining(['test-config', 'test_access_token']),
-      )
+      expect(vi.mocked(runTransaction)).toHaveBeenCalledOnce()
+      const [statements] = vi.mocked(runTransaction).mock.calls[0]
+      expect(statements.some((s) => s.sql.includes('INSERT INTO tokens'))).toBe(true)
+      const insertStmt = statements.find((s) => s.sql.includes('INSERT INTO tokens'))
+      expect(insertStmt?.params).toEqual(expect.arrayContaining(['test-config', 'test_access_token']))
     })
 
     it('calls event.preventDefault() to stop Electron loading the redirect URL', async () => {

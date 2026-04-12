@@ -21,9 +21,10 @@ export function registerIntegrationHandlers(): void {
   }) => {
     try {
       if (args.repo) {
-        try { new URL(args.repo) } catch {
-          return { error: 'Invalid repository URL' }
-        }
+        let isValidRepoUrl = false
+        try { new URL(args.repo); isValidRepoUrl = true } catch { /* not an http(s) url */ }
+        if (!isValidRepoUrl) isValidRepoUrl = /^git@[^:]+:[^/]+\/.+/.test(args.repo)
+        if (!isValidRepoUrl) return { error: 'Invalid repository URL' }
       }
       if (args.baseUrl) {
         try { new URL(args.baseUrl) } catch {

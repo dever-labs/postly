@@ -4,6 +4,28 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] — 2026-04-12
+
+### Fixed
+
+- **Window drag area** — scrollable content no longer moves the window drag strip; drag region is now a fixed strip and content areas are marked `no-drag` (closes #12).
+- **Window controls** — minimize, maximize/restore and close buttons now resolve the target window from `event.sender` instead of `getAllWindows()[0]`, preventing accidental targeting of OAuth popups or DevTools windows.
+- **Theme initialisation** — `nativeTheme.themeSource` is now always set on startup (both `light` and `dark`), keeping native UI elements consistent with the renderer theme.
+- **Window controls accessibility** — caption buttons now carry explicit `aria-label` attributes (`Minimize`, `Restore`/`Maximize`, `Close`) for screen reader support.
+- **Light mode colours** — minimize, maximize and close button colours corrected for light mode; text contrast improved across light and dark themes.
+
+---
+
+## [0.4.2] — 2026-04-09
+
+### Fixed
+
+- **Git connect** — unblock Connect button when credential dialog is cancelled (closes #40).
+- **Git SSH URLs** — `git@` SSH URLs now accepted as valid repository URLs (closes #43).
+- **OAuth transaction** — resolve "cannot commit — no transaction is active" error (closes #41).
+
+---
+
 ## [0.4.1] — 2026-04-07
 
 ### Fixed
