@@ -175,7 +175,7 @@ export function GraphQLTab({
     quickSuggestions: false,
     suggestOnTriggerCharacters: false,
     // Enter always inserts a newline; Tab accepts the selected suggestion.
-    acceptSuggestionOnEnter: 'off' as const,
+    acceptSuggestionOnEnter: 'on' as const,
   }
 
   const monacoTheme = theme === 'light' ? 'vs' : 'vs-dark'
@@ -234,7 +234,7 @@ export function GraphQLTab({
             </div>
             {schema && (
               <p className="mt-1 text-xs text-th-text-faint">
-                Schema loaded — press <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> to autocomplete fields, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Tab</kbd> to accept
+                Schema loaded — press <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> to autocomplete fields, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Enter</kbd> to accept
               </p>
             )}
           </div>
