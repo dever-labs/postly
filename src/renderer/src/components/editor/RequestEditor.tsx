@@ -103,7 +103,7 @@ export function RequestEditor() {
   triggerGitSaveRef.current = triggerGitSave
   const breadcrumbRef = useRef(breadcrumb)
   breadcrumbRef.current = breadcrumb
-  const _isReadOnly = (breadcrumb?.sourceType === 'backstage') ?? false
+  const _isReadOnly = breadcrumb?.sourceType === 'backstage'
 
   // Ctrl+S: save; Ctrl+Z (when not in a text field): app-level undo
   useEffect(() => {
