@@ -165,8 +165,8 @@ export function GraphQLTab({
     return () => disposable.dispose()
   }, [monaco])
 
-  // Auto-trigger suggestions when typing a word char inside a selection set,
-  // or immediately after `{`.
+  // Only auto-trigger immediately after '{' — all other triggers are user-initiated
+  // (Ctrl+Space). This avoids suggestions blocking Enter on every keystroke.
   const attachGraphQLSuggest = useCallback(
     (editor: Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0]) => {
       editor.onDidChangeModelContent(() => {
@@ -174,15 +174,11 @@ export function GraphQLTab({
         if (!pos) return
         const model = editor.getModel()
         if (!model) return
-        const textUntil = model.getValueInRange({
-          startLineNumber: 1, startColumn: 1,
+        const lastChar = model.getValueInRange({
+          startLineNumber: pos.lineNumber, startColumn: Math.max(1, pos.column - 1),
           endLineNumber: pos.lineNumber, endColumn: pos.column,
         })
-        const lastChar = textUntil.slice(-1)
-        if (
-          lastChar === '{' ||
-          (/\w/.test(lastChar) && getTypeAtCursor(textUntil, typeMapRef.current, rootTypesRef.current) !== null)
-        ) {
+        if (lastChar === '{') {
           editor.trigger('postly', 'editor.action.triggerSuggest', {})
         }
       })
@@ -197,8 +193,12 @@ export function GraphQLTab({
     scrollBeyondLastLine: false,
     wordWrap: 'on' as const,
     padding: { top: 8 },
-    quickSuggestions: { other: true, comments: false, strings: false },
-    suggestOnTriggerCharacters: true,
+    // Don't auto-show on every keystroke — only on '{' (via onDidChangeModelContent)
+    // or Ctrl+Space. Prevents suggestions blocking the Enter key.
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    // Enter always inserts a newline; Tab accepts the selected suggestion.
+    acceptSuggestionOnEnter: 'off' as const,
   }
 
   const monacoTheme = theme === 'light' ? 'vs' : 'vs-dark'
@@ -257,7 +257,7 @@ export function GraphQLTab({
             </div>
             {schema && (
               <p className="mt-1 text-xs text-th-text-faint">
-                Schema loaded — press <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> or type inside <code className="font-mono">{'{}'}</code> to autocomplete fields
+                Schema loaded — type <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">{'{'}</kbd> to autocomplete fields, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Tab</kbd> to accept, <kbd className="rounded bg-th-surface-raised px-1 font-mono text-th-text-subtle">Ctrl+Space</kbd> to re-open
               </p>
             )}
           </div>
