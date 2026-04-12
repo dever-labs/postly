@@ -251,6 +251,18 @@ export function RequestEditor() {
         )}
       </div>
 
+      {/* gRPC URL validation */}
+      {protocol === 'grpc' && /^https?:\/\//i.test(editingRequest.url) && (
+        <div className="border-b border-th-border bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400">
+          gRPC expects <span className="font-mono">host:port</span> — remove the{' '}
+          <span className="font-mono">
+            {editingRequest.url.match(/^https?:\/\//i)?.[0]}
+          </span>{' '}
+          prefix (e.g.{' '}
+          <span className="font-mono">{editingRequest.url.replace(/^https?:\/\//i, '')}</span>)
+        </div>
+      )}
+
       {/* Protocol-specific content area */}
       <div className="flex-1 overflow-hidden">
         {protocol === 'websocket' && (

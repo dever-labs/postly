@@ -99,11 +99,8 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
       ? grpc.credentials.createSsl()
       : grpc.credentials.createInsecure()
 
-    // gRPC expects host:port, not an HTTP URL. Strip any scheme the user may have typed.
-    const target = params.serverUrl.replace(/^https?:\/\//, '')
-
     type GrpcClientCtor = new (url: string, creds: grpc.ChannelCredentials) => grpc.Client
-    const client = new (svcCtor as GrpcClientCtor)(target, creds)
+    const client = new (svcCtor as GrpcClientCtor)(params.serverUrl, creds)
 
     const meta = new grpc.Metadata()
     for (const [k, v] of Object.entries(params.metadata)) {
