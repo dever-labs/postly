@@ -13,6 +13,7 @@ import { GitSourceView } from '@/components/git/GitSourceView'
 import { ExportPage } from '@/components/export-import/ExportPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
+import { WindowControls } from '@/components/layout/WindowControls'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
 import type { AiContext } from '@/lib/aiContext'
@@ -91,7 +92,7 @@ export function AppShell() {
 
       {/* Right pane — drag-region on the wrapper so there's always some
           drag area; individual views add more via their own headers */}
-      <div className="drag-region flex flex-1 flex-col overflow-hidden">
+      <div className="drag-region relative flex flex-1 flex-col overflow-hidden">
         <ErrorBoundary>
 
         {sidebarTab === 'environments' ? (
@@ -107,11 +108,11 @@ export function AppShell() {
             <IntegrationEditPage integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'export-page' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <ExportPage />
           </div>
         ) : selectedItem?.type === 'import-page' ? (
-          <div className="no-drag flex flex-1 overflow-y-auto">
+          <div className="no-drag flex flex-1 flex-col overflow-hidden">
             <ImportPage />
           </div>
         ) : selectedItem?.type === 'git-source' ? (
@@ -119,11 +120,11 @@ export function AppShell() {
             <GitSourceView integrationId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'collection' ? (
-          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
+          <div className="no-drag flex min-h-0 flex-1 flex-col overflow-hidden">
             <CollectionEditor collectionId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'group' ? (
-          <div className="no-drag min-h-0 flex-1 overflow-y-auto">
+          <div className="no-drag flex min-h-0 flex-1 flex-col overflow-hidden">
             <GroupEditor groupId={selectedItem.id} />
           </div>
         ) : selectedItem?.type === 'ai-collection' ? (
@@ -156,6 +157,9 @@ export function AppShell() {
           </div>
         )}
         </ErrorBoundary>
+        {/* Window controls rendered LAST so no-drag wins over any inner
+            drag-region elements in DOM/paint order. Positioned absolute. */}
+        {window.api.platform !== 'darwin' && <WindowControls />}
       </div>
     </div>
   )

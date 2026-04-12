@@ -116,7 +116,7 @@ export function ExportPage() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         {collections.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <FileJson className="h-8 w-8 text-th-text-muted" />

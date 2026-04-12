@@ -2,16 +2,13 @@ import { app, BrowserWindow, shell, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { platform } from 'process'
 import { initDatabase } from './database'
-import { registerAllIpcHandlers } from './ipc'
+import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
   const iconFile = platform === 'win32' ? 'icon.ico' : 'icon.png'
   const icon = nativeImage.createFromPath(join(__dirname, '../../resources', iconFile))
 
-  // titleBarOverlay adds native Win32 caption buttons (close/min/max) in the
-  // top-right corner while keeping our custom title bar look everywhere else.
-  // Height matches the sidebar tab strip (~44px).
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -19,9 +16,6 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: '#030712',
     titleBarStyle: platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(platform === 'win32' && {
-      titleBarOverlay: { color: '#030712', symbolColor: '#d1d5db', height: 44 },
-    }),
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -45,15 +39,21 @@ function createWindow(): void {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  return win
 }
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   await initDatabase()
   registerAllIpcHandlers()
-  createWindow()
+  const win = createWindow()
+  attachWindowEvents(win)
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const w = createWindow()
+      attachWindowEvents(w)
+    }
   })
 })
 
