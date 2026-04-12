@@ -4,7 +4,7 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.2] — 2026-04-12
+## [0.4.3] — 2026-04-12
 
 ### Fixed
 
@@ -13,6 +13,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Theme initialisation** — `nativeTheme.themeSource` is now always set on startup (both `light` and `dark`), keeping native UI elements consistent with the renderer theme.
 - **Window controls accessibility** — caption buttons now carry explicit `aria-label` attributes (`Minimize`, `Restore`/`Maximize`, `Close`) for screen reader support.
 - **Light mode colours** — minimize, maximize and close button colours corrected for light mode; text contrast improved across light and dark themes.
+
+---
+
+## [0.4.2] — 2026-04-09
+
+### Fixed
+
+- **Git connect** — unblock Connect button when credential dialog is cancelled (closes #40).
+- **Git SSH URLs** — `git@` SSH URLs now accepted as valid repository URLs (closes #43).
+- **OAuth transaction** — resolve "cannot commit — no transaction is active" error (closes #41).
 
 ---
 
