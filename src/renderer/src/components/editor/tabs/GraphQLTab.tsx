@@ -32,7 +32,7 @@ function parseSchemaFields(sdl: string): TypeMap {
     }
     if (line === '}') { currentType = null; continue }
     if (currentType) {
-      const fieldMatch = line.match(/^(\w+)(?:\([^)]*\))?:\s*([\[\]!\w]+)/)
+      const fieldMatch = line.match(/^(\w+)(?:\([^)]*\))?:\s*([[\]!\w]+)/)
       if (fieldMatch) typeMap[currentType].push({ name: fieldMatch[1], type: fieldMatch[2] })
     }
   }
@@ -85,7 +85,7 @@ function getTypeAtCursor(text: string, typeMap: TypeMap, roots: RootTypes): stri
       } else {
         const curType = stack[stack.length - 1]
         const field = (typeMap[curType] || []).find(f => f.name === word)
-        stack.push(field ? field.type.replace(/[\[\]!]/g, '') : word)
+        stack.push(field ? field.type.replace(/[[\]!]/g, '') : word)
       }
       word = ''
     } else if (ch === '}') {
