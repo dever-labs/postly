@@ -44,16 +44,6 @@ function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v
   )
 }
 
-function inferRepoName(raw: string): string {
-  try {
-    const clean = raw.trim().replace(/\.git$/, '')
-    const parts = clean.replace(/^git@[^:]+:/, 'https://fake/').split('/').filter(Boolean)
-    return parts.slice(-2).join('/') || clean
-  } catch {
-    return raw
-  }
-}
-
 export function IntegrationSetupPage() {
   const { load: loadIntegrations } = useIntegrationsStore()
   const integrations = useIntegrationsStore((s) => s.integrations)

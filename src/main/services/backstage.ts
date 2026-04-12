@@ -46,7 +46,7 @@ interface BackstageComponentEntity {
 }
 
 function resolveOpenApiSpec(definition: string | Record<string, unknown>): object | null {
-  if (typeof definition === 'object' && definition !== null) return definition
+  if (typeof definition === 'object' && Object(definition) === definition) return definition
   if (typeof definition !== 'string' || !definition.trim()) return null
   try {
     const parsed = yaml.load(definition)
