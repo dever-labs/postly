@@ -253,7 +253,7 @@ export function RequestEditor() {
 
       {/* gRPC URL validation */}
       {protocol === 'grpc' && /^https?:\/\//i.test(editingRequest.url) && (
-        <div className="border-b border-th-border bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400">
+        <div className="mx-3 mt-2 rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
           gRPC expects <span className="font-mono">host:port</span> — remove the{' '}
           <span className="font-mono">
             {editingRequest.url.match(/^https?:\/\//i)?.[0]}
