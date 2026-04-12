@@ -4,6 +4,28 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-04-12
+
+### Added
+
+- **Backstage integration** — full OAuth login flow (GitLab, GitHub, Google, Guest) with an icon tile picker; sync collections from Backstage Component entities including gRPC and GraphQL service types (closes #38).
+- **GraphQL query editor** — Monaco-based editor with schema-aware field autocomplete; trigger with `Ctrl+Space`, accept with `Enter`. Variables and schema views also upgraded to Monaco editors.
+- **gRPC URL validation** — inline warning banner shown when an `http://` or `https://` URL is entered for a gRPC endpoint, with a corrected URL suggestion.
+
+### Fixed
+
+- **Panel drag performance** — sidebar and editor/response divider drag now mutates the DOM directly during drag with a single Zustand commit on mouse-up, eliminating React re-renders at 60 fps (closes #38).
+- **ResizablePanel bounds** — editor pane can no longer be dragged to 0 px or arbitrarily large values; clamped to 150–800 px.
+- **Backstage auth** — `provider` validated against an allowlist before URL/JS interpolation; IPC handler rejects unknown providers; `client_id`-sourced `authProvider` normalised in integrations connect flow.
+- **Backstage settings** — `authProvider` normalised once with `?? 'token'` so `useOAuth` and `signIn` share a consistent fallback.
+- **Integration remount** — edit page now remounts correctly when switching between integrations.
+
+### Security
+
+- **Provider injection** — `provider` string validated against `['gitlab','github','google']` allowlist before being interpolated into `loadURL()` and `executeJavaScript()` template literals in `backstage.ts`.
+
+---
+
 ## [0.4.3] — 2026-04-12
 
 ### Fixed
