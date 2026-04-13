@@ -118,3 +118,49 @@ jobs:
           VERSION="${VERSION#v}"
           npx electron-builder --${{ matrix.platform }} --publish always \
             --config.extraMetadata.version="$VERSION"
+
+  update-homebrew:
+    name: Update Homebrew Cask
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Download macOS DMG assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir dmgs
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo dever-labs/postly \
+            --pattern "*.dmg" \
+            --dir dmgs
+
+      - name: Update tap repository
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+
+          ARM64_FILE=$(ls dmgs/*arm64*.dmg)
+          X64_FILE=$(ls dmgs/*.dmg | grep -v arm64 | head -1)
+
+          ARM64_SHA=$(sha256sum "$ARM64_FILE" | awk '{print $1}')
+          X64_SHA=$(sha256sum "$X64_FILE" | awk '{print $1}')
+
+          git clone \
+            "https://x-access-token:${GH_TOKEN}@github.com/dever-labs/homebrew-tap.git" \
+            tap
+          cd tap
+          mkdir -p Casks
+
+          python3 "$GITHUB_WORKSPACE/scripts/generate-cask.py" \
+            "$VERSION" "$ARM64_SHA" "$X64_SHA" > Casks/postly.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/postly.rb
+          git commit -m "chore: bump postly to ${VERSION}"
+          git push
