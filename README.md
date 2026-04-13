@@ -61,7 +61,25 @@ Collections from each source appear as separate groups in the sidebar. Changes c
 
 ## Download
 
-Download the latest release for your platform from the [Releases](https://github.com/dever-labs/postly/releases) page.
+### macOS
+
+The recommended way to install on macOS is via [Homebrew](https://brew.sh) — it bypasses Gatekeeper automatically:
+
+```bash
+brew install dever-labs/tap/postly
+```
+
+Alternatively, download the `.dmg` from the [Releases](https://github.com/dever-labs/postly/releases) page. Because Postly is not notarized, macOS will block it on first launch. To allow it, run this once after installing:
+
+```bash
+xattr -cr /Applications/Postly.app
+```
+
+Or: right-click the app → **Open** → click **Open** in the dialog.
+
+### Windows & Linux
+
+Download the latest installer for your platform from the [Releases](https://github.com/dever-labs/postly/releases) page.
 
 | Platform | Installer |
 |---|---|
