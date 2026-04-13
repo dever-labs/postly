@@ -129,8 +129,8 @@ export function CollectionsSidebar() {
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
 
-      {/* Tab switcher */}
-      <div className="flex shrink-0 border-b border-th-border">
+      {/* Tab switcher — pt-8 on macOS clears the hiddenInset traffic lights */}
+      <div className={cn('flex shrink-0 border-b border-th-border', window.api.platform === 'darwin' && 'pt-8')}>
         <button
           data-testid="tab-apis"
           onClick={() => setSidebarTab('apis')}
