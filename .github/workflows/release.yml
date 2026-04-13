@@ -95,8 +95,21 @@ jobs:
         env:
           # electron-builder uses GH_TOKEN to upload assets to the release
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS signing — set CSC_LINK / CSC_KEY_PASSWORD for signed builds
+          # macOS code signing — base64-encoded .p12 certificate and its password.
+          # Set CSC_LINK and CSC_KEY_PASSWORD in GitHub repository secrets.
+          # When absent the build proceeds unsigned (Gatekeeper will block it).
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Prevent electron-builder from searching the system keychain;
+          # we supply the cert explicitly via CSC_LINK.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # macOS notarization — required for Gatekeeper on modern macOS.
+          # Set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID
+          # in GitHub repository secrets. build/notarize.js skips gracefully
+          # when these are absent.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         # Strip the leading 'v' from the tag (v1.2.3 → 1.2.3) and inject it
         # as the app version so package.json never needs to be updated manually.
         shell: bash
