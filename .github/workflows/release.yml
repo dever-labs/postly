@@ -114,6 +114,10 @@ jobs:
         # as the app version so package.json never needs to be updated manually.
         shell: bash
         run: |
+          # Unset signing vars if the secrets are not configured — an empty
+          # string causes electron-builder to resolve it as a path (the cwd).
+          [ -z "$CSC_LINK" ] && unset CSC_LINK || true
+
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
           npx electron-builder --${{ matrix.platform }} --publish always \
