@@ -123,6 +123,17 @@ jobs:
           npx electron-builder --${{ matrix.platform }} --publish always \
             --config.extraMetadata.version="$VERSION"
 
+      - name: Upload macOS DMGs as workflow artifact
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          # Exclude blockmap files — only the DMGs are needed for SHA256
+          path: |
+            dist/*.dmg
+            !dist/*.blockmap
+          retention-days: 1
+
   update-homebrew:
     name: Update Homebrew Cask
     needs: [build]
@@ -131,7 +142,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Download macOS DMG assets and update tap
+      - name: Download macOS DMG artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-dmg
+          path: dmgs
+
+      - name: Update tap repository
         env:
           GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
           TAG: ${{ github.event.release.tag_name }}
@@ -139,14 +156,11 @@ jobs:
           VERSION="${TAG#v}"
 
           # electron-builder names the x64 DMG without an arch suffix
-          ARM64_URL="https://github.com/dever-labs/postly/releases/download/v${VERSION}/Postly-${VERSION}-arm64.dmg"
-          X64_URL="https://github.com/dever-labs/postly/releases/download/v${VERSION}/Postly-${VERSION}.dmg"
+          ARM64_FILE=$(ls dmgs/*arm64*.dmg)
+          X64_FILE=$(ls dmgs/*.dmg | grep -v arm64 | head -1)
 
-          curl -fsSL -o arm64.dmg "$ARM64_URL"
-          curl -fsSL -o x64.dmg "$X64_URL"
-
-          ARM64_SHA=$(sha256sum arm64.dmg | awk '{print $1}')
-          X64_SHA=$(sha256sum x64.dmg | awk '{print $1}')
+          ARM64_SHA=$(sha256sum "$ARM64_FILE" | awk '{print $1}')
+          X64_SHA=$(sha256sum "$X64_FILE" | awk '{print $1}')
 
           git clone \
             "https://x-access-token:${GH_TOKEN}@github.com/dever-labs/homebrew-tap.git" \
