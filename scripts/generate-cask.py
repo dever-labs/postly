@@ -31,6 +31,15 @@ cask "postly" do
 
   app "Postly.app"
 
+  # Ad-hoc re-sign so macOS 26+ dyld Team ID enforcement doesn't block launch.
+  # The unsigned build has no Team ID but the bundled Electron Framework does;
+  # re-signing with "-" makes all components consistent.
+  postflight do
+    system_command "/usr/bin/codesign",
+                   args: ["--deep", "--force", "--sign", "-", "#{appdir}/Postly.app"],
+                   sudo: true
+  end
+
   zap trash: [
     "~/Library/Application Support/Postly",
     "~/Library/Logs/Postly",
