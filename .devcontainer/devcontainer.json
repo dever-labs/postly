@@ -5,8 +5,9 @@
   "name": "postly",
   "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:latest",
 
-  // Install dependencies and gh copilot extension on first container creation.
-  "postCreateCommand": "npm install && gh extension install github/gh-copilot",
+  // Install dependencies and Copilot CLI on first container creation.
+  // @github/copilot requires Node.js 22+ — the frontend-dev image ships LTS which satisfies this.
+  "postCreateCommand": "npm install && npm install -g @github/copilot && gh extension install github/gh-copilot",
 
   // Override the shared image's postStartCommand (minikube) — not needed for Postly.
   "postStartCommand": "",
