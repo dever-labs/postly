@@ -39,6 +39,7 @@ const mockGitInstance = {
   revparse: vi.fn(),
   checkoutBranch: vi.fn(),
   checkoutLocalBranch: vi.fn(),
+  getRemotes: vi.fn().mockResolvedValue([]),
 }
 mockGitInstance.env.mockReturnValue(mockGitInstance)
 
@@ -58,7 +59,7 @@ vi.mock('../../database', () => ({
 
 // ── Import SUT after mocks ────────────────────────────────────────────────────
 
-import { buildSshCommand, testConnectivity, cloneOrPull } from '../git-local'
+import { buildSshCommand, isSshUrl, buildGitEnv, testConnectivity, cloneOrPull } from '../git-local'
 import os from 'os'
 import fs from 'fs'
 import simpleGit from 'simple-git'
@@ -72,6 +73,50 @@ beforeEach(() => {
   mockGitInstance.env.mockReturnValue(mockGitInstance)
   mockHomedir.mockReturnValue('/home/testuser')
   mockExistsSync.mockReturnValue(false)
+})
+
+// ── isSshUrl ──────────────────────────────────────────────────────────────────
+
+describe('isSshUrl', () => {
+  it('returns true for git@ URLs', () => {
+    expect(isSshUrl('git@github.com:org/repo.git')).toBe(true)
+  })
+
+  it('returns true for ssh:// URLs', () => {
+    expect(isSshUrl('ssh://git@github.com/org/repo.git')).toBe(true)
+  })
+
+  it('returns false for https:// URLs', () => {
+    expect(isSshUrl('https://github.com/org/repo.git')).toBe(false)
+  })
+
+  it('returns false for http:// URLs', () => {
+    expect(isSshUrl('http://github.com/org/repo.git')).toBe(false)
+  })
+})
+
+// ── buildGitEnv ───────────────────────────────────────────────────────────────
+
+describe('buildGitEnv', () => {
+  it('includes GIT_SSH_COMMAND for SSH URLs', () => {
+    const env = buildGitEnv('git@github.com:org/repo.git')
+    expect(env.GIT_SSH_COMMAND).toBeDefined()
+    expect(env.GIT_SSH_COMMAND).toContain('StrictHostKeyChecking=accept-new')
+  })
+
+  it('omits GIT_SSH_COMMAND for HTTPS URLs', () => {
+    const env = buildGitEnv('https://github.com/org/repo.git')
+    expect((env as Record<string, unknown>).GIT_SSH_COMMAND).toBeUndefined()
+  })
+
+  it('always includes GIT_TERMINAL_PROMPT and GCM_INTERACTIVE', () => {
+    const sshEnv = buildGitEnv('git@github.com:org/repo.git')
+    const httpsEnv = buildGitEnv('https://github.com/org/repo.git')
+    expect(sshEnv.GIT_TERMINAL_PROMPT).toBe('0')
+    expect(sshEnv.GCM_INTERACTIVE).toBe('never')
+    expect(httpsEnv.GIT_TERMINAL_PROMPT).toBe('0')
+    expect(httpsEnv.GCM_INTERACTIVE).toBe('never')
+  })
 })
 
 // ── buildSshCommand ───────────────────────────────────────────────────────────
@@ -283,7 +328,7 @@ describe('cloneOrPull — SSH environment', () => {
     await expect(cloneOrPull(integrationId, repoUrl, branch)).resolves.not.toThrow()
   })
 
-  it('uses SSH env for both SSH and HTTPS remote URLs', async () => {
+  it('does not include GIT_SSH_COMMAND for HTTPS URLs (only base env vars set)', async () => {
     const httpsUrl = 'https://github.com/org/repo.git'
     mockExistsSync.mockReturnValue(false)
 
@@ -292,6 +337,8 @@ describe('cloneOrPull — SSH environment', () => {
     expect(mockGitInstance.env).toHaveBeenCalledWith(
       expect.objectContaining({ GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })
     )
+    const envArg = mockGitInstance.env.mock.calls[0][0] as Record<string, string>
+    expect(envArg.GIT_SSH_COMMAND).toBeUndefined()
   })
 })
 
