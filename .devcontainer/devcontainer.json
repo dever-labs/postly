@@ -6,8 +6,8 @@
   "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:latest",
 
   // Install dependencies and Copilot CLI on first container creation.
-  // @github/copilot requires Node.js 22+ — the frontend-dev image ships LTS which satisfies this.
-  "postCreateCommand": "npm install && npm install -g @github/copilot && gh extension install github/gh-copilot",
+  // Uses the install script (pre-built binary) to avoid node-pty native compilation.
+  "postCreateCommand": "npm install && curl -fsSL https://gh.io/copilot-install | bash && gh extension install github/gh-copilot",
 
   // Override the shared image's postStartCommand (minikube) — not needed for Postly.
   "postStartCommand": "",
