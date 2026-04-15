@@ -1,0 +1,37 @@
+{
+  // Postly dev environment — uses the shared dever-labs frontend-dev image.
+  // The image includes: Node.js LTS, Git, GitHub CLI, GitHub Copilot, Claude Code.
+  // Rebuild the container after changes: Dev Containers: Rebuild Container.
+  "name": "postly",
+  "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:latest",
+
+  // Install dependencies on first container creation.
+  "postCreateCommand": "npm install",
+
+  "remoteEnv": {
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // AI agents
+        "github.copilot",
+        "github.copilot-chat",
+        "anthropics.claude-code",
+        // TypeScript / React
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next",
+        // Electron
+        "ms-vscode.electron-debug"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib"
+      }
+    }
+  }
+}
