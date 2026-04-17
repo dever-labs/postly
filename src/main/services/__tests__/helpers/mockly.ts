@@ -48,6 +48,25 @@ export interface FaultConfig {
   error_rate?: number
 }
 
+export interface CallEntry {
+  id: string
+  timestamp: string
+  protocol: string
+  method: string
+  path: string
+  status: number
+  duration_ms: number
+  headers?: Record<string, string>
+  /** Raw request body string (e.g. URL-encoded form params for token requests). */
+  body?: string
+  matched_id?: string
+}
+
+export interface CallsResponse {
+  count: number
+  calls: CallEntry[]
+}
+
 // ─── Port utility ─────────────────────────────────────────────────────────────
 
 export function getFreePort(): Promise<number> {
@@ -136,6 +155,37 @@ export class MocklyServer {
   /** Clear fault injection. */
   async clearFault(): Promise<void> {
     await fetch(`${this.apiBase}/api/fault`, { method: 'DELETE' })
+  }
+
+  /** Get logged calls for a mock. */
+  async getCalls(mockId: string): Promise<CallsResponse> {
+    const res = await fetch(`${this.apiBase}/api/calls/http/${mockId}`)
+    if (!res.ok) throw new Error(`getCalls failed: ${res.status}`)
+    return res.json() as Promise<CallsResponse>
+  }
+
+  /** Clear logged calls for a specific mock. */
+  async clearCalls(mockId: string): Promise<void> {
+    await fetch(`${this.apiBase}/api/calls/http/${mockId}`, { method: 'DELETE' })
+  }
+
+  /** Clear all logged HTTP calls. */
+  async clearAllCalls(): Promise<void> {
+    await fetch(`${this.apiBase}/api/calls/http`, { method: 'DELETE' })
+  }
+
+  /**
+   * Block until a mock has been called at least `count` times, or until
+   * `timeoutMs` elapses. Resolves with the matching call entries.
+   */
+  async waitForCalls(mockId: string, count: number, timeoutMs = 5000): Promise<CallEntry[]> {
+    const res = await this._post(`/api/calls/http/${mockId}/wait`, {
+      count,
+      timeout: `${Math.ceil(timeoutMs / 1000)}s`,
+    })
+    if (!res.ok) throw new Error(`waitForCalls timed out after ${timeoutMs}ms (mock: ${mockId})`)
+    const data = await res.json() as CallsResponse
+    return data.calls
   }
 
   /**

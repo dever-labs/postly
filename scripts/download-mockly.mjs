@@ -12,7 +12,7 @@ import https from 'https'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
 const BIN_DIR = join(ROOT, 'bin')
-const MOCKLY_VERSION = 'v0.1.0'
+const MOCKLY_VERSION = 'v0.5.0'
 
 const ARCH_MAP = { 'x64': 'amd64', 'arm64': 'arm64' }
 const PLATFORM_MAP = { 'win32': 'windows', 'darwin': 'darwin', 'linux': 'linux' }
