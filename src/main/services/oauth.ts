@@ -145,12 +145,15 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
   authUrl.searchParams.set('code_challenge', challenge)
   authUrl.searchParams.set('code_challenge_method', 'S256')
 
-  // When SSL verification is disabled, use a unique in-memory session partition
-  // so the auth login page loads against self-signed certificates.  Each attempt
-  // gets its own partition so sessions/cookies are never shared across flows.
-  const partition = sslVerification ? undefined : `oauth-ssl-disabled-${crypto.randomUUID()}`
-  if (partition) {
-    const s = session.fromPartition(partition)
+  // Use a persistent named partition per config so the IDP session (cookies) is
+  // preserved between auth attempts — the user won't be prompted to log in again
+  // as long as their IDP session is still valid.
+  // SSL-disabled configs use a separate namespace so cert policy stays isolated.
+  const partitionName = sslVerification
+    ? `persist:oauth-${config.id}`
+    : `persist:oauth-ssl-disabled-${config.id}`
+  const s = session.fromPartition(partitionName)
+  if (!sslVerification) {
     s.setCertificateVerifyProc((_req, callback) => callback(0))
   }
 
@@ -158,7 +161,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
     width: 800,
     height: 600,
     autoHideMenuBar: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true, partition }
+    webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partitionName }
   })
   // Register listener BEFORE loadURL so the redirect is caught even if
   // Keycloak completes it instantly (e.g. an existing session).

@@ -65,16 +65,27 @@ test(ipc): cover SSL flag forwarding
 
 ### Rules (enforced by commitlint)
 
-- Subject line **≤ 72 characters**
+- Subject line **≤ 72 characters** — **HARD LIMIT, CI will reject anything longer**
 - Subject line **no trailing period**
 - **No `WIP` commits** merged to main
 - Body lines **≤ 100 characters**
+
+### Auto-generation rules (Copilot commit message generation)
+
+When generating a commit message automatically, you **must**:
+
+1. **Count the subject line characters before finalising.** If it would exceed 72, shorten it — never exceed 72 under any circumstance.
+2. **Move detail to the body, never the subject.** Phrases like "to verify X", "in order to Y", "by doing Z", "which ensures W" belong in the body, not the subject line.
+3. **Stop at the object, not the purpose.** `test(oauth): add session persistence tests` is correct. `test(oauth): add session persistence tests to verify token refresh behavior` is too long and wrong.
+4. **Prefer omitting the scope over truncating mid-word.** If `type(scope): description` is too long, try dropping the scope before shortening the description.
+
+Quick mental check before finalising: `type(scope): description` — count the characters. If > 72, cut.
 
 ### Good examples
 
 ```
 feat(ssl): propagate ssl-verification setting into oauth token requests
-fix(oauth): use unique session partition per auth attempt to avoid shared cookies
+fix(oauth): use unique session partition per auth attempt
 security: disable rejectUnauthorized only when user explicitly opts out
 docs: document conventional commit rules in CONTRIBUTING.md
 chore(deps): add selfsigned devDependency for ssl integration tests
@@ -85,10 +96,12 @@ ci: add commitlint check to pull-request workflow
 ### Bad examples — will be rejected
 
 ```
-Fixed bug                        # no type
-feat: add new thing.             # trailing period
-WIP: experimenting               # WIP not allowed
-FEAT: add thing                  # type must be lowercase
+Fixed bug                                           # no type
+feat: add new thing.                                # trailing period
+WIP: experimenting                                  # WIP not allowed
+FEAT: add thing                                     # type must be lowercase
+test(e2e): add OAuth session persistence tests to verify token refresh behavior  # > 72 chars
+feat(oauth): add integration tests to ensure browser session is preserved        # > 72 chars
 ```
 
 ---
