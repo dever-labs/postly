@@ -1,16 +1,22 @@
 {
   // Postly dev environment — uses the shared dever-labs frontend-dev image.
-  // The image includes: Node.js LTS, Git, GitHub CLI, GitHub Copilot, Claude Code.
+  // The image includes: Node.js LTS, Git, GitHub CLI, Claude Code.
+  // The Dockerfile strips the base image's minikube postStartCommand (not needed for Postly).
   // Rebuild the container after changes: Dev Containers: Rebuild Container.
   "name": "postly",
-  "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:latest",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/npm-package:1": {
+      "package": "@github/copilot",
+      "version": "latest"
+    }
+  },
 
   // Install project dependencies on first container creation.
-  // Copilot CLI and gh-copilot extension are pre-installed in the base image.
   "postCreateCommand": "npm install",
-
-  // Override the shared image's postStartCommand (minikube) — not needed for Postly.
-  "postStartCommand": "true",
 
   "remoteEnv": {
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
