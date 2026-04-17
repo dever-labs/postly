@@ -58,7 +58,7 @@ export function ResizablePanel({ direction, onResize, targetRef, onCommit, minSi
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
     },
-    [isHorizontal, onResize, targetRef, onCommit]
+    [isHorizontal, onResize, targetRef, onCommit, minSize, maxSize]
   )
 
   return (

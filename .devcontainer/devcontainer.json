@@ -5,12 +5,12 @@
   "name": "postly",
   "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:latest",
 
-  // Install dependencies and Copilot CLI on first container creation.
-  // Uses the install script (pre-built binary) to avoid node-pty native compilation.
-  "postCreateCommand": "npm install && curl -fsSL https://gh.io/copilot-install | bash && gh extension install github/gh-copilot",
+  // Install project dependencies on first container creation.
+  // Copilot CLI and gh-copilot extension are pre-installed in the base image.
+  "postCreateCommand": "npm install",
 
   // Override the shared image's postStartCommand (minikube) — not needed for Postly.
-  "postStartCommand": "",
+  "postStartCommand": "true",
 
   "remoteEnv": {
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"

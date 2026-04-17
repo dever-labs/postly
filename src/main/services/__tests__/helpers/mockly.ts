@@ -96,8 +96,9 @@ export class MocklyServer {
   /** Stop the server process. */
   async stop(): Promise<void> {
     if (this.proc) {
-      this.proc.kill()
-      await new Promise<void>((r) => this.proc!.once('exit', r))
+      const proc = this.proc
+      proc.kill()
+      await new Promise<void>((r) => proc.once('exit', r))
       this.proc = null
     }
   }

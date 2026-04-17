@@ -125,7 +125,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   ]
 
   result.entitiesFound = collections.length
-  console.log(`[Backstage] syncCatalog: ${allComponents.length} components, ${allApis.length} APIs → ${collections.length} collections`)
+  console.warn(`[Backstage] syncCatalog: ${allComponents.length} components, ${allApis.length} APIs → ${collections.length} collections`)
 
   for (const col of collections) {
     // Upsert the collection row
@@ -149,7 +149,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
       const apiName = api.metadata.name
       const apiType = api.spec?.type ?? 'openapi'
       const rawDefinition = api.spec?.definition
-      console.log(`[Backstage] ${col.label}/${apiName} type=${apiType} hasDefinition=${!!rawDefinition}`)
+      console.warn(`[Backstage] ${col.label}/${apiName} type=${apiType} hasDefinition=${!!rawDefinition}`)
 
       try {
         if (apiType === 'openapi' || apiType === 'swagger') {
@@ -209,7 +209,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
     else result.skipped++
   }
 
-  console.log(`[Backstage] sync done — synced=${result.synced} skipped=${result.skipped} errors=${result.errors.length}`)
+  console.warn(`[Backstage] sync done — synced=${result.synced} skipped=${result.skipped} errors=${result.errors.length}`)
   return result
 }
 

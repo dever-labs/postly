@@ -420,7 +420,8 @@ export async function deleteCollectionFile(
     throw new Error('Invalid file path: must be within the repository directory')
   }
   if (!fs.existsSync(localPath)) return
-  const git = simpleGit(localPath).env(GIT_ENV)
+  const remoteUrl = await getRemoteUrl(localPath)
+  const git = simpleGit(localPath).env(buildGitEnv(remoteUrl))
   if (fs.existsSync(fullPath)) {
     fs.unlinkSync(fullPath)
     await git.rm([fileName]).catch(() => {})
