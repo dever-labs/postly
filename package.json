@@ -6,9 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "test:integration": "node scripts/download-mockly.mjs && vitest run --config vitest.integration.config.ts",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui",
+    "test:e2e": "node scripts/download-mockly.mjs && playwright test",
+    "test:e2e:headed": "node scripts/download-mockly.mjs && playwright test --headed",
+    "test:e2e:ui": "node scripts/download-mockly.mjs && playwright test --ui",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

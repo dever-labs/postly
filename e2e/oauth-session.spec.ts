@@ -13,13 +13,27 @@
  *    is what we need to test persistence. Mockly can't do this because it has
  *    no query-param template syntax.
  *
- * Requires a built app (`npm run build` before `npm run test:e2e`)
- * and the Mockly binary at `bin/mockly` (`node scripts/download-mockly.mjs`).
+ * Requires a built app (`npm run build` before `npm run test:e2e`).
+ * The Mockly binary is downloaded automatically by `npm run test:e2e`
+ * via `node scripts/download-mockly.mjs`.  If the binary is missing when
+ * tests run directly with `playwright test`, all tests in this file are
+ * skipped with a descriptive message.
  */
 import { test, expect } from './fixtures'
 import http from 'http'
+import { existsSync } from 'fs'
+import { resolve } from 'path'
 import type { AddressInfo } from 'net'
 import { MocklyServer } from '../src/main/services/__tests__/helpers/mockly'
+
+// ─── Binary guard ─────────────────────────────────────────────────────────────
+// Skip the entire suite with a clear message when the Mockly binary is absent.
+// In normal usage `npm run test:e2e` downloads it automatically via
+// `node scripts/download-mockly.mjs` before Playwright runs.
+
+const binName = process.platform === 'win32' ? 'mockly.exe' : 'mockly'
+const mocklyBinPath = resolve(__dirname, '..', 'bin', binName)
+const mocklyAvailable = existsSync(mocklyBinPath)
 
 // ─── Auth server ─────────────────────────────────────────────────────────────
 
@@ -86,6 +100,13 @@ const MOCK_TOKEN_ID = 'oauth2-token'
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test.describe('OAuth session persistence', () => {
+  test.beforeEach(() => {
+    test.skip(
+      !mocklyAvailable,
+      `Mockly binary not found at bin/${binName} — run: node scripts/download-mockly.mjs`,
+    )
+  })
+
   test.beforeAll(async () => {
     // Start Mockly for the token endpoint.
     mockly = await MocklyServer.create()

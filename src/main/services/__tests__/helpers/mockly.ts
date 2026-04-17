@@ -166,12 +166,14 @@ export class MocklyServer {
 
   /** Clear logged calls for a specific mock. */
   async clearCalls(mockId: string): Promise<void> {
-    await fetch(`${this.apiBase}/api/calls/http/${mockId}`, { method: 'DELETE' })
+    const res = await fetch(`${this.apiBase}/api/calls/http/${mockId}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`clearCalls failed for ${mockId}: ${res.status}`)
   }
 
   /** Clear all logged HTTP calls. */
   async clearAllCalls(): Promise<void> {
-    await fetch(`${this.apiBase}/api/calls/http`, { method: 'DELETE' })
+    const res = await fetch(`${this.apiBase}/api/calls/http`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(`clearAllCalls failed: ${res.status}`)
   }
 
   /**
