@@ -4,6 +4,16 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-04-17
+
+### Added
+
+- **OAuth session persistence** — the authorization-code flow now reuses a named persistent Electron session partition (`persist:oauth-<configId>`) per OAuth config so the IDP session cookie survives between auth attempts; users are no longer re-prompted to log in when refreshing a token (closes #53).
+- **OAuth integration tests** — Mockly v0.5.0-based integration tests covering `clientCredentials`, `refreshTokenGrant`, and `authorizeAuthCode` token-exchange; call-body inspection verifies correct form params are sent to the token endpoint.
+- **OAuth E2E tests** — Playwright suite that boots the real app against a live Mockly token server and a minimal inline IDP, asserting that the `idp-session` cookie is present and unchanged after a second auth attempt.
+
+---
+
 ## [0.5.0] — 2026-04-12
 
 ### Added
