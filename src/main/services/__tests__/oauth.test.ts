@@ -549,10 +549,10 @@ describe('OAuth integration', () => {
         expect(idp.requests()).toHaveLength(1)
       })
 
-      it('creates a dedicated session partition and bypasses cert verification when sslVerification is false', async () => {
+      it('creates a persistent partition namespaced to the config and bypasses cert verification when sslVerification is false', async () => {
         await authorizeAuthCode(makeConfig({ tokenUrl: idp.tokenUrl }), false)
 
-        expect(mockFromPartition).toHaveBeenCalledWith(expect.stringMatching(/^oauth-ssl-disabled-/))
+        expect(mockFromPartition).toHaveBeenCalledWith('persist:oauth-ssl-disabled-test-config')
         // The cert verify proc must be called with a callback — pass 0 = OK
         expect(mockSetCertVerifyProc).toHaveBeenCalledWith(expect.any(Function))
         const proc = mockSetCertVerifyProc.mock.calls[0][0] as (req: unknown, cb: (result: number) => void) => void
@@ -561,12 +561,13 @@ describe('OAuth integration', () => {
         expect(callback).toHaveBeenCalledWith(0)
       })
 
-      it('does not touch the session when sslVerification is true (default)', async () => {
+      it('uses a persistent partition keyed to the config id when sslVerification is true (default)', async () => {
         // Use HTTP idp so the request actually completes cleanly
         const httpIdp = await startFakeIdp()
         try {
           await authorizeAuthCode(makeConfig({ tokenUrl: httpIdp.tokenUrl, authUrl: httpIdp.authUrl }))
-          expect(mockFromPartition).not.toHaveBeenCalled()
+          expect(mockFromPartition).toHaveBeenCalledWith('persist:oauth-test-config')
+          expect(mockSetCertVerifyProc).not.toHaveBeenCalled()
         } finally {
           httpIdp.stop()
         }
