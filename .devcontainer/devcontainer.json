@@ -8,18 +8,12 @@
     "dockerfile": "Dockerfile"
   },
 
-  "features": {
-    "ghcr.io/devcontainers-contrib/features/npm-package:1": {
-      "package": "@github/copilot",
-      "version": "latest"
-    }
-  },
-
   // Install project dependencies on first container creation.
   "postCreateCommand": "npm install",
 
   "mounts": [
-    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume"
+    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume",
+    "source=dever-labs-copilot-config,target=/home/vscode/.copilot,type=volume"
   ],
 
   "remoteEnv": {
