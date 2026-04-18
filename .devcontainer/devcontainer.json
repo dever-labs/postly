@@ -18,6 +18,10 @@
   // Install project dependencies on first container creation.
   "postCreateCommand": "npm install",
 
+  "mounts": [
+    "source=dever-labs-gh-config,target=/home/vscode/.config/gh,type=volume"
+  ],
+
   "remoteEnv": {
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
   },
