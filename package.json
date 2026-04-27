@@ -201,7 +201,7 @@
     "clsx": "^2.1.1",
     "electron-store": "^11.0.2",
     "httpntlm": "^1.8.13",
-    "lucide-react": "^1.8.0",
+    "lucide-react": "^1.11.0",
     "monaco-editor": "^0.55.1",
     "mqtt": "^5.15.1",
     "openapi-types": "^12.1.3",
