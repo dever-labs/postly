@@ -4,6 +4,14 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-04-28
+
+### Fixed
+
+- **Backstage self-signed certificates** — added a "Skip SSL verification" toggle to the Backstage connect and edit pages, and to the Backstage settings panel. When enabled, connections to Backstage instances using self-signed certificates will succeed instead of throwing `unable to verify the first certificate` (closes #57).
+
+---
+
 ## [0.6.0] — 2026-04-17
 
 ### Added
