@@ -101,7 +101,6 @@ function makeBackstageIntegration(sslVerification: string) {
 }
 
 describe('postly:integrations:connect — Backstage SSL', () => {
-  const guestUser = { name: 'Guest', avatarUrl: '' }
   const syncResult = { entitiesFound: 2, synced: 2, skipped: 0, errors: [] }
 
   beforeEach(() => {
