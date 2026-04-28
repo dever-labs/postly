@@ -78,6 +78,7 @@ When generating a commit message automatically, you **must**:
 2. **Move detail to the body, never the subject.** Phrases like "to verify X", "in order to Y", "by doing Z", "which ensures W" belong in the body, not the subject line.
 3. **Stop at the object, not the purpose.** `test(oauth): add session persistence tests` is correct. `test(oauth): add session persistence tests to verify token refresh behavior` is too long and wrong.
 4. **Prefer omitting the scope over truncating mid-word.** If `type(scope): description` is too long, try dropping the scope before shortening the description.
+5. **Never list multiple changes with "and" in the subject.** If a commit touches several things, describe only the primary change in the subject and list the rest in the body.
 
 Quick mental check before finalising: `type(scope): description` — count the characters. If > 72, cut.
 
@@ -102,6 +103,7 @@ WIP: experimenting                                  # WIP not allowed
 FEAT: add thing                                     # type must be lowercase
 test(e2e): add OAuth session persistence tests to verify token refresh behavior  # > 72 chars
 feat(oauth): add integration tests to ensure browser session is preserved        # > 72 chars
+chore(devcontainer): remove Dockerfile and add init script for environment setup  # > 72 chars, "and" chains two actions, purpose clause at end
 ```
 
 ---
