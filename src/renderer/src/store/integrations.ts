@@ -26,6 +26,7 @@ function normalize(raw: Record<string, unknown>): Integration {
     branch: (raw.branch ?? 'main') as string,
     status: (raw.status ?? 'disconnected') as Integration['status'],
     errorMessage: (raw.error_message ?? raw.errorMessage ?? '') as string,
+    sslVerification: (raw.ssl_verification ?? raw.sslVerification) !== 'disabled',
     createdAt: (raw.created_at ?? raw.createdAt ?? 0) as number,
     updatedAt: (raw.updated_at ?? raw.updatedAt ?? 0) as number,
   }

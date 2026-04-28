@@ -76,6 +76,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
   const [baseUrl, setBaseUrl] = useState(integration?.baseUrl ?? DEFAULTS[integration?.type ?? 'git']?.baseUrl ?? '')
   const [clientId, setClientId] = useState(integration?.clientId ?? '')
   const [token, setToken] = useState(integration?.token ?? '')
+  const [sslVerification, setSslVerification] = useState(integration?.sslVerification !== false)
 
   const [reconnecting, setReconnecting] = useState(false)
   const [connectedUser, setConnectedUser] = useState<Integration['connectedUser']>(integration?.connectedUser ?? null)
@@ -105,6 +106,9 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
     if (token && (type === 'backstage')) {
       await window.api.integrations.update({ id: integrationId, token })
     }
+    if (type === 'backstage') {
+      await window.api.integrations.update({ id: integrationId, ssl_verification: sslVerification ? 'enabled' : 'disabled' })
+    }
     await loadIntegrations()
     addToast('Saved', 'success')
     clearSelectedItem()
@@ -132,6 +136,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
         await loadIntegrations(); await loadCollections()
       } else if (type === 'backstage') {
         if (token) await window.api.integrations.update({ id: integrationId, token })
+        await window.api.integrations.update({ id: integrationId, ssl_verification: sslVerification ? 'enabled' : 'disabled' })
         const { data, error: connErr, syncError, syncResult } = await window.api.integrations.connect({ id: integrationId }) as {
           data: unknown; error?: string; syncError?: string
           syncResult?: { entitiesFound: number; synced: number; skipped: number; errors: string[] }
@@ -244,6 +249,15 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                   {connectedUser && (
                     <p className="text-xs text-th-text-subtle">Connected as <span className="text-th-text-secondary">{connectedUser.name}</span></p>
                   )}
+                  <label className="flex cursor-pointer items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={!sslVerification}
+                      onChange={(e) => setSslVerification(!e.target.checked)}
+                      className="h-4 w-4 accent-blue-500"
+                    />
+                    <span className="text-sm text-th-text-secondary">Skip SSL verification</span>
+                  </label>
                 </>
               )}
 

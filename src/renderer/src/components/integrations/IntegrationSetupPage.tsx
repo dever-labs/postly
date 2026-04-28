@@ -81,6 +81,7 @@ export function IntegrationSetupPage() {
   const [bsName, setBsName] = useState('Backstage')
   const [bsToken, setBsToken] = useState('')
   const [bsProvider, setBsProvider] = useState<'token' | 'guest' | 'gitlab' | 'github' | 'google'>('guest')
+  const [bsSslVerification, setBsSslVerification] = useState(true)
 
   const [error, setError] = useState<string | null>(null)
 
@@ -147,6 +148,7 @@ export function IntegrationSetupPage() {
         if (createErr) { setError(createErr); setConnecting(false); return }
         const id = (createData as Record<string, unknown>).id as string
         if (bsProvider === 'token' && bsToken) await api.integrations.update({ id, token: bsToken })
+        await api.integrations.update({ id, ssl_verification: bsSslVerification ? 'enabled' : 'disabled' })
         const { error: connErr } = await api.integrations.connect({ id })
         if (connErr) { setError(connErr); setConnecting(false); return }
         setConnectedUser({ name: 'Backstage', avatarUrl: '' })
@@ -389,6 +391,16 @@ export function IntegrationSetupPage() {
               {bsProvider !== 'token' && bsProvider !== 'guest' && (
                 <p className="text-xs text-th-text-subtle">A browser window will open to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
               )}
+
+              <label className="flex cursor-pointer items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={!bsSslVerification}
+                  onChange={(e) => setBsSslVerification(!e.target.checked)}
+                  className="h-4 w-4 accent-blue-500"
+                />
+                <span className="text-sm text-th-text-secondary">Skip SSL verification</span>
+              </label>
 
               {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
 

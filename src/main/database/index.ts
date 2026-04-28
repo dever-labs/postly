@@ -61,6 +61,8 @@ function runMigrations(): void {
   try { db.run("ALTER TABLE requests ADD COLUMN protocol_config TEXT NOT NULL DEFAULT '{}'") } catch {}
   // Collections collapsed state
   try { db.run('ALTER TABLE collections ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0') } catch {}
+  // Integrations ssl verification
+  try { db.run("ALTER TABLE integrations ADD COLUMN ssl_verification TEXT NOT NULL DEFAULT 'enabled'") } catch {}
   // Draft cache tables (Issue #14) — changes are auto-saved here until explicit save
   db.run(`CREATE TABLE IF NOT EXISTS request_drafts (
     request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
