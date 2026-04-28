@@ -42,7 +42,7 @@ export function registerIntegrationHandlers(): void {
 
   ipcMain.handle('postly:integrations:update', async (_, args: { id: string; [key: string]: unknown }) => {
     try {
-      const allowed = ['name', 'base_url', 'client_id', 'client_secret', 'repo', 'branch', 'token', 'connected_user', 'status', 'error_message']
+      const allowed = ['name', 'base_url', 'client_id', 'client_secret', 'repo', 'branch', 'token', 'connected_user', 'status', 'error_message', 'ssl_verification']
       const fields: string[] = []
       const values: unknown[] = []
       for (const key of allowed) {
@@ -103,9 +103,10 @@ export function registerIntegrationHandlers(): void {
         const raw = (integration.client_id as string) || 'token'
         authProvider = ALLOWED_BS_PROVIDERS.includes(raw as BsProvider) ? raw : 'token'
         const baseUrl = integration.base_url as string
+        const sslVerification = (integration.ssl_verification as string) !== 'disabled'
 
         if (authProvider === 'guest') {
-          const result = await authenticateWithBackstageGuest(baseUrl)
+          const result = await authenticateWithBackstageGuest(baseUrl, { sslVerification })
           token = result.token
           connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
         } else if (authProvider !== 'token') {
@@ -123,8 +124,9 @@ export function registerIntegrationHandlers(): void {
 
       // For Backstage, immediately sync the catalog with the fresh token
       if (type === 'backstage') {
+        const sslVerification = (integration.ssl_verification as string) !== 'disabled'
         try {
-          const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'] })
+          const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'], sslVerification })
           return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncResult }
         } catch (syncErr) {
           run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',

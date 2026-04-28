@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import axios from 'axios'
+import https from 'https'
 import crypto from 'crypto'
 import yaml from 'js-yaml'
 import { queryOne, run } from '../database'
@@ -12,6 +13,7 @@ export interface BackstageSettings {
   integrationId?: string
   authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
+  sslVerification?: boolean
 }
 
 export interface SyncResult {
@@ -72,10 +74,15 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   const headers: Record<string, string> = {}
   if (settings.token) headers['Authorization'] = `Bearer ${settings.token}`
 
+  // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
+  const httpsAgent = settings.sslVerification === false
+    ? new https.Agent({ rejectUnauthorized: false })
+    : undefined
+
   // Fetch all API + Component entities in parallel
   const [apisRes, compsRes] = await Promise.all([
-    axios.get<BackstageApiEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=API`, { headers }),
-    axios.get<BackstageComponentEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=Component`, { headers }),
+    axios.get<BackstageApiEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=API`, { headers, httpsAgent }),
+    axios.get<BackstageComponentEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=Component`, { headers, httpsAgent }),
   ])
 
   const allApis = Array.isArray(apisRes.data) ? apisRes.data : []
@@ -157,7 +164,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
           if (!spec) {
             const specUrl = api.metadata.annotations?.['backstage.io/api-spec']
             if (specUrl) {
-              try { spec = (await axios.get(specUrl, { headers })).data }
+              try { spec = (await axios.get(specUrl, { headers, httpsAgent })).data }
               catch (err) { result.errors.push(`${col.label}/${apiName}: failed to fetch spec — ${String(err)}`); continue }
             }
           }
@@ -221,12 +228,17 @@ const AUTH_TIMEOUT_MS = 5 * 60 * 1000
  */
 export async function authenticateWithBackstageGuest(
   baseUrl: string,
+  options: { sslVerification?: boolean } = {},
 ): Promise<{ token: string; user: { name: string; email?: string; picture?: string } }> {
   const base = baseUrl.replace(/\/$/, '')
+  // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
+  const httpsAgent = options.sslVerification === false
+    ? new https.Agent({ rejectUnauthorized: false })
+    : undefined
   const resp = await axios.post<{
     backstageIdentity?: { token?: string }
     profile?: { displayName?: string; email?: string; picture?: string }
-  }>(`${base}/api/auth/guest/refresh`, {}, { headers: { 'Content-Type': 'application/json' } })
+  }>(`${base}/api/auth/guest/refresh`, {}, { headers: { 'Content-Type': 'application/json' }, httpsAgent })
 
   const token = resp.data?.backstageIdentity?.token
   if (!token) throw new Error('Guest refresh did not return a token')

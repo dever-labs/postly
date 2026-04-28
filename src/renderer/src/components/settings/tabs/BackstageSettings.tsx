@@ -163,6 +163,16 @@ export function BackstageSettings() {
           />
           <span className="text-sm text-th-text-secondary">Auto-sync on startup</span>
         </label>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings.sslVerification === false}
+            onChange={(e) => setSettings({ ...settings, sslVerification: e.target.checked ? false : true })}
+            className="h-4 w-4 accent-blue-500"
+          />
+          <span className="text-sm text-th-text-secondary">Skip SSL verification</span>
+        </label>
       </div>
 
       <div className="flex gap-2">

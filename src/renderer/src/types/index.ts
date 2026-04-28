@@ -54,6 +54,7 @@ export interface Integration {
   branch: string
   status: 'connected' | 'disconnected' | 'error'
   errorMessage?: string
+  sslVerification?: boolean
   createdAt: number
   updatedAt: number
 }
@@ -164,6 +165,7 @@ export interface BackstageSettings {
   autoSync: boolean
   authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
+  sslVerification?: boolean
 }
 
 export interface GitHubSettings {
