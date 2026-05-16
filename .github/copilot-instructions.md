@@ -7,6 +7,30 @@
 >
 > **All generated commit messages must follow the rules below.**
 
+## Build Commands
+
+- `npm run build` — Compile with electron-vite (main + preload + renderer)
+- `npm test` — Run unit tests (Vitest)
+- `npm run test:integration` — Run integration tests (downloads mockly binary first)
+- `npm run test:e2e` — Run Playwright E2E tests
+- `npm run lint` — ESLint across `src/`
+- `npm run typecheck` — TypeScript type-check (no emit)
+
+## Workflow
+
+After making code changes, always run:
+
+```
+npm run typecheck && npm run lint && npm test
+```
+
+- Fix any type errors or lint issues before committing
+- Commit messages **must** follow Conventional Commits (see below)
+- Feature branches are cut from `main`
+- Write operations in the UI (create/edit/delete) must go through `openGitAction()` to trigger `GitCommitOverlay`
+
+---
+
 ## Commit messages — Conventional Commits (required)
 
 Every commit **must** follow [Conventional Commits](https://www.conventionalcommits.org/).
