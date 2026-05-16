@@ -44,6 +44,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Integration tests
+        run: npm run test:integration
+
   build:
     needs: [ci]
     strategy:
