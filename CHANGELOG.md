@@ -4,6 +4,16 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] — 2026-05-16
+
+### Changed
+
+- **Dependencies** — bumped axios, lucide-react, ws, protobufjs, @grpc/proto-loader, tailwind-merge, zustand, react, and dev-tools groups to latest patch versions.
+- **CI** — upgraded `actions/setup-node` to v6.4.0, `actions/upload-artifact` to v7.0.1, and `github/codeql-action` to v4; pinned codeql-action to full commit SHA for supply-chain security.
+- **Docs** — added architecture and testing convention guidelines.
+
+---
+
 ## [0.6.1] — 2026-04-28
 
 ### Fixed
