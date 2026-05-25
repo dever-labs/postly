@@ -4,6 +4,15 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] — 2026-05-25
+
+### Changed
+
+- **CI** — consolidated CodeQL into a dedicated advanced workflow; bumped `github/codeql-action` from v4.35.5 to v4.36.0.
+- **Dependencies** — bumped `@grpc/grpc-js` to 1.14.4, `ws` to 8.21.0, and dev-tools group (TypeScript, Vitest, Electron, Playwright, etc.) to latest.
+
+---
+
 ## [0.6.2] — 2026-05-16
 
 ### Changed
