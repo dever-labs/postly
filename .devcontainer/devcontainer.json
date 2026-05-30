@@ -1,7 +1,7 @@
 {
   // Postly dev environment — uses the shared dever-labs frontend-dev image.
   "name": "postly",
-  "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:v1.2.1",
+  "image": "ghcr.io/dever-labs/devcontainers/frontend-dev:v1.5.0",
 
   "postCreateCommand": "bash .devcontainer/init.sh",
 
