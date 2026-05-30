@@ -25,6 +25,7 @@ const api = {
   },
   http: {
     execute: (request: unknown) => ipcRenderer.invoke('postly:http:execute', request),
+    cancel: () => ipcRenderer.invoke('postly:http:cancel'),
   },
   oauth: {
     configs: {

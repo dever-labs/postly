@@ -37,10 +37,11 @@ export async function executeRequest(
     sslVerification?: boolean
     followRedirects?: boolean
     timeout?: number
+    signal?: AbortSignal
     onLog?: (entry: LogEntry) => void
   } = {}
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000, onLog } = options
+  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog } = options
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 
@@ -164,6 +165,7 @@ export async function executeRequest(
     headers,
     data,
     timeout,
+    signal,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting

@@ -14,6 +14,7 @@ interface RequestsState {
   updateField: (field: keyof Request, value: unknown) => void
   undoRequest: () => void
   sendRequest: () => Promise<void>
+  cancelRequest: () => void
   saveRequest: () => Promise<void>
   discardDraft: () => Promise<void>
   clearDirty: (requestId: string) => void
@@ -264,6 +265,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       set({ response: errorResponse, isLoading: false })
     }
+  },
+
+  cancelRequest: () => {
+    void window.api.http.cancel()
   },
 
   saveRequest: async () => {

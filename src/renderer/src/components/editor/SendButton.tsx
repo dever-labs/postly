@@ -1,31 +1,35 @@
-import { Loader2 } from 'lucide-react'
 import React from 'react'
 import { cn } from '@/lib/utils'
 
 interface SendButtonProps {
   onClick: () => void
+  onCancel?: () => void
   isLoading: boolean
 }
 
-export function SendButton({ onClick, isLoading }: SendButtonProps) {
+export function SendButton({ onClick, onCancel, isLoading }: SendButtonProps) {
+  if (isLoading) {
+    return (
+      <button
+        data-testid="cancel-button"
+        onClick={onCancel}
+        className={cn(
+          'flex h-8 shrink-0 items-center gap-2 rounded-sm px-4 text-sm font-medium text-white transition-colors focus:outline-hidden focus:ring-1 focus:ring-red-400',
+          onCancel ? 'bg-red-600 hover:bg-red-500 cursor-pointer' : 'cursor-not-allowed bg-blue-700 opacity-80'
+        )}
+      >
+        Cancel
+      </button>
+    )
+  }
+
   return (
     <button
       data-testid="send-button"
       onClick={onClick}
-      disabled={isLoading}
-      className={cn(
-        'flex h-8 shrink-0 items-center gap-2 rounded-sm px-4 text-sm font-medium text-white transition-colors focus:outline-hidden focus:ring-1 focus:ring-blue-400',
-        isLoading ? 'cursor-not-allowed bg-blue-700 opacity-80' : 'bg-blue-600 hover:bg-blue-500'
-      )}
+      className="flex h-8 shrink-0 items-center gap-2 rounded-sm px-4 text-sm font-medium text-white transition-colors focus:outline-hidden focus:ring-1 focus:ring-blue-400 bg-blue-600 hover:bg-blue-500"
     >
-      {isLoading ? (
-        <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Sending</span>
-        </>
-      ) : (
-        'Send'
-      )}
+      Send
     </button>
   )
 }

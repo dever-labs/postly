@@ -6,6 +6,8 @@ import { getGeneralSettings } from './settings-utils'
 
 type LogLevel = 'info' | 'warn' | 'error'
 
+let currentAbortController: AbortController | null = null
+
 function interpolateEnvVars(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => vars[key.trim()] ?? `{{${key}}}`)
 }
@@ -36,6 +38,11 @@ function formatExpiry(expiresAt: number | undefined): string {
 }
 
 export function registerHttpHandlers(): void {
+  ipcMain.handle('postly:http:cancel', () => {
+    currentAbortController?.abort()
+    currentAbortController = null
+  })
+
   ipcMain.handle('postly:http:execute', async (_, req: HttpRequest) => {
     const logs: LogEntry[] = []
     const log = (level: LogLevel, message: string, detail?: string) => logs.push({ level, message, detail })
@@ -191,12 +198,17 @@ export function registerHttpHandlers(): void {
       }
 
       // ── Execute ───────────────────────────────────────────────────────────────
+      const controller = new AbortController()
+      currentAbortController = controller
       const response = await executeRequest(interpolatedReq, {
         sslVerification, followRedirects, timeout,
+        signal: controller.signal,
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })
+      currentAbortController = null
       return { data: { ...response, logs } }
     } catch (err) {
+      currentAbortController = null
       log('error', `Unexpected error: ${String(err)}`)
       return { error: String(err), logs }
     }

@@ -51,7 +51,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
+  const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
   const collections = useCollectionsStore((s) => s.collections)
   const groups = useCollectionsStore((s) => s.groups)
   const integrations = useIntegrationsStore((s) => s.integrations)
@@ -221,7 +221,7 @@ export function RequestEditor() {
           onSend={protocol === 'http' || protocol === 'graphql' ? sendRequest : undefined}
         />
         {(protocol === 'http' || protocol === 'graphql') && (
-          <SendButton onClick={sendRequest} isLoading={isLoading} />
+          <SendButton onClick={sendRequest} onCancel={cancelRequest} isLoading={isLoading} />
         )}
         {breadcrumb?.sourceType !== 'backstage' && (
           <>
