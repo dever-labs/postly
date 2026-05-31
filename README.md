@@ -37,12 +37,11 @@ Configure auth once on a collection or group, and requests inherit it automatica
 | **Inherit** | Walk up to group → collection → integration |
 
 ### Source Integrations
-Pull APIs directly from:
-- **Backstage** — discovers APIs via the Backstage catalog
-- **GitHub** — reads OpenAPI specs from repositories
-- **GitLab** — reads OpenAPI specs from repositories
+Pull APIs directly from any git repository or Backstage:
+- **Any git host** — GitHub, GitLab, Gitea, Azure DevOps, Bitbucket, self-hosted — uses your system git credentials (SSH or HTTPS, no token setup needed in the app)
+- **Backstage** — discovers APIs via the Backstage software catalog
 
-Collections from each source appear as separate groups in the sidebar. Changes can be committed back to source control from within the app.
+Collections from each source appear as separate groups in the sidebar. `*.postly.json` collection files can be committed back to the repository from within the app; OpenAPI specs are read-only.
 
 ### Environments
 - Multiple named environments with key-value variables
