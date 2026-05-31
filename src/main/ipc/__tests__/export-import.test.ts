@@ -187,7 +187,7 @@ describe('importData', () => {
 
     const reqInsert = mockRun.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO requests'))
     expect(reqInsert).toBeDefined()
-    const params = reqInsert![1] as unknown[]
+    const params = (reqInsert as unknown[][])[1] as unknown[]
     expect(params).toContain('Get Users')
     expect(params).toContain('GET')
     expect(params).toContain('/users')

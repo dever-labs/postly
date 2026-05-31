@@ -87,7 +87,7 @@ async function invoke(req: unknown): Promise<Result> {
 }
 
 async function invokeCancel(): Promise<void> {
-  await state.handlers['postly:http:cancel']!(null, null)
+  await state.handlers['postly:http:cancel']!(null, null as never)
 }
 
 /** Asserts the invocation succeeded and returns the data object (never null). */
