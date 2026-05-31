@@ -178,6 +178,7 @@ const api = {
     download: () => ipcRenderer.invoke('postly:updater:download'),
     install: () => ipcRenderer.invoke('postly:updater:install'),
     setFeed: (data: { url: string }) => ipcRenderer.invoke('postly:updater:set-feed', data),
+    getEnterpriseConfig: () => ipcRenderer.invoke('postly:updater:get-enterprise-config') as Promise<{ data?: { updateUrl?: string }; error?: string }>,
     onEvent: (cb: (event: { type: string; version?: string; percent?: number; error?: string }) => void) => {
       const handler = (_: unknown, event: unknown) => cb(event as { type: string; version?: string; percent?: number; error?: string })
       ipcRenderer.on('postly:updater:event', handler)

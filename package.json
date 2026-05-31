@@ -217,5 +217,8 @@
     "tailwind-merge": "^3.6.0",
     "ws": "^8.21.0",
     "zustand": "^5.0.13"
+  },
+  "optionalDependencies": {
+    "rolldown": "^1.0.3"
   }
 }

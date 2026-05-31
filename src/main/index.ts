@@ -3,7 +3,7 @@ import { join } from 'path'
 import { platform } from 'process'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
-import { initUpdater, checkForUpdates, setUpdateFeedUrl } from './services/updater'
+import { initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
 
 function createWindow(): BrowserWindow {
@@ -57,7 +57,11 @@ app.whenReady().then(async () => {
   if (app.isPackaged) {
     const generalSettings = getGeneralSettings()
     if (generalSettings.autoUpdate) {
-      if (generalSettings.updateFeedUrl) setUpdateFeedUrl(generalSettings.updateFeedUrl)
+      // Enterprise bundled config takes precedence over user setting.
+      // Neither affects the default GitHub Releases channel used by normal builds.
+      const enterprise = getEnterpriseConfig()
+      const effectiveUrl = enterprise.updateUrl ?? generalSettings.updateFeedUrl
+      applyFeedUrl(effectiveUrl)
       checkForUpdates()
     }
   }

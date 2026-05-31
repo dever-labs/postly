@@ -48,6 +48,7 @@ import {
   downloadUpdate,
   installUpdate,
   setUpdateFeedUrl,
+  applyFeedUrl,
   __setAutoUpdaterForTesting,
 } from '../updater'
 
@@ -202,5 +203,75 @@ describe('packaged mode', () => {
       fireAuEvent('checking-for-update')
       expect(mockSend).not.toHaveBeenCalled()
     })
+  })
+})
+
+// ─── applyFeedUrl ─────────────────────────────────────────────────────────────
+
+describe('applyFeedUrl', () => {
+  beforeEach(() => {
+    isPackaged = true
+    initUpdater(mockWin as never)
+  })
+
+  it('sets generic provider when URL provided', () => {
+    applyFeedUrl('https://updates.internal.corp/postly/')
+    expect(mockAutoUpdater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'generic',
+      url: 'https://updates.internal.corp/postly/',
+    })
+  })
+
+  it('reverts to GitHub provider when URL is undefined', () => {
+    applyFeedUrl(undefined)
+    expect(mockAutoUpdater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'github',
+      owner: 'dever-labs',
+      repo: 'postly',
+    })
+  })
+
+  it('is a no-op in dev mode', () => {
+    isPackaged = false
+    applyFeedUrl('https://updates.internal.corp/postly/')
+    expect(mockAutoUpdater.setFeedURL).not.toHaveBeenCalled()
+  })
+})
+
+// ─── getEnterpriseConfig ──────────────────────────────────────────────────────
+
+import { getEnterpriseConfig } from '../updater'
+import fs from 'fs'
+import path from 'path'
+
+describe('getEnterpriseConfig', () => {
+  it('returns empty object when resourcesPath is not set', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const proc = process as any
+    const original = proc.resourcesPath
+    proc.resourcesPath = undefined
+    expect(getEnterpriseConfig()).toEqual({})
+    proc.resourcesPath = original
+  })
+
+  it('returns empty object when enterprise.json does not exist', () => {
+    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = '/tmp/no-such-dir-12345'
+    expect(getEnterpriseConfig()).toEqual({})
+  })
+
+  it('parses enterprise.json when present', () => {
+    const dir = fs.mkdtempSync('/tmp/postly-test-')
+    fs.writeFileSync(path.join(dir, 'enterprise.json'), JSON.stringify({ updateUrl: 'https://corp.internal/postly/' }))
+    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = dir
+    expect(getEnterpriseConfig()).toEqual({ updateUrl: 'https://corp.internal/postly/' })
+    fs.rmSync(dir, { recursive: true })
+  })
+
+  it('returns empty object when enterprise.json is malformed', () => {
+    const dir = fs.mkdtempSync('/tmp/postly-test-')
+    fs.writeFileSync(path.join(dir, 'enterprise.json'), 'not valid json')
+    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = dir
+    expect(getEnterpriseConfig()).toEqual({})
+    fs.rmSync(dir, { recursive: true })
   })
 })
