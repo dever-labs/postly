@@ -52,8 +52,9 @@ app.whenReady().then(async () => {
   const win = createWindow()
   attachWindowEvents(win)
 
+  // Always init so dev-mode "check now" button can emit events back to renderer
+  initUpdater(win)
   if (app.isPackaged) {
-    initUpdater(win)
     const generalSettings = getGeneralSettings()
     if (generalSettings.autoUpdate) {
       if (generalSettings.updateFeedUrl) setUpdateFeedUrl(generalSettings.updateFeedUrl)
