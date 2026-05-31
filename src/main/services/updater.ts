@@ -9,7 +9,27 @@ export interface UpdaterEvent {
   error?: string
 }
 
+type AutoUpdater = {
+  autoDownload: boolean
+  autoInstallOnAppQuit: boolean
+  logger: unknown
+  on(event: string, handler: (...args: unknown[]) => void): void
+  checkForUpdates(): Promise<unknown>
+  downloadUpdate(): Promise<unknown>
+  quitAndInstall(isSilent: boolean, isForceRunAfter: boolean): void
+  setFeedURL(options: { provider: string; url: string }): void
+}
+
 let win: BrowserWindow | null = null
+let _autoUpdater: AutoUpdater | null = null
+
+function getAutoUpdater(): AutoUpdater {
+  if (_autoUpdater) return _autoUpdater
+  // Lazy import — electron-updater is only loaded in packaged builds to avoid
+  // cross-platform binary issues during development.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('electron-updater') as { autoUpdater: AutoUpdater }).autoUpdater
+}
 
 function emit(event: UpdaterEvent) {
   if (win && !win.isDestroyed()) {
@@ -23,20 +43,17 @@ export function initUpdater(mainWindow: BrowserWindow): void {
 
   if (!app.isPackaged) return
 
-  // Lazy import — electron-updater is only loaded in packaged builds to avoid
-  // cross-platform binary issues during development.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater')
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.logger = null
+  const au = getAutoUpdater()
+  au.autoDownload = false
+  au.autoInstallOnAppQuit = true
+  au.logger = null
 
-  autoUpdater.on('checking-for-update', () => emit({ type: 'checking' }))
-  autoUpdater.on('update-available', (info: { version?: string }) => emit({ type: 'available', version: info.version }))
-  autoUpdater.on('update-not-available', () => emit({ type: 'not-available' }))
-  autoUpdater.on('download-progress', (progress: { percent: number }) => emit({ type: 'progress', percent: Math.round(progress.percent) }))
-  autoUpdater.on('update-downloaded', (info: { version?: string }) => emit({ type: 'downloaded', version: info.version }))
-  autoUpdater.on('error', (err: Error) => emit({ type: 'error', error: err.message }))
+  au.on('checking-for-update', () => emit({ type: 'checking' }))
+  au.on('update-available', (info: unknown) => emit({ type: 'available', version: (info as { version?: string }).version }))
+  au.on('update-not-available', () => emit({ type: 'not-available' }))
+  au.on('download-progress', (progress: unknown) => emit({ type: 'progress', percent: Math.round((progress as { percent: number }).percent) }))
+  au.on('update-downloaded', (info: unknown) => emit({ type: 'downloaded', version: (info as { version?: string }).version }))
+  au.on('error', (err: unknown) => emit({ type: 'error', error: (err as Error).message }))
 }
 
 export function checkForUpdates(): void {
@@ -46,28 +63,25 @@ export function checkForUpdates(): void {
     setTimeout(() => emit({ type: 'not-available' }), 800)
     return
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater')
-  autoUpdater.checkForUpdates().catch(() => { /* handled via error event */ })
+  getAutoUpdater().checkForUpdates().catch(() => { /* handled via error event */ })
 }
 
 export function downloadUpdate(): void {
   if (!app.isPackaged) return
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater')
-  autoUpdater.downloadUpdate().catch(() => { /* handled via error event */ })
+  getAutoUpdater().downloadUpdate().catch(() => { /* handled via error event */ })
 }
 
 export function installUpdate(): void {
   if (!app.isPackaged) return
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater')
-  autoUpdater.quitAndInstall(false, true)
+  getAutoUpdater().quitAndInstall(false, true)
 }
 
 export function setUpdateFeedUrl(feedUrl: string): void {
   if (!app.isPackaged) return
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater')
-  autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl })
+  getAutoUpdater().setFeedURL({ provider: 'generic', url: feedUrl })
+}
+
+/** Inject a mock autoUpdater — for unit tests only. */
+export function __setAutoUpdaterForTesting(au: AutoUpdater | null): void {
+  _autoUpdater = au
 }
