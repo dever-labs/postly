@@ -225,7 +225,8 @@ async function executeNtlmRequest(
 
   if (options.signal?.aborted) {
     const msg = 'Request cancelled'
-    return { status: 0, statusText: msg, headers: {}, body: msg, duration: 0, size: Buffer.byteLength(msg, 'utf8') }
+    log('info', msg)
+    return { status: 0, statusText: msg, headers: {}, body: msg, duration: Date.now() - start, size: Buffer.byteLength(msg, 'utf8') }
   }
 
   const httpntlm = require('httpntlm') as Record<string, (opts: Record<string, unknown>, cb: (err: Error | null, res: { statusCode: number; headers: Record<string, string>; body: string }) => void) => void>
