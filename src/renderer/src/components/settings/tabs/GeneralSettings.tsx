@@ -7,6 +7,7 @@ const DEFAULTS: GeneralSettings = {
   defaultTimeout: 30000,
   followRedirects: true,
   sslVerification: true,
+  autoUpdate: true,
 }
 
 export function GeneralSettings() {

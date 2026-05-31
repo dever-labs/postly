@@ -1,57 +1,55 @@
-# Connecting Integrations
+# Connecting Sources
 
-Postly can sync API collections from three external sources: **GitHub**, **GitLab**, and **Backstage**. Each source appears as its own collapsible group in the sidebar alongside your local collections.
+Postly can sync API collections from two types of external sources: **Git repositories** and **Backstage**. Each source appears as its own collapsible group in the sidebar alongside your local collections.
 
----
-
-## GitHub
-
-### Prerequisites
-
-Create a **GitHub OAuth App** (no client secret required — Postly uses the Device Flow standard):
-
-1. Go to **GitHub → Settings → Developer settings → OAuth Apps → New OAuth App**
-2. Set **Homepage URL** to `http://localhost`
-3. Set **Authorization callback URL** to `http://localhost`
-4. Copy the **Client ID** (you do not need the client secret)
-
-### Connecting
-
-1. In Postly, click **Connect a source** at the bottom of the sidebar
-2. Select **GitHub**
-3. Enter a display name and your GitHub base URL (`https://github.com` or your GitHub Enterprise URL)
-4. Paste the **Client ID**
-5. Enter the **repository** to sync from (`owner/repo`)
-6. Enter the default **branch** (e.g. `main`)
-7. Click **Save & Reconnect** — you will be shown a device code to approve at github.com/login/device
-8. Once approved, collections from the repository are imported into the sidebar
-
-### What gets synced
-
-Postly looks for a `postly.json` file (or files matching `*.postly.json`) at the root of the configured repository and branch. The file format is the same as the Postly export format.
+To add a source, click **Add Git Source** at the bottom of the sidebar.
 
 ---
 
-## GitLab
+## Git repository
 
-### Prerequisites
+The **Git** source type works with any git host — GitHub, GitLab, Gitea, Azure DevOps, Bitbucket, or any self-hosted git server. Postly clones the repository locally using your system's git credentials; no token or OAuth setup is required inside the app.
 
-Create a **GitLab OAuth Application**:
+### Authentication
 
-1. Go to **GitLab → User Settings → Applications** (or the Admin Area for instance-wide)
-2. Set **Redirect URI** to `http://localhost`
-3. Enable the `read_api` scope
-4. Copy the **Application ID** (Client ID)
+Postly delegates authentication to your system git tooling:
+
+| URL style | How credentials are resolved |
+|---|---|
+| `https://github.com/org/repo` | Git Credential Manager, macOS Keychain, `~/.netrc`, etc. |
+| `git@github.com:org/repo.git` | SSH agent or `~/.ssh/id_ed25519` / `id_rsa` (auto-detected) |
+| `https://gitlab.example.com/…` | Same as HTTPS above |
+| Any self-hosted | Same rules — whatever your system git would use |
+
+If `git clone <url>` works in your terminal, it will work in Postly.
 
 ### Connecting
 
-1. In Postly, click **Connect a source**
-2. Select **GitLab**
-3. Enter a display name and your GitLab base URL (`https://gitlab.com` or your self-hosted URL)
-4. Paste the **Application ID** as the Client ID
-5. Enter the **repository** (`namespace/project`) and **branch**
-6. Click **Save & Reconnect** — you will be shown a device code to approve on your GitLab instance
-7. Once approved, collections are synced from the repository
+1. Click **Add Git Source** in the sidebar
+2. Select **Git repository**
+3. Paste the repository URL (HTTPS or SSH)
+4. Optionally edit the display name (auto-filled from `org/repo`)
+5. Set the default branch (default: `main`)
+6. Click **Connect** — Postly clones the repository and imports any API definitions it finds
+
+### What gets imported
+
+Postly auto-discovers API definitions on connect and sync:
+
+| File(s) found | What happens |
+|---|---|
+| `openapi.yaml` / `openapi.json` | Imported as a collection with groups per tag |
+| `swagger.yaml` / `swagger.json` | Same |
+| `openapi/openapi.yaml`, `docs/openapi.yaml`, `api/openapi.yaml` | Same |
+| `*.postly.json` | Imported as a full Postly collection (requests, auth, groups) |
+
+Multiple files can coexist — each produces a separate collection in the sidebar.
+
+### Syncing and committing
+
+- Click the **Sync** icon next to a git source to pull the latest changes from the remote branch
+- For `*.postly.json` collections, you can edit requests and commit changes back to the repository using the **Commit** panel (commit icon in the request editor toolbar)
+- Changes to OpenAPI-sourced collections are read-only from Postly's perspective — edit the spec file in your repo
 
 ---
 
@@ -65,23 +63,17 @@ Optionally, create a **service account token** if your Backstage instance requir
 
 ### Connecting
 
-1. In Postly, click **Connect a source**
-2. Select **Backstage**
-3. Enter a display name and your Backstage base URL (e.g. `http://localhost:7007`)
-4. Optionally enter a **service account token** if required
-5. Set the **default path** (defaults to `/api/catalog`)
-6. Click **Save & Connect**
+1. Click **Add Git Source** → select **Backstage**
+2. Enter a display name and your Backstage base URL (e.g. `http://localhost:7007`)
+3. Optionally enter a **service account token** if required
+4. Click **Connect**
 
-Postly will fetch all API entities from the catalog and create a collection group for each one that contains OpenAPI/Swagger definitions.
+Postly fetches all API entities from the catalog and creates a collection for each one that has an OpenAPI/Swagger definition.
 
 ---
 
-## Managing integrations
+## Managing sources
 
 - Click the **settings icon** next to any connected source in the sidebar to edit its configuration
-- To remove a source, open the edit page and scroll down to the **Remove** section
-- Collections synced from a source are read-only by default; to make local changes, drag collections to your **Local** source
-
-## Committing changes
-
-For GitHub and GitLab sources, Postly includes a **Commit panel** that lets you write a commit message and push changes back to the source repository directly from the app. Open it via the commit icon in the request editor toolbar.
+- To remove a source, open the settings page and scroll down to the **Remove** section
+- Collections synced from a git or Backstage source are read-only by default; drag them to **Local** to make fully independent copies

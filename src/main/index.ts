@@ -3,6 +3,8 @@ import { join } from 'path'
 import { platform } from 'process'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
+import { initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
+import { getGeneralSettings } from './ipc/settings-utils'
 
 function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
@@ -49,6 +51,20 @@ app.whenReady().then(async () => {
   registerAllIpcHandlers()
   const win = createWindow()
   attachWindowEvents(win)
+
+  // Always init so dev-mode "check now" button can emit events back to renderer
+  initUpdater(win)
+  if (app.isPackaged) {
+    const generalSettings = getGeneralSettings()
+    if (generalSettings.autoUpdate) {
+      // Enterprise bundled config takes precedence over user setting.
+      // Neither affects the default GitHub Releases channel used by normal builds.
+      const enterprise = getEnterpriseConfig()
+      const effectiveUrl = enterprise.updateUrl ?? generalSettings.updateFeedUrl
+      applyFeedUrl(effectiveUrl)
+      checkForUpdates()
+    }
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const w = createWindow()

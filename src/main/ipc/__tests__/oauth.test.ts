@@ -27,7 +27,7 @@ vi.mock('../../services/oauth', () => ({
 }))
 
 vi.mock('../settings-utils', () => ({
-  getGeneralSettings: vi.fn().mockReturnValue({ sslVerification: true, followRedirects: true, defaultTimeout: 30000 }),
+  getGeneralSettings: vi.fn().mockReturnValue({ sslVerification: true, followRedirects: true, defaultTimeout: 30000, autoUpdate: true }),
 }))
 
 import { registerOAuthHandlers } from '../oauth'
@@ -64,7 +64,7 @@ function invoke(channel: string, args: unknown) {
 describe('OAuth IPC handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGetGeneralSettings.mockReturnValue({ sslVerification: true, followRedirects: true, defaultTimeout: 30000 })
+    mockGetGeneralSettings.mockReturnValue({ sslVerification: true, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
     registerOAuthHandlers()
   })
 
@@ -79,7 +79,7 @@ describe('OAuth IPC handlers', () => {
     })
 
     it('passes sslVerification=false to authorizeAuthCode when global SSL is disabled', async () => {
-      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000 })
+      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockQ1.mockReturnValue(fakeConfigRow)
       mockAuthorizeAuthCode.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:authorize', { configId: 'cfg1' })
@@ -87,7 +87,7 @@ describe('OAuth IPC handlers', () => {
     })
 
     it('passes sslVerification=false to clientCredentials when global SSL is disabled', async () => {
-      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000 })
+      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockQ1.mockReturnValue({ ...fakeConfigRow, grant_type: 'client_credentials' })
       mockClientCredentials.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:authorize', { configId: 'cfg1' })
@@ -111,7 +111,7 @@ describe('OAuth IPC handlers', () => {
     })
 
     it('passes sslVerification=false to getValidToken when global SSL is disabled', async () => {
-      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000 })
+      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockGetValidToken.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:token:get', { configId: 'cfg1' })
       expect(mockGetValidToken).toHaveBeenCalledWith('cfg1', false)
@@ -128,7 +128,7 @@ describe('OAuth IPC handlers', () => {
     })
 
     it('passes sslVerification=false to authorizeInline when global SSL is disabled', async () => {
-      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000 })
+      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockAuthorizeInline.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:inline:authorize', fakeOAuthConfig)
       expect(mockAuthorizeInline).toHaveBeenCalledWith(fakeOAuthConfig, false)
@@ -145,7 +145,7 @@ describe('OAuth IPC handlers', () => {
     })
 
     it('passes sslVerification=false to getValidTokenForConfig when global SSL is disabled', async () => {
-      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000 })
+      mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockGetValidTokenForConfig.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:inline:token:get', fakeOAuthConfig)
       expect(mockGetValidTokenForConfig).toHaveBeenCalledWith(fakeOAuthConfig, false)

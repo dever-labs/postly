@@ -37,12 +37,11 @@ Configure auth once on a collection or group, and requests inherit it automatica
 | **Inherit** | Walk up to group → collection → integration |
 
 ### Source Integrations
-Pull APIs directly from:
-- **Backstage** — discovers APIs via the Backstage catalog
-- **GitHub** — reads OpenAPI specs from repositories
-- **GitLab** — reads OpenAPI specs from repositories
+Pull APIs directly from any git repository or Backstage:
+- **Any git host** — GitHub, GitLab, Gitea, Azure DevOps, Bitbucket, self-hosted — uses your system git credentials (SSH or HTTPS, no token setup needed in the app)
+- **Backstage** — discovers APIs via the Backstage software catalog
 
-Collections from each source appear as separate groups in the sidebar. Changes can be committed back to source control from within the app.
+Collections from each source appear as separate groups in the sidebar. `*.postly.json` collection files can be committed back to the repository from within the app; OpenAPI specs are read-only.
 
 ### Environments
 - Multiple named environments with key-value variables
@@ -56,6 +55,15 @@ Collections from each source appear as separate groups in the sidebar. Changes c
 - Search and filter across all collections
 - Dark and light theme
 - Breadcrumb navigation (Source › Collection › Group › Request)
+
+### Automatic Updates
+Postly checks for updates automatically on startup and shows a notification banner when a new version is available. Updates are downloaded in the background and applied on the next restart.
+
+Configure update behaviour in **Settings → Updates**:
+- Toggle automatic startup checks on or off
+- Set a custom internal update server URL for enterprise/air-gapped deployments
+
+See [docs/updates.md](docs/updates.md) for enterprise deployment options.
 
 ---
 

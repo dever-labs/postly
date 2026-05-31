@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { queryAll, queryOne, run } from '../database'
 
 const DEFAULTS = {
-  general: { theme: 'dark', defaultTimeout: 30000, followRedirects: true, sslVerification: true },
+  general: { theme: 'dark', defaultTimeout: 30000, followRedirects: true, sslVerification: true, autoUpdate: true },
   backstage: { baseUrl: '', token: '', autoSync: false },
   github: { token: '', orgs: [] as string[] },
   gitlab: { baseUrl: 'https://gitlab.com', token: '', groups: [] as string[] },

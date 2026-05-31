@@ -16,6 +16,7 @@ import { registerAiHandlers } from './ai'
 import { registerExportImportHandlers } from './export-import'
 import { registerDraftHandlers } from './drafts'
 import { registerWindowHandlers } from './window'
+import { registerUpdaterHandlers } from './updater'
 
 export { attachWindowEvents } from './window'
 
@@ -38,4 +39,5 @@ export function registerAllIpcHandlers(): void {
   registerExportImportHandlers()
   registerDraftHandlers()
   registerWindowHandlers()
+  registerUpdaterHandlers()
 }

@@ -23,6 +23,7 @@ const DEFAULT_GENERAL: GeneralSettings = {
   defaultTimeout: 30000,
   followRedirects: true,
   sslVerification: true,
+  autoUpdate: true,
 }
 const DEFAULT_BACKSTAGE: BackstageSettings = { baseUrl: '', token: '', autoSync: false, authProvider: 'token' }
 const DEFAULT_GITHUB: GitHubSettings = { baseUrl: 'https://github.com', clientId: '', clientSecret: '', token: '', repo: '', orgs: [] }
