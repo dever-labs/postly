@@ -192,6 +192,8 @@ export interface GeneralSettings {
   defaultTimeout: number
   followRedirects: boolean
   sslVerification: boolean
+  autoUpdate: boolean
+  updateFeedUrl?: string
 }
 
 export interface AiSettings {

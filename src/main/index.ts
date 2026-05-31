@@ -3,6 +3,8 @@ import { join } from 'path'
 import { platform } from 'process'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
+import { initUpdater, checkForUpdates, setUpdateFeedUrl } from './services/updater'
+import { getGeneralSettings } from './ipc/settings-utils'
 
 function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
@@ -49,6 +51,15 @@ app.whenReady().then(async () => {
   registerAllIpcHandlers()
   const win = createWindow()
   attachWindowEvents(win)
+
+  if (app.isPackaged) {
+    initUpdater(win)
+    const generalSettings = getGeneralSettings()
+    if (generalSettings.autoUpdate) {
+      if (generalSettings.updateFeedUrl) setUpdateFeedUrl(generalSettings.updateFeedUrl)
+      checkForUpdates()
+    }
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const w = createWindow()

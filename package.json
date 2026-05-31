@@ -204,6 +204,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3",
     "httpntlm": "^1.8.13",
     "lucide-react": "^1.16.0",
     "monaco-editor": "^0.55.1",
