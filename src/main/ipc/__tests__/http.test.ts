@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Capture the registered handler so tests can call it directly.
+// Capture registered handlers by channel so tests can call them directly.
 // The object must be declared before vi.mock so the factory closes over the reference.
 const state: {
-  handler: ((ev: unknown, req: unknown) => Promise<Record<string, unknown>>) | null
-} = { handler: null }
+  handlers: Record<string, (ev: unknown, req: unknown) => Promise<Record<string, unknown>>>
+} = { handlers: {} }
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: vi.fn((_ch: string, handler: (ev: unknown, req: unknown) => Promise<Record<string, unknown>>) => {
-      state.handler = handler
+    handle: vi.fn((ch: string, handler: (ev: unknown, req: unknown) => Promise<Record<string, unknown>>) => {
+      state.handlers[ch] = handler
     })
   }
 }))
@@ -83,7 +83,11 @@ function baseResp() {
 }
 
 async function invoke(req: unknown): Promise<Result> {
-  return state.handler!(null, req) as Promise<Result>   // eslint-disable-line @typescript-eslint/no-non-null-assertion
+  return state.handlers['postly:http:execute']!(null, req) as Promise<Result>   // eslint-disable-line @typescript-eslint/no-non-null-assertion
+}
+
+async function invokeCancel(): Promise<void> {
+  await state.handlers['postly:http:cancel']!(null, null)
 }
 
 /** Asserts the invocation succeeded and returns the data object (never null). */
@@ -98,7 +102,7 @@ async function invokeOk(req: unknown): Promise<Record<string, unknown> & { logs:
 describe('http IPC handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    state.handler = null
+    state.handlers = {}
     setupDb()
     mockExec.mockResolvedValue(baseResp())
     registerHttpHandlers()
@@ -370,6 +374,47 @@ describe('http IPC handler', () => {
         expect.anything(),
         expect.objectContaining({ followRedirects: false })
       )
+    })
+  })
+
+  // ── Request cancellation ───────────────────────────────────────────────────
+
+  describe('request cancellation', () => {
+    it('passes an AbortSignal to executeRequest', async () => {
+      await invoke(baseReq())
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ signal: expect.objectContaining({ aborted: false }) })
+      )
+    })
+
+    it('aborts in-flight request when cancel is called', async () => {
+      let capturedSignal: AbortSignal | undefined
+
+      mockExec.mockImplementation(async (_req, opts) => {
+        capturedSignal = opts?.signal
+        // Simulate a slow request that checks the signal
+        await new Promise<void>((resolve) => setTimeout(resolve, 10))
+        return baseResp()
+      })
+
+      const executePromise = invoke(baseReq())
+      // Cancel while execute is still in progress
+      await invokeCancel()
+      await executePromise
+
+      expect(capturedSignal?.aborted).toBe(true)
+    })
+
+    it('is a no-op when no request is in flight', async () => {
+      // Should not throw when cancel is called with nothing in flight
+      await expect(invokeCancel()).resolves.toBeUndefined()
+    })
+
+    it('clears currentAbortController after successful execution', async () => {
+      await invoke(baseReq())
+      // Second cancel should be a no-op (controller was cleared after first execute)
+      await expect(invokeCancel()).resolves.toBeUndefined()
     })
   })
 })

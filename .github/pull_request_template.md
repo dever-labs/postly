@@ -1,20 +1,23 @@
 ## Summary
 <!-- One-line description of the change -->
 
+Closes #<!-- issue number -->
+
+## What changed and why
+<!-- Key decisions, trade-offs, or anything a reviewer should know -->
+
 ## Type of change
 - [ ] Bug fix
 - [ ] New feature
+- [ ] Refactor / chore
 - [ ] Breaking change
-- [ ] Documentation / chore
-
-## Changes
-<!-- What was changed and why -->
 
 ## Testing
-<!-- How was this tested? -->
+<!-- How was this verified? Unit tests added? Integration tests? Manual testing steps? -->
 
 ## Checklist
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
 - [ ] `npm test` passes
+- [ ] New tests added for new behaviour
 - [ ] `npm run build` completes without errors

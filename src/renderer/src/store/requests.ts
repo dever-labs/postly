@@ -205,8 +205,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   },
 
   sendRequest: async () => {
-    const { editingRequest } = get()
-    if (!editingRequest) return
+    const { editingRequest, isLoading } = get()
+    if (!editingRequest || isLoading) return
 
     set({ isLoading: true, response: null })
 

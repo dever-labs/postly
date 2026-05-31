@@ -5,6 +5,7 @@ import type { BodyType, KeyValuePair } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { EnvInput } from '@/components/editor/EnvInput'
+import { ResizablePanel } from '@/components/layout/ResizablePanel'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -180,6 +181,7 @@ function FormDataEditor({ pairs, onChange }: { pairs: KeyValuePair[]; onChange: 
 export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTypeChange, onContentChange }: BodyTabProps) {
   const theme = useUIStore((s) => s.theme)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const gqlQueryRef = useRef<HTMLDivElement>(null)
   const monaco = useMonaco()
   const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
   const vars = useEnvironmentsStore((s) => s.vars)
@@ -246,6 +248,7 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
     scrollBeyondLastLine: false,
     wordWrap: 'on' as const,
     padding: { top: 8 },
+    automaticLayout: true,
     // Allow suggestions everywhere including inside strings
     quickSuggestions: { other: true, comments: true, strings: true },
     suggestOnTriggerCharacters: true,
@@ -273,7 +276,7 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex h-full flex-col">
       <div className="flex gap-0 border-b border-th-border">
         {TOP_TABS.map((t) => (
           <button
@@ -310,7 +313,7 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
         </div>
       )}
 
-      <div className="flex-1">
+      <div className="min-h-0 flex-1">
         {topTab === 'none' && (
           <div className="flex items-center justify-center py-8 text-sm text-th-text-faint">No body</div>
         )}
@@ -331,7 +334,7 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
 
         {topTab === 'raw' && (
           <Editor
-            height="220px"
+            height="100%"
             language={rawLang}
             theme={theme === 'light' ? 'vs' : 'vs-dark'}
             value={bodyContent}
@@ -366,27 +369,32 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
         )}
 
         {topTab === 'graphql' && (
-          <div className="flex flex-col gap-0">
+          <div className="flex h-full flex-col gap-0">
             <div className="border-b border-th-border px-3 py-1 text-xs text-th-text-faint">Query</div>
-            <Editor
-              height="160px"
-              language="graphql"
-              theme={theme === 'light' ? 'vs' : 'vs-dark'}
-              value={parsedGql().query}
-              onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), query: v ?? '' }))}
-              onMount={attachEnvSuggest}
-              options={monacoOptions}
-            />
+            <div ref={gqlQueryRef} style={{ height: '60%' }}>
+              <Editor
+                height="100%"
+                language="graphql"
+                theme={theme === 'light' ? 'vs' : 'vs-dark'}
+                value={parsedGql().query}
+                onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), query: v ?? '' }))}
+                onMount={attachEnvSuggest}
+                options={monacoOptions}
+              />
+            </div>
+            <ResizablePanel direction="vertical" targetRef={gqlQueryRef} minSize={60} />
             <div className="border-b border-t border-th-border px-3 py-1 text-xs text-th-text-faint">Variables</div>
-            <Editor
-              height="100px"
-              language="json"
-              theme={theme === 'light' ? 'vs' : 'vs-dark'}
-              value={parsedGql().variables}
-              onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), variables: v ?? '' }))}
-              onMount={attachEnvSuggest}
-              options={monacoOptions}
-            />
+            <div className="flex-1 min-h-0">
+              <Editor
+                height="100%"
+                language="json"
+                theme={theme === 'light' ? 'vs' : 'vs-dark'}
+                value={parsedGql().variables}
+                onChange={(v) => onContentChange(JSON.stringify({ ...parsedGql(), variables: v ?? '' }))}
+                onMount={attachEnvSuggest}
+                options={monacoOptions}
+              />
+            </div>
           </div>
         )}
       </div>

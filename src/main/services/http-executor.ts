@@ -218,10 +218,17 @@ export async function executeRequest(
 async function executeNtlmRequest(
   req: HttpRequest,
   headers: Record<string, string>,
-  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number; onLog?: (entry: LogEntry) => void }
+  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number; signal?: AbortSignal; onLog?: (entry: LogEntry) => void }
 ): Promise<HttpResponse> {
   const start = Date.now()
   const log = (level: LogLevel, message: string) => options.onLog?.({ level, message })
+
+  if (options.signal?.aborted) {
+    const msg = 'Request cancelled'
+    log('info', msg)
+    return { status: 0, statusText: msg, headers: {}, body: msg, duration: Date.now() - start, size: Buffer.byteLength(msg, 'utf8') }
+  }
+
   const httpntlm = require('httpntlm') as Record<string, (opts: Record<string, unknown>, cb: (err: Error | null, res: { statusCode: number; headers: Record<string, string>; body: string }) => void) => void>
   const method = req.method.toLowerCase()
   const fn = httpntlm[method] ?? httpntlm['get']
@@ -239,7 +246,17 @@ async function executeNtlmRequest(
   if (req.body) ntlmOpts['body'] = req.body
 
   return new Promise((resolve) => {
+    const onAbort = () => {
+      const msg = 'Request cancelled'
+      log('info', msg)
+      resolve({ status: 0, statusText: msg, headers: {}, body: msg, duration: Date.now() - start, size: Buffer.byteLength(msg, 'utf8') })
+    }
+
+    options.signal?.addEventListener('abort', onAbort, { once: true })
+
     fn(ntlmOpts, (err, res) => {
+      options.signal?.removeEventListener('abort', onAbort)
+      if (options.signal?.aborted) return
       const duration = Date.now() - start
       if (err) {
         const msg = err.message

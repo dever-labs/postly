@@ -5,6 +5,7 @@ interface UrlBarProps {
   value: string
   onChange: (url: string) => void
   onSend?: () => void
+  isLoading?: boolean
 }
 
 /**
@@ -12,7 +13,7 @@ interface UrlBarProps {
  * Only this component (and EnvInput inside it) re-renders on every keystroke;
  * the parent RequestEditor re-renders only after the 100 ms debounce fires.
  */
-export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend }: UrlBarProps) {
+export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend, isLoading }: UrlBarProps) {
   const [localUrl, setLocalUrl] = useState(value)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stable ref so handleChange/handleSend never need onChange in their dep array
@@ -51,7 +52,7 @@ export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend }: Ur
     <EnvInput
       value={localUrl}
       onChange={handleChange}
-      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+      onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
       placeholder="https://api.example.com/endpoint"
       data-testid="url-input"
       spellCheck={false}

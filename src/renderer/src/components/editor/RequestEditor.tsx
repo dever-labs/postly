@@ -219,6 +219,7 @@ export function RequestEditor() {
           value={editingRequest.url}
           onChange={(url) => updateField('url', url)}
           onSend={protocol === 'http' || protocol === 'graphql' ? sendRequest : undefined}
+          isLoading={isLoading}
         />
         {(protocol === 'http' || protocol === 'graphql') && (
           <SendButton onClick={sendRequest} onCancel={cancelRequest} isLoading={isLoading} />
@@ -303,7 +304,7 @@ export function RequestEditor() {
         )}
 
         {(protocol === 'http' || protocol === 'graphql') && (
-          <Tabs defaultValue={protocol === 'graphql' ? 'query' : 'params'}>
+          <Tabs defaultValue={protocol === 'graphql' ? 'query' : 'params'} className="flex h-full flex-col">
             <TabsList className="px-3">
               {protocol === 'graphql' ? (
                 <TabsTrigger value="query">Query</TabsTrigger>
@@ -317,7 +318,7 @@ export function RequestEditor() {
             </TabsList>
 
             {protocol === 'graphql' && (
-              <TabsContent value="query">
+              <TabsContent value="query" className="flex-1 overflow-hidden">
                 <GraphQLTab
                   query={editingRequest.bodyContent}
                   variables={pcGet(pc, 'variables')}
@@ -335,7 +336,7 @@ export function RequestEditor() {
                 <TabsContent value="params">
                   <ParamsTab params={editingRequest.params} onChange={onParamsChange} />
                 </TabsContent>
-                <TabsContent value="body">
+                <TabsContent value="body" className="flex-1 overflow-hidden">
                   <BodyTab
                     bodyType={editingRequest.bodyType as BodyType}
                     bodyContent={editingRequest.bodyContent}
