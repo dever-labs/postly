@@ -643,7 +643,7 @@ describe('getEnterpriseConfig — real filesystem', () => {
   })
 
   afterEach(() => {
-    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = originalResourcesPath
+    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = originalResourcesPath as string
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -676,7 +676,7 @@ describe('getEnterpriseConfig — real filesystem', () => {
   })
 
   it('returns empty config when resourcesPath is not set', () => {
-    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = undefined
+    ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = undefined as unknown as string
 
     const result = getEnterpriseConfig()
 
