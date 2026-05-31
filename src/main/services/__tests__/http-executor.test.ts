@@ -318,3 +318,25 @@ describe('executeRequest — onLog callback', () => {
     await expect(executeRequest(makeReq())).resolves.not.toThrow()
   })
 })
+
+describe('executeRequest — abort signal', () => {
+  it('forwards the AbortSignal to axios config', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse())
+    const controller = new AbortController()
+    await executeRequest(makeReq(), { signal: controller.signal })
+    const config = mockAxios.mock.calls[0][0] as { signal: AbortSignal }
+    expect(config.signal).toBe(controller.signal)
+  })
+
+  it('returns a cancellation response when signal is pre-aborted (NTLM path)', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const res = await executeRequest(
+      makeReq({ authType: 'ntlm', authConfig: { username: 'u', password: 'p' } }),
+      { signal: controller.signal }
+    )
+    expect(res.status).toBe(0)
+    expect(res.statusText).toBe('Request cancelled')
+    expect(mockAxios).not.toHaveBeenCalled()
+  })
+})

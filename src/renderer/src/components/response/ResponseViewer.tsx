@@ -22,7 +22,7 @@ export function ResponseViewer() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-sm text-th-text-subtle">
+      <div data-testid="response-loading" className="flex h-full items-center justify-center gap-2 text-sm text-th-text-subtle">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-th-border-strong border-t-th-text-secondary" />
         Sending request...
       </div>
@@ -31,7 +31,7 @@ export function ResponseViewer() {
 
   if (!response) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-th-text-faint">
+      <div data-testid="response-empty" className="flex h-full flex-col items-center justify-center gap-2 text-th-text-faint">
         <SendHorizonal className="h-8 w-8 opacity-40" />
         <span className="text-sm">Send a request to see the response</span>
       </div>
@@ -43,9 +43,9 @@ export function ResponseViewer() {
   const alertCount = logs.filter((e) => e.level === 'warn' || e.level === 'error').length
 
   return (
-    <div className="flex h-full flex-col bg-th-bg">
+    <div data-testid="response-panel" className="flex h-full flex-col bg-th-bg">
       {/* Status bar */}
-      <div className="flex items-center justify-between border-b border-th-border px-4 py-2">
+      <div data-testid="response-status" className="flex items-center justify-between border-b border-th-border px-4 py-2">
         <ResponseStatus response={response} />
         <button
           onClick={handleCopy}
