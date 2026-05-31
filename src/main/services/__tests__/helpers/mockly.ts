@@ -21,6 +21,8 @@ export interface HttpMock {
     method: string
     path: string
     headers?: Record<string, string>
+    /** Query parameter matchers. Use "*" as a value for wildcard matching. */
+    query?: Record<string, string>
   }
   response: {
     status: number
