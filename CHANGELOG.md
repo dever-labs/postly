@@ -4,6 +4,38 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-05-31
+
+### Added
+
+- **Auto-update** — Postly now checks for updates automatically on launch and notifies you when a new version is available. A new **Updates** tab in Settings lets you configure the update channel, toggle auto-update on/off, and trigger a manual check (closes #89).
+- **Enterprise / disconnected-mode updates** — IT teams can bundle an `enterprise.json` config file into the app's resources directory to point the updater at an internal mirror server, fully isolating updates from the public GitHub release channel. The per-user URL setting is disabled when a bundled config is present. See [docs/updates.md](docs/updates.md) for the full deployment guide.
+- **Body editor resize** — the request body editor now fills the full panel height and can be resized by dragging the panel divider, giving more space when working with large payloads (closes #90).
+- **Request cancellation** — in-flight HTTP requests can be cancelled mid-flight via the Stop button in the URL bar. NTLM requests now correctly log and measure duration even when cancelled at the pre-auth stage (closes #90).
+
+### Changed
+
+- **Integrations docs** — [docs/integrations.md](docs/integrations.md) rewritten to reflect the unified **Git** source type. The old per-provider GitHub and GitLab OAuth setup sections are removed; any git host (GitHub, GitLab, Gitea, Azure DevOps, Bitbucket, self-hosted) now connects via system git credentials (SSH or HTTPS) with no token configuration needed inside the app.
+- **README** — source integrations feature description updated to match the unified git approach.
+- **CI** — removed commitlint; PR-level title checks replace commit-level enforcement.
+
+### Tests
+
+- 30+ unit tests for the updater service and IPC handlers (Vitest).
+- 22 integration tests for the enterprise update flow using Mockly as a real HTTP update server — covers update-available, not-available, 404/503 errors, fault injection, download flow, enterprise URL routing, and `enterprise.json` file reading.
+- E2E Playwright suite for request cancellation.
+- Additional unit tests for `BodyTab`, `UrlBar`, `SendButton`, `ResponseViewer`, and the requests store.
+
+### Documentation
+
+- New [docs/updates.md](docs/updates.md) — enterprise deployment guide covering mirror server setup, `latest.yml` manifest format, bundled vs per-user config, and version rollback.
+
+### Dependencies
+
+- Bumped `tmp` from 0.2.5 to 0.2.7.
+
+---
+
 ## [0.6.3] — 2026-05-25
 
 ### Changed
