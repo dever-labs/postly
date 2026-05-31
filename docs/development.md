@@ -79,7 +79,9 @@ postly/
 | `npm run dist:mac` | Package for macOS (x64 + arm64) |
 | `npm run dist:linux` | Package for Linux (x64 + arm64) |
 | `npm test` | Run unit tests with Vitest |
+| `npm run test:integration` | Run integration tests (downloads Mockly binary first) |
 | `npm run test:e2e` | Run Playwright E2E tests (requires `npm run build` first) |
+| `npm run typecheck` | TypeScript type-check without emitting files |
 | `npm run lint` | Lint TypeScript source |
 
 ---

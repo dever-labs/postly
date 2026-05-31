@@ -57,6 +57,15 @@ Collections from each source appear as separate groups in the sidebar. Changes c
 - Dark and light theme
 - Breadcrumb navigation (Source › Collection › Group › Request)
 
+### Automatic Updates
+Postly checks for updates automatically on startup and shows a notification banner when a new version is available. Updates are downloaded in the background and applied on the next restart.
+
+Configure update behaviour in **Settings → Updates**:
+- Toggle automatic startup checks on or off
+- Set a custom internal update server URL for enterprise/air-gapped deployments
+
+See [docs/updates.md](docs/updates.md) for enterprise deployment options.
+
 ---
 
 ## Download
