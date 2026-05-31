@@ -18,6 +18,13 @@ What you expected to happen.
 ## Actual behaviour
 What actually happened.
 
+## Acceptance criteria
+<!-- What needs to be true for this bug to be considered fixed? -->
+- [ ] ...
+
+## Affected components
+<!-- Which part of the app is broken? e.g. RequestEditor, OAuth flow, Backstage sync -->
+
 ## Environment
 - OS: [e.g. Windows 11, macOS 14, Ubuntu 22.04]
 - Architecture: [e.g. x64, arm64]
