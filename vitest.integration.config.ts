@@ -10,10 +10,6 @@ export default defineConfig({
     // binary on dynamically allocated ports. Parallel forks cause port
     // TOCTOU races and resource contention on CI runners.
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        maxForks: 1,
-      },
-    },
+    maxWorkers: 1,
   },
 })
