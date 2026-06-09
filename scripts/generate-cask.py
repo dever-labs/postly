@@ -34,9 +34,15 @@ cask "postly" do
   # Ad-hoc re-sign so macOS 26+ dyld Team ID enforcement doesn't block launch.
   # The unsigned build has no Team ID but the bundled Electron Framework does;
   # re-signing with "-" makes all components consistent.
+  #
+  # Remove the quarantine attribute so Gatekeeper doesn't block the unsigned
+  # app on first launch — no Apple Developer account required.
   postflight do
     system_command "/usr/bin/codesign",
                    args: ["--deep", "--force", "--sign", "-", "#{appdir}/Postly.app"],
+                   sudo: true
+    system_command "/usr/bin/xattr",
+                   args: ["-rd", "com.apple.quarantine", "#{appdir}/Postly.app"],
                    sudo: true
   end
 
