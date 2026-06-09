@@ -177,7 +177,7 @@
     "js-yaml": "^4.2.0",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.15",
-    "rolldown": "^1.0.3",
+    "rolldown": "^1.1.0",
     "selfsigned": "^5.5.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.2",
@@ -220,6 +220,6 @@
     "zustand": "^5.0.14"
   },
   "optionalDependencies": {
-    "rolldown": "^1.0.3"
+    "rolldown": "^1.1.0"
   }
 }
