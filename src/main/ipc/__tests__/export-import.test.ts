@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── DB mock ───────────────────────────────────────────────────────────────────
-
 vi.mock('../../database', () => ({
   queryAll: vi.fn(),
   run: vi.fn(),
@@ -14,10 +12,7 @@ import type { PostlyExportFile } from '../export-import'
 const mockQueryAll = vi.mocked(queryAll)
 const mockRun = vi.mocked(run)
 
-// resetAllMocks also clears the mockReturnValueOnce queue between tests
 beforeEach(() => vi.resetAllMocks())
-
-// ── tryParse ──────────────────────────────────────────────────────────────────
 
 describe('tryParse', () => {
   it('parses a valid JSON string', () => {
@@ -35,88 +30,135 @@ describe('tryParse', () => {
   })
 })
 
-// ── buildExport ───────────────────────────────────────────────────────────────
-
 describe('buildExport', () => {
-  function setupDb(cols: object[], groups: object[], requests: object[]) {
-    mockQueryAll
-      .mockReturnValueOnce(cols)     // collections query
-      .mockReturnValueOnce(groups)   // groups for col[0]
-      .mockReturnValueOnce(requests) // requests for grp[0]
-    // Note: no integration query mock here — tests that need it add it themselves
-  }
-
   it('returns a file with the correct schema string', () => {
-    setupDb(
-      [{ id: 'c1', name: 'My API', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit' }],
-      [{ id: 'g1', collection_id: 'c1', name: 'Default', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit' }],
-      [],
-    )
+    mockQueryAll
+      .mockReturnValueOnce([{ id: 'c1', parent_id: null, name: 'My API', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 }])
+      .mockReturnValueOnce([])
 
     const file = buildExport()
     expect(file.$schema).toBe('postly/v1')
     expect(file.exportedAt).toBeTruthy()
   })
 
-  it('serializes a collection with groups and requests', () => {
-    const col = { id: 'c1', name: 'API', source: 'local', description: 'desc', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', integration_id: null }
-    const grp = { id: 'g1', collection_id: 'c1', name: 'Default', description: '', auth_type: 'bearer', auth_config: '{"token":"t"}', ssl_verification: 'verify' }
-    const req = { id: 'r1', group_id: 'g1', name: 'Get Users', method: 'GET', url: '/users', protocol: 'http', params: '[]', headers: '[]', body_type: 'none', body_content: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', description: '', protocol_config: '{}' }
+  it('serializes a recursive collection tree with requests in a sub-folder', () => {
+    const folderRows = [
+      { id: 'c1', parent_id: null, name: 'API', source: 'local', description: 'desc', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+      { id: 'f1', parent_id: 'c1', name: 'Default', source: 'local', description: '', auth_type: 'bearer', auth_config: '{"token":"t"}', ssl_verification: 'inherit', sort_order: 0 },
+    ]
+    const requestRows = [
+      { id: 'r1', folder_id: 'f1', name: 'Get Users', method: 'GET', url: '/users', protocol: 'http', params: '[]', headers: '[]', body_type: 'none', body_content: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', description: '', protocol_config: '{}', sort_order: 0 },
+    ]
 
     mockQueryAll
-      .mockReturnValueOnce([col])
-      .mockReturnValueOnce([grp])
-      .mockReturnValueOnce([req])
-      .mockReturnValueOnce([]) // integration
+      .mockReturnValueOnce(folderRows)
+      .mockReturnValueOnce(requestRows)
 
     const file = buildExport()
     expect(file.collections).toHaveLength(1)
-
     const exported = file.collections[0]
     expect(exported.name).toBe('API')
-    expect(exported.groups).toHaveLength(1)
-    expect(exported.groups[0].requests).toHaveLength(1)
-    expect(exported.groups[0].requests[0].name).toBe('Get Users')
-    expect(exported.groups[0].requests[0].method).toBe('GET')
+    expect(exported.requests).toHaveLength(0)
+    expect(exported.folders).toHaveLength(1)
+    expect(exported.folders[0].requests).toHaveLength(1)
+    expect(exported.folders[0].requests[0].name).toBe('Get Users')
+  })
+
+  it('serializes requests placed directly at collection level (no sub-folder)', () => {
+    const folderRows = [
+      { id: 'c1', parent_id: null, name: 'Simple API', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+    ]
+    const requestRows = [
+      { id: 'r1', folder_id: 'c1', name: 'Health Check', method: 'GET', url: '/health', protocol: 'http', params: '[]', headers: '[]', body_type: 'none', body_content: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', description: '', protocol_config: '{}', sort_order: 0 },
+    ]
+
+    mockQueryAll.mockReturnValueOnce(folderRows).mockReturnValueOnce(requestRows)
+
+    const file = buildExport()
+    const col = file.collections[0]
+    expect(col.requests).toHaveLength(1)
+    expect(col.requests[0].name).toBe('Health Check')
+    expect(col.folders).toHaveLength(0)
+  })
+
+  it('serializes deeply nested folders (3 levels)', () => {
+    const folderRows = [
+      { id: 'c1', parent_id: null,  name: 'Root',   source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+      { id: 'f1', parent_id: 'c1', name: 'Level 1', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+      { id: 'f2', parent_id: 'f1', name: 'Level 2', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+    ]
+    const requestRows = [
+      { id: 'r1', folder_id: 'f2', name: 'Deep Request', method: 'POST', url: '/deep', protocol: 'http', params: '[]', headers: '[]', body_type: 'json', body_content: '{}', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', description: '', protocol_config: '{}', sort_order: 0 },
+    ]
+
+    mockQueryAll.mockReturnValueOnce(folderRows).mockReturnValueOnce(requestRows)
+
+    const file = buildExport()
+    const col = file.collections[0]
+    expect(col.folders).toHaveLength(1)
+    expect(col.folders[0].name).toBe('Level 1')
+    expect(col.folders[0].folders).toHaveLength(1)
+    expect(col.folders[0].folders[0].name).toBe('Level 2')
+    expect(col.folders[0].folders[0].requests).toHaveLength(1)
+    expect(col.folders[0].folders[0].requests[0].name).toBe('Deep Request')
+  })
+
+  it('serializes auth config on sub-folders', () => {
+    const folderRows = [
+      { id: 'c1', parent_id: null, name: 'API', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0 },
+      { id: 'f1', parent_id: 'c1', name: 'Secured', source: 'local', description: '', auth_type: 'bearer', auth_config: '{"token":"secret"}', ssl_verification: 'false', sort_order: 0 },
+    ]
+
+    mockQueryAll.mockReturnValueOnce(folderRows).mockReturnValueOnce([])
+
+    const file = buildExport()
+    const folder = file.collections[0].folders[0]
+    expect(folder.auth.type).toBe('bearer')
+    expect(folder.auth.config).toEqual({ token: 'secret' })
+    expect(folder.ssl).toBe('false')
   })
 
   it('filters collections when collectionIds is provided', () => {
     mockQueryAll
-      .mockReturnValueOnce([]) // no collections (filtered result)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([])
 
     const file = buildExport(['c-specific'])
     expect(file.collections).toHaveLength(0)
 
     const [sql, params] = mockQueryAll.mock.calls[0] as [string, unknown[]]
-    expect(sql).toContain('WHERE id IN')
+    expect(sql).toContain('WITH RECURSIVE tree')
     expect(params).toContain('c-specific')
   })
 
   it('uses all collections when no ids are passed', () => {
-    mockQueryAll.mockReturnValueOnce([])
+    mockQueryAll.mockReturnValueOnce([]).mockReturnValueOnce([])
 
     buildExport()
 
     const [sql] = mockQueryAll.mock.calls[0] as [string, unknown[]]
-    expect(sql).not.toContain('WHERE id IN')
-  })
-
-  it('attaches integrationName when the collection has an integration', () => {
-    const col = { id: 'c1', name: 'GitHub', source: 'github', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', integration_id: 'int-1' }
-
-    mockQueryAll
-      .mockReturnValueOnce([col])
-      .mockReturnValueOnce([]) // no groups
-      .mockReturnValueOnce([{ name: 'My GitHub Integration' }]) // integration lookup
-
-    const file = buildExport()
-    expect(file.collections[0].integrationName).toBe('My GitHub Integration')
+    expect(sql).not.toContain('WITH RECURSIVE tree')
   })
 })
 
-// ── importData ────────────────────────────────────────────────────────────────
-
 describe('importData', () => {
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  const baseRequest = {
+    name: 'Get Users',
+    method: 'GET',
+    url: '/users',
+    protocol: 'http',
+    params: [],
+    headers: [],
+    bodyType: 'none',
+    bodyContent: '',
+    auth: { type: 'none', config: {} },
+    ssl: 'inherit',
+    description: '',
+    protocolConfig: {},
+  }
+
   function makeFile(overrides: Partial<PostlyExportFile> = {}): PostlyExportFile {
     return {
       $schema: 'postly/v1',
@@ -128,28 +170,15 @@ describe('importData', () => {
           source: 'local',
           auth: { type: 'none', config: {} },
           ssl: 'inherit',
-          groups: [
+          requests: [],
+          folders: [
             {
               name: 'Default',
               description: '',
               auth: { type: 'none', config: {} },
               ssl: 'inherit',
-              requests: [
-                {
-                  name: 'Get Users',
-                  method: 'GET',
-                  url: '/users',
-                  protocol: 'http',
-                  params: [],
-                  headers: [],
-                  bodyType: 'none',
-                  bodyContent: '',
-                  auth: { type: 'none', config: {} },
-                  ssl: 'inherit',
-                  description: '',
-                  protocolConfig: {},
-                },
-              ],
+              requests: [{ ...baseRequest }],
+              folders: [],
             },
           ],
         },
@@ -158,50 +187,337 @@ describe('importData', () => {
     }
   }
 
+  function insertCalls() {
+    return mockRun.mock.calls.filter(([sql]) => (sql as string).startsWith('INSERT'))
+  }
+
+  function folderInserts() {
+    return insertCalls().filter(([sql]) => (sql as string).includes('INSERT INTO folders'))
+  }
+
+  function requestInserts() {
+    return insertCalls().filter(([sql]) => (sql as string).includes('INSERT INTO requests'))
+  }
+
+  // ── basic ─────────────────────────────────────────────────────────────────
+
   it('returns the number of imported collections', () => {
-    const count = importData(makeFile())
-    expect(count).toBe(1)
+    expect(importData(makeFile())).toBe(1)
   })
 
-  it('inserts one collection, one group, and one request row', () => {
+  it('inserts one collection folder, one sub-folder, and one request row', () => {
     importData(makeFile())
-
-    const insertCalls = mockRun.mock.calls.filter(([sql]) => (sql as string).startsWith('INSERT'))
-    expect(insertCalls).toHaveLength(3) // collection + group + request
-    const sqls = insertCalls.map(([sql]) => sql as string)
-    expect(sqls.some((s) => s.includes('INSERT INTO collections'))).toBe(true)
-    expect(sqls.some((s) => s.includes('INSERT INTO groups'))).toBe(true)
-    expect(sqls.some((s) => s.includes('INSERT INTO requests'))).toBe(true)
+    expect(folderInserts()).toHaveLength(2)
+    expect(requestInserts()).toHaveLength(1)
   })
 
   it('handles multiple collections', () => {
     const file = makeFile()
     file.collections = [...file.collections, { ...file.collections[0], name: 'Second API' }]
-
-    const count = importData(file)
-    expect(count).toBe(2)
+    expect(importData(file)).toBe(2)
   })
 
   it('preserves request fields (url, method, bodyType)', () => {
     importData(makeFile())
-
-    const reqInsert = mockRun.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO requests'))
-    expect(reqInsert).toBeDefined()
-    const params = (reqInsert as unknown[][])[1] as unknown[]
+    const params = requestInserts()[0][1] as unknown[]
     expect(params).toContain('Get Users')
     expect(params).toContain('GET')
     expect(params).toContain('/users')
-    expect(params).toContain('none') // bodyType
   })
 
   it('uses default values for optional fields when absent', () => {
     const file = makeFile()
-    const req = file.collections[0].groups[0].requests[0]
-    // Remove optional fields to simulate a minimal import
+    const req = file.collections[0].folders[0].requests[0]
     delete (req as unknown as Record<string, unknown>).description
     delete (req as unknown as Record<string, unknown>).protocolConfig
-
-    // Should not throw
     expect(() => importData(file)).not.toThrow()
+  })
+
+  // ── new format ────────────────────────────────────────────────────────────
+
+  describe('new format (folders)', () => {
+    it('imports requests placed directly at collection level', () => {
+      const file: PostlyExportFile = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Flat API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            requests: [{ ...baseRequest, name: 'Health', url: '/health' }],
+            folders: [],
+          },
+        ],
+      }
+
+      importData(file)
+
+      // 1 root folder, 0 sub-folders, 1 request
+      expect(folderInserts()).toHaveLength(1)
+      expect(requestInserts()).toHaveLength(1)
+      const reqParams = requestInserts()[0][1] as unknown[]
+      expect(reqParams).toContain('Health')
+    })
+
+    it('imports 3-level deeply nested folders', () => {
+      const file: PostlyExportFile = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Deep API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            requests: [],
+            folders: [
+              {
+                name: 'Level 1',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [],
+                folders: [
+                  {
+                    name: 'Level 2',
+                    description: '',
+                    auth: { type: 'none', config: {} },
+                    ssl: 'inherit',
+                    requests: [{ ...baseRequest, name: 'Deep Request', url: '/deep' }],
+                    folders: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      importData(file)
+
+      // 1 root + Level1 + Level2 = 3 folder inserts, 1 request
+      expect(folderInserts()).toHaveLength(3)
+      expect(requestInserts()).toHaveLength(1)
+      const reqParams = requestInserts()[0][1] as unknown[]
+      expect(reqParams).toContain('Deep Request')
+    })
+
+    it('imports requests at multiple folder levels in the same collection', () => {
+      const file: PostlyExportFile = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Mixed API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            requests: [{ ...baseRequest, name: 'Root Request', url: '/root' }],
+            folders: [
+              {
+                name: 'Sub',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [{ ...baseRequest, name: 'Sub Request', url: '/sub' }],
+                folders: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      importData(file)
+
+      expect(folderInserts()).toHaveLength(2)   // root + Sub
+      expect(requestInserts()).toHaveLength(2)  // Root Request + Sub Request
+    })
+
+    it('preserves auth config on imported sub-folders', () => {
+      const file: PostlyExportFile = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Auth API',
+            description: '',
+            source: 'local',
+            auth: { type: 'bearer', config: { token: 'root-token' } },
+            ssl: 'inherit',
+            requests: [],
+            folders: [
+              {
+                name: 'Secured',
+                description: '',
+                auth: { type: 'bearer', config: { token: 'folder-token' } },
+                ssl: 'false',
+                requests: [],
+                folders: [],
+              },
+            ],
+          },
+        ],
+      }
+
+      importData(file)
+
+      const allFolderParams = folderInserts().map(([, params]) => params as unknown[])
+      // root folder auth
+      expect(allFolderParams[0]).toContain('bearer')
+      expect(allFolderParams[0]).toContain(JSON.stringify({ token: 'root-token' }))
+      // sub-folder auth + ssl
+      expect(allFolderParams[1]).toContain('bearer')
+      expect(allFolderParams[1]).toContain(JSON.stringify({ token: 'folder-token' }))
+      expect(allFolderParams[1]).toContain('false')
+    })
+  })
+
+  // ── old format ────────────────────────────────────────────────────────────
+
+  describe('old format (groups)', () => {
+    it('imports a single group with requests', () => {
+      const oldFormat = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Legacy API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            groups: [
+              {
+                name: 'Default',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [{ ...baseRequest, name: 'List items', url: '/items' }],
+              },
+            ],
+          },
+        ],
+      } as unknown as PostlyExportFile
+
+      const count = importData(oldFormat)
+      expect(count).toBe(1)
+      // 1 root folder + 1 group-as-subfolder + 1 request
+      expect(folderInserts()).toHaveLength(2)
+      expect(requestInserts()).toHaveLength(1)
+      const reqParams = requestInserts()[0][1] as unknown[]
+      expect(reqParams).toContain('List items')
+    })
+
+    it('imports multiple groups each with multiple requests', () => {
+      const oldFormat = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Big API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            groups: [
+              {
+                name: 'Users',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [
+                  { ...baseRequest, name: 'List users', url: '/users' },
+                  { ...baseRequest, name: 'Create user', method: 'POST', url: '/users' },
+                ],
+              },
+              {
+                name: 'Orders',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [
+                  { ...baseRequest, name: 'List orders', url: '/orders' },
+                ],
+              },
+            ],
+          },
+        ],
+      } as unknown as PostlyExportFile
+
+      importData(oldFormat)
+
+      // 1 root + 2 groups = 3 folder inserts, 3 requests
+      expect(folderInserts()).toHaveLength(3)
+      expect(requestInserts()).toHaveLength(3)
+    })
+
+    it('does not import any requests when both folders and groups are absent', () => {
+      const oldFormat = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'Empty',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+          },
+        ],
+      } as unknown as PostlyExportFile
+
+      importData(oldFormat)
+
+      expect(folderInserts()).toHaveLength(1)  // root folder only
+      expect(requestInserts()).toHaveLength(0)
+    })
+
+    it('prefers folders over groups when both are present (forward-compat)', () => {
+      const mixedFormat = {
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [
+          {
+            name: 'API',
+            description: '',
+            source: 'local',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            folders: [
+              {
+                name: 'New Folder',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [{ ...baseRequest, name: 'From folders', url: '/new' }],
+                folders: [],
+              },
+            ],
+            groups: [
+              {
+                name: 'Old Group',
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [{ ...baseRequest, name: 'From groups', url: '/old' }],
+              },
+            ],
+          },
+        ],
+      } as unknown as PostlyExportFile
+
+      importData(mixedFormat)
+
+      // folders takes precedence — only "New Folder" sub-folder, not "Old Group"
+      expect(folderInserts()).toHaveLength(2)
+      expect(requestInserts()).toHaveLength(1)
+      const reqParams = requestInserts()[0][1] as unknown[]
+      expect(reqParams).toContain('From folders')
+    })
   })
 })

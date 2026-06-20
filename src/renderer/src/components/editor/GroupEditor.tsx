@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
-import type { AuthType, SslVerification } from '@/types'
+import type { AuthType, Folder as FolderType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { useCollectionsStore } from '@/store/collections'
@@ -11,9 +11,9 @@ import { AiActionButton } from '@/components/ai/AiActionButton'
 function SourceCrumb({ source, name }: { source: string; name: string }) {
   const icon =
     source === 'github' ? <GitFork className="h-3 w-3" /> :
-    source === 'gitlab' ? <GitBranch className="h-3 w-3" /> :
-    source === 'backstage' ? <Box className="h-3 w-3" /> :
-    <HardDrive className="h-3 w-3" />
+      source === 'gitlab' ? <GitBranch className="h-3 w-3" /> :
+        source === 'backstage' ? <Box className="h-3 w-3" /> :
+          <HardDrive className="h-3 w-3" />
   return (
     <span className="flex items-center gap-1 px-1.5 py-0.5 text-th-text-faint">
       {icon}
@@ -23,7 +23,7 @@ function SourceCrumb({ source, name }: { source: string; name: string }) {
 }
 
 interface Props {
-  groupId: string
+  folderId: string
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -38,15 +38,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export function GroupEditor({ groupId }: Props) {
-  const group = useCollectionsStore((s) => s.groups.find((g) => g.id === groupId))
-  const collections = useCollectionsStore((s) => s.collections)
-  const updateGroup = useCollectionsStore((s) => s.updateGroup)
-  const integrations = useIntegrationsStore((s) => s.integrations)
-  const addToast = useUIStore((s) => s.addToast)
-  const selectItem = useUIStore((s) => s.selectItem)
-  const openGitAction = useUIStore((s) => s.openGitAction)
-  const setEditorDirty = useUIStore((s) => s.setEditorDirty)
+function findRootCollection(folder: FolderType | undefined, folders: FolderType[]): FolderType | null {
+  let current = folder
+  while (current?.parentId) {
+    current = folders.find((candidate) => candidate.id === current?.parentId)
+  }
+  return current ?? null
+}
+
+export function GroupEditor({ folderId }: Props) {
+  const folders = useCollectionsStore((state) => state.folders)
+  const folder = useCollectionsStore((state) => state.groups.find((item) => item.id === folderId))
+  const updateGroup = useCollectionsStore((state) => state.updateGroup)
+  const integrations = useIntegrationsStore((state) => state.integrations)
+  const addToast = useUIStore((state) => state.addToast)
+  const selectItem = useUIStore((state) => state.selectItem)
+  const openGitAction = useUIStore((state) => state.openGitAction)
+  const setEditorDirty = useUIStore((state) => state.setEditorDirty)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -75,17 +83,14 @@ export function GroupEditor({ groupId }: Props) {
     if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
   }
 
-  const scheduleDraft = (fields: {
-    name: string; description: string
-    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
-  }) => {
+  const scheduleDraft = (fields: FormSnapshot) => {
     pendingDraftData.current = fields
     if (draftTimer.current) clearTimeout(draftTimer.current)
     draftTimer.current = setTimeout(() => {
       draftTimer.current = null
       pendingDraftData.current = null
       window.api.drafts.group.upsert({
-        groupId,
+        groupId: folderId,
         name: fields.name,
         description: fields.description,
         authType: fields.authType,
@@ -95,39 +100,38 @@ export function GroupEditor({ groupId }: Props) {
     }, 500)
   }
 
-  const collection = group ? collections.find((c) => c.id === group.collectionId) : null
+  const collection = findRootCollection(folder, folders)
+  const integration = collection?.integrationId ? integrations.find((item) => item.id === collection.integrationId) : null
 
   useEffect(() => {
-    if (!group) return
+    if (!folder) return
     const load = async () => {
-      // Reset dirty immediately so the sidebar indicator clears while draft loads
-      setEditorDirty(groupId, false)
-      // Capture saved state before any draft overlay
+      setEditorDirty(folderId, false)
       savedSnapshot.current = {
-        name: group.name,
-        description: group.description ?? '',
-        authType: group.authType,
-        authConfig: group.authConfig,
-        sslVerification: group.sslVerification ?? 'inherit',
+        name: folder.name,
+        description: folder.description ?? '',
+        authType: folder.authType,
+        authConfig: folder.authConfig,
+        sslVerification: folder.sslVerification ?? 'inherit',
       }
       try {
-        const { data } = await window.api.drafts.group.get({ groupId }) as { data: Record<string, unknown> | null }
+        const { data } = await window.api.drafts.group.get({ groupId: folderId }) as { data: Record<string, unknown> | null }
         if (data) {
-          setName((data.name as string) ?? group.name)
-          setDescription((data.description as string) ?? group.description ?? '')
-          setAuthType(((data.auth_type as AuthType) ?? group.authType))
-          setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : group.authConfig)
-          setSslVerification(((data.ssl_verification as SslVerification) ?? group.sslVerification ?? 'inherit'))
+          setName((data.name as string) ?? folder.name)
+          setDescription((data.description as string) ?? folder.description ?? '')
+          setAuthType(((data.auth_type as AuthType) ?? folder.authType))
+          setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : folder.authConfig)
+          setSslVerification(((data.ssl_verification as SslVerification) ?? folder.sslVerification ?? 'inherit'))
           setIsDirty(true)
-          setEditorDirty(groupId, true)
+          setEditorDirty(folderId, true)
           return
         }
       } catch { /* fall through to saved state */ }
-      setName(group.name)
-      setDescription(group.description ?? '')
-      setAuthType(group.authType)
-      setAuthConfig(group.authConfig)
-      setSslVerification(group.sslVerification ?? 'inherit')
+      setName(folder.name)
+      setDescription(folder.description ?? '')
+      setAuthType(folder.authType)
+      setAuthConfig(folder.authConfig)
+      setSslVerification(folder.sslVerification ?? 'inherit')
       setIsDirty(false)
     }
     load()
@@ -138,22 +142,17 @@ export function GroupEditor({ groupId }: Props) {
         const pending = pendingDraftData.current
         if (pending) {
           pendingDraftData.current = null
-          window.api.drafts.group.upsert({ groupId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+          window.api.drafts.group.upsert({ groupId: folderId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
         }
       }
       clearUndo()
-      setEditorDirty(groupId, false)
+      setEditorDirty(folderId, false)
     }
-  }, [groupId, group, setEditorDirty])
+  }, [folderId, folder, setEditorDirty])
 
-  // No separate isDirty sync effect — setEditorDirty is called directly
-  // in load/save/discard/mark/handleUndo to avoid stale-state race on group switch
-
-  if (!group) {
-    return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Group not found</div>
+  if (!folder) {
+    return <div className="flex h-full items-center justify-center text-sm text-th-text-subtle">Folder not found</div>
   }
-
-  const integration = collection?.integrationId ? integrations.find((i) => i.id === collection.integrationId) : null
 
   let inheritedAuthFrom: string | undefined
   if (collection && collection.authType !== 'none' && collection.authType !== 'inherit') {
@@ -165,14 +164,14 @@ export function GroupEditor({ groupId }: Props) {
   const discard = async () => {
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     clearUndo()
-    await window.api.drafts.group.delete({ groupId })
-    setName(group.name)
-    setDescription(group.description ?? '')
-    setAuthType(group.authType)
-    setAuthConfig(group.authConfig)
-    setSslVerification(group.sslVerification ?? 'inherit')
+    await window.api.drafts.group.delete({ groupId: folderId })
+    setName(folder.name)
+    setDescription(folder.description ?? '')
+    setAuthType(folder.authType)
+    setAuthConfig(folder.authConfig)
+    setSslVerification(folder.sslVerification ?? 'inherit')
     setIsDirty(false)
-    setEditorDirty(groupId, false)
+    setEditorDirty(folderId, false)
   }
 
   const save = async () => {
@@ -180,36 +179,30 @@ export function GroupEditor({ groupId }: Props) {
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     clearUndo()
     setSaving(true)
-    await updateGroup(groupId, { name: name.trim(), description, authType, authConfig, sslVerification })
-    await window.api.drafts.group.delete({ groupId })
+    await updateGroup(folderId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await window.api.drafts.group.delete({ groupId: folderId })
     setSaving(false)
     setIsDirty(false)
-    setEditorDirty(groupId, false)
-    const isGit= collection && ['git', 'github', 'gitlab'].includes(collection.source)
+    setEditorDirty(folderId, false)
+    const isGit = collection && ['git', 'github', 'gitlab'].includes(collection.source)
     if (isGit && collection) {
-      openGitAction({ type: 'push', collectionId: collection.id, title: `Updated group '${name.trim()}'`, subtitle: collection.name })
+      openGitAction({ type: 'push', collectionId: collection.id, title: `Updated folder '${name.trim()}'`, subtitle: collection.name })
     } else {
-      addToast('Group saved', 'success')
+      addToast('Folder saved', 'success')
     }
   }
 
-  const mark = (fields?: {
-    name?: string; description?: string
-    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
-  }, changedField?: string) => {
-    const currentSnapshot: FormSnapshot = {
-      name: name, description: description, authType: authType,
-      authConfig: authConfig, sslVerification: sslVerification,
-    }
+  const mark = (fields?: Partial<FormSnapshot>, changedField?: string) => {
+    const currentSnapshot: FormSnapshot = { name, description, authType, authConfig, sslVerification }
     if (changedField !== lastUndoField.current) {
       if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
       pushUndo(currentSnapshot)
       lastUndoField.current = changedField ?? null
     } else if (!undoPushTimer.current) {
-      const snap = { ...currentSnapshot, authConfig: { ...currentSnapshot.authConfig } }
+      const snapshot = { ...currentSnapshot, authConfig: { ...currentSnapshot.authConfig } }
       undoPushTimer.current = setTimeout(() => {
         undoPushTimer.current = null
-        pushUndo(snap)
+        pushUndo(snapshot)
       }, 1000)
     }
     const newState = {
@@ -222,13 +215,13 @@ export function GroupEditor({ groupId }: Props) {
     const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
-      setEditorDirty(groupId, false)
+      setEditorDirty(folderId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
       if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
-      window.api.drafts.group.delete({ groupId })
+      window.api.drafts.group.delete({ groupId: folderId })
     } else {
       setIsDirty(true)
-      setEditorDirty(groupId, true)
+      setEditorDirty(folderId, true)
       scheduleDraft(newState)
     }
   }
@@ -243,16 +236,15 @@ export function GroupEditor({ groupId }: Props) {
     setAuthType(previous.authType)
     setAuthConfig(previous.authConfig)
     setSslVerification(previous.sslVerification)
-    // Dirty only if the restored snapshot differs from the originally saved state
     const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
-      setEditorDirty(groupId, false)
+      setEditorDirty(folderId, false)
       if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
-      window.api.drafts.group.delete({ groupId })
+      window.api.drafts.group.delete({ groupId: folderId })
     } else {
       setIsDirty(true)
-      setEditorDirty(groupId, true)
+      setEditorDirty(folderId, true)
       scheduleDraft(previous)
     }
   }
@@ -268,92 +260,83 @@ export function GroupEditor({ groupId }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-th-bg" onKeyDown={onKeyDown}>
-      {/* Thin drag strip — window drag target only, no content */}
       <div className="drag-region shrink-0 pt-8 pb-4" />
-      {/* Scrollable content */}
       <div className="no-drag flex-1 overflow-y-auto">
-      <div className="px-8 pb-4 flex flex-col gap-6 border-b border-th-border">
-
-        {/* Title with breadcrumb */}
-        <div className="no-drag">
-          <div className="mb-3 inline-flex items-center gap-1.5 text-xs flex-wrap">
-            <SourceCrumb
-              source={collection?.source ?? 'local'}
-              name={integration ? integration.name : 'Local'}
+        <div className="flex flex-col gap-6 border-b border-th-border px-8 pb-4">
+          <div className="no-drag">
+            <div className="mb-3 inline-flex flex-wrap items-center gap-1.5 text-xs">
+              <SourceCrumb
+                source={collection?.source ?? 'local'}
+                name={integration ? integration.name : 'Local'}
+              />
+              {collection && (
+                <>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
+                  <button
+                    onClick={() => selectItem('collection', collection.id)}
+                    className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-medium text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-hidden"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                    {collection.name}
+                  </button>
+                </>
+              )}
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 font-medium text-th-text-primary">
+                <Folder className="h-3.5 w-3.5 shrink-0" />
+                {name || 'Folder'}
+              </span>
+            </div>
+            <input
+              data-testid="group-name-input"
+              className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
+              placeholder="Folder name"
+              value={name}
+              onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }, 'name') }}
             />
-            {collection && (
-              <>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
-                <button
-                  onClick={() => selectItem('collection', collection.id)}
-                  className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-medium text-th-text-subtle hover:bg-th-surface-hover hover:text-th-text-primary focus:outline-hidden"
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                  {collection.name}
-                </button>
-              </>
-            )}
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-th-text-faint" />
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 font-medium text-th-text-primary">
-              <Folder className="h-3.5 w-3.5 shrink-0" />
-              {name || 'Group'}
-            </span>
+            <p className="mt-1 text-xs text-th-text-faint">Folder</p>
+            <AiActionButton
+              className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
+              onClick={() => selectItem('ai-group', folderId)}
+            />
           </div>
-          <input
-            data-testid="group-name-input"
-            className="-mx-2 w-full cursor-text rounded-md border border-transparent bg-transparent px-2 py-1 text-2xl font-semibold text-th-text-primary placeholder:text-th-text-faint outline-hidden transition-colors hover:border-th-border hover:bg-th-surface-hover focus:border-th-border-strong focus:bg-th-surface"
-            placeholder="Group name"
-            value={name}
-            onChange={(e) => { setName(e.target.value); mark({ name: e.target.value }, 'name') }}
-          />
-          <p className="mt-1 text-xs text-th-text-faint">Group</p>
-          <AiActionButton
-            className="mt-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm hover:border-blue-500/60 hover:bg-blue-500/15"
-            onClick={() => selectItem('ai-group', groupId)}
-          />
+
+          <Section title="Description">
+            <textarea
+              className="w-full resize-none rounded-md border border-th-border bg-th-surface px-3 py-2.5 text-sm leading-relaxed text-th-text-secondary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden"
+              placeholder="Describe what this folder contains, e.g. which service or feature area."
+              rows={4}
+              value={description}
+              onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }, 'description') }}
+            />
+          </Section>
+
+          <Section title="Authentication">
+            <p className="mb-3 text-xs text-th-text-faint">
+              Default auth for all requests in this folder. Use <strong className="text-th-text-subtle">Inherit</strong> to fall through to the collection or integration auth.
+            </p>
+            <AuthEditor
+              authType={authType}
+              authConfig={authConfig}
+              onChange={(type, config) => { setAuthType(type); setAuthConfig(config); mark({ authType: type, authConfig: config }, 'auth') }}
+              inheritedFrom={inheritedAuthFrom}
+              canInherit={true}
+            />
+          </Section>
+
+          <Section title="SSL Verification">
+            <p className="mb-3 text-xs text-th-text-faint">
+              Default SSL setting for requests in this folder. Use <strong className="text-th-text-subtle">Inherit</strong> to fall through to the collection setting.
+            </p>
+            <SslEditor
+              value={sslVerification}
+              onChange={(value) => { setSslVerification(value); mark({ sslVerification: value }, 'ssl') }}
+              inheritedFrom={collection?.sslVerification !== 'inherit' ? collection?.name : undefined}
+            />
+          </Section>
         </div>
-
-        {/* Description */}
-        <Section title="Description">
-          <textarea
-            className="w-full resize-none rounded-md border border-th-border bg-th-surface px-3 py-2.5 text-sm text-th-text-secondary placeholder-th-text-faint focus:border-th-border-strong focus:outline-hidden leading-relaxed"
-            placeholder="Describe what this group contains, e.g. which service or feature area."
-            rows={4}
-            value={description}
-            onChange={(e) => { setDescription(e.target.value); mark({ description: e.target.value }, 'description') }}
-          />
-        </Section>
-
-        {/* Auth */}
-        <Section title="Authentication">
-          <p className="mb-3 text-xs text-th-text-faint">
-            Default auth for all requests in this group. Use <strong className="text-th-text-subtle">Inherit</strong> to fall through to the collection or integration auth.
-          </p>
-          <AuthEditor
-            authType={authType}
-            authConfig={authConfig}
-            onChange={(t, c) => { setAuthType(t); setAuthConfig(c); mark({ authType: t, authConfig: c }, 'auth') }}
-            inheritedFrom={inheritedAuthFrom}
-            canInherit={true}
-          />
-        </Section>
-
-        {/* SSL */}
-        <Section title="SSL Verification">
-          <p className="mb-3 text-xs text-th-text-faint">
-            Default SSL setting for requests in this group. Use <strong className="text-th-text-subtle">Inherit</strong> to fall through to the collection setting.
-          </p>
-          <SslEditor
-            value={sslVerification}
-            onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }, 'ssl') }}
-            inheritedFrom={collection?.sslVerification !== 'inherit' ? collection?.name : undefined}
-          />
-        </Section>
-
       </div>
-      </div>{/* end scroll wrapper */}
 
-      {/* Save bar */}
       <div className="no-drag flex items-center justify-end gap-2 border-t border-th-border px-8 py-3">
         {isDirty && (
           <button

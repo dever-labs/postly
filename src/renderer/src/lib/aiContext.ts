@@ -3,10 +3,10 @@ import type { Request } from '@/types'
 export interface AiContext {
   type: 'collection' | 'group' | 'request'
   collectionId?: string
-  groupId?: string
+  folderId?: string
   name: string
   collectionName?: string
-  groupName?: string
+  folderName?: string
   existingRequests: Request[]
   currentRequest?: Request
   description?: string
@@ -22,13 +22,12 @@ ${ctx.existingRequests.length > 0 ? `\nExisting endpoints (${ctx.existingRequest
 When creating endpoints, build on existing ones if present (same base URL patterns, auth headers, etc.).`
     }
     if (ctx.type === 'group') {
-      return `Working in group: "${ctx.name}"${ctx.collectionName ? ` (collection: "${ctx.collectionName}")` : ''}
+      return `Working in folder: "${ctx.name}"${ctx.collectionName ? ` (collection: "${ctx.collectionName}")` : ''}
 ${ctx.description ? `Description: ${ctx.description}` : ''}
-${ctx.existingRequests.length > 0 ? `\nExisting endpoints in this group (${ctx.existingRequests.length}):\n${ctx.existingRequests.map(r => `- ${r.name}: ${r.protocol?.toUpperCase() ?? r.method} ${r.url}`).join('\n')}` : 'No existing endpoints yet.'}
+${ctx.existingRequests.length > 0 ? `\nExisting endpoints in this folder (${ctx.existingRequests.length}):\n${ctx.existingRequests.map(r => `- ${r.name}: ${r.protocol?.toUpperCase() ?? r.method} ${r.url}`).join('\n')}` : 'No existing endpoints yet.'}
 
 When creating endpoints, build on existing ones if present (same base URL patterns, auth headers, etc.).`
     }
-    // request type — review mode
     if (!ctx.currentRequest) return ''
     const req = ctx.currentRequest
     const headers = (req.headers ?? []).map((h) => `  ${h.key}: ${h.value}`).join('\n')
@@ -42,7 +41,7 @@ ${headers ? `- Headers:\n${headers}` : ''}
 ${params ? `- Query params:\n${params}` : ''}
 ${req.bodyType && req.bodyType !== 'none' ? `- Body type: ${req.bodyType}` : ''}
 ${req.description ? `- Description: ${req.description}` : ''}
-${ctx.groupName ? `\nGroup: "${ctx.groupName}"` : ''}${ctx.collectionName ? `  Collection: "${ctx.collectionName}"` : ''}
+${ctx.folderName ? `\nFolder: "${ctx.folderName}"` : ''}${ctx.collectionName ? `  Collection: "${ctx.collectionName}"` : ''}
 ${ctx.existingRequests.length > 1 ? `\nSibling endpoints (${ctx.existingRequests.length - 1}):\n${ctx.existingRequests.filter(r => r.id !== req.id).map(r => `- ${r.name}: ${r.protocol?.toUpperCase() ?? r.method} ${r.url}`).join('\n')}` : ''}
 
 You can review this endpoint for best practices, suggest improvements, or help create additional related endpoints.`

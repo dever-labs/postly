@@ -4,22 +4,19 @@ export const migrations: string[] = [
     value TEXT
   )`,
 
-  `CREATE TABLE IF NOT EXISTS collections (
+  `CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'local',
-    source_meta TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  )`,
-
-  `CREATE TABLE IF NOT EXISTS groups (
-    id TEXT PRIMARY KEY,
-    collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    parent_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
-    collapsed INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'local',
+    source_meta TEXT,
+    integration_id TEXT REFERENCES integrations(id),
+    auth_type TEXT NOT NULL DEFAULT 'none',
+    auth_config TEXT NOT NULL DEFAULT '{}',
+    ssl_verification TEXT NOT NULL DEFAULT 'inherit',
     hidden INTEGER NOT NULL DEFAULT 0,
+    collapsed INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -27,7 +24,7 @@ export const migrations: string[] = [
 
   `CREATE TABLE IF NOT EXISTS requests (
     id TEXT PRIMARY KEY,
-    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    folder_id TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     method TEXT NOT NULL DEFAULT 'GET',
     url TEXT NOT NULL DEFAULT '',
@@ -105,3 +102,49 @@ export const migrations: string[] = [
     updated_at INTEGER NOT NULL
   )`,
 ]
+
+/*
+Legacy schema reference:
+
+CREATE TABLE IF NOT EXISTS collections (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'local',
+  source_meta TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)
+
+CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  collapsed INTEGER NOT NULL DEFAULT 0,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)
+
+CREATE TABLE IF NOT EXISTS requests (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  method TEXT NOT NULL DEFAULT 'GET',
+  url TEXT NOT NULL DEFAULT '',
+  params TEXT NOT NULL DEFAULT '[]',
+  headers TEXT NOT NULL DEFAULT '[]',
+  body_type TEXT NOT NULL DEFAULT 'none',
+  body_content TEXT NOT NULL DEFAULT '',
+  auth_type TEXT NOT NULL DEFAULT 'none',
+  auth_config TEXT NOT NULL DEFAULT '{}',
+  description TEXT,
+  scm_path TEXT,
+  scm_sha TEXT,
+  is_dirty INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)
+*/

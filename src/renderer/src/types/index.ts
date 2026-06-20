@@ -26,8 +26,9 @@ export interface KeyValuePair {
   fieldType?: 'text' | 'file'
 }
 
-export interface Collection {
+export interface Folder {
   id: string
+  parentId?: string
   name: string
   description?: string
   source: CollectionSource
@@ -36,10 +37,14 @@ export interface Collection {
   authType: AuthType
   authConfig: Record<string, string>
   sslVerification: SslVerification
+  hidden: boolean
   collapsed: boolean
+  sortOrder: number
   createdAt: number
   updatedAt: number
 }
+
+export type Collection = Folder
 
 export interface Integration {
   id: string
@@ -59,22 +64,11 @@ export interface Integration {
   updatedAt: number
 }
 
-export interface Group {
-  id: string
-  collectionId: string
-  name: string
-  description?: string
-  collapsed: boolean
-  hidden: boolean
-  sortOrder: number
-  authType: AuthType
-  authConfig: Record<string, string>
-  sslVerification: SslVerification
-}
+export type Group = Folder
 
 export interface Request {
   id: string
-  groupId: string
+  folderId: string
   name: string
   protocol: ProtocolType
   method: HttpMethod
@@ -146,7 +140,7 @@ export interface HttpRequest {
   authType: AuthType
   authConfig: Record<string, string>
   sslVerification?: SslVerification
-  groupId?: string
+  folderId?: string
 }
 
 export interface HttpResponse {

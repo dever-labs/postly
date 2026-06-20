@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock window.api before importing the store
 const mockHttpExecute = vi.fn()
 const mockHttpCancel = vi.fn()
 const mockDraftsGet = vi.fn()
@@ -16,10 +15,9 @@ vi.stubGlobal('window', {
   },
 })
 
-// Mock the collections store
 vi.mock('../collections', () => ({
   useCollectionsStore: {
-    getState: () => ({ syncRequest: vi.fn(), groups: [], collections: [], markDirty: vi.fn() }),
+    getState: () => ({ syncRequest: vi.fn(), folders: [], collections: [], markDirty: vi.fn(), requests: [] }),
   },
 }))
 
@@ -42,7 +40,7 @@ function makeRequest(overrides: Partial<Request> = {}): Request {
     protocolConfig: {},
     sslVerification: 'inherit',
     isDirty: false,
-    groupId: 'group-1',
+    folderId: 'folder-1',
     sortOrder: 0,
     ...overrides,
   }
@@ -58,7 +56,6 @@ beforeEach(() => {
   mockDraftsUpsert.mockResolvedValue({})
   mockDraftsDelete.mockResolvedValue({})
   mockRequestsUpdate.mockResolvedValue({ error: null })
-  // Reset store state between tests
   useRequestsStore.setState({
     activeRequestId: null,
     editingRequest: null,
@@ -71,7 +68,7 @@ beforeEach(() => {
 describe('useRequestsStore — sendRequest', () => {
   it('sets isLoading=true while the request is in flight', async () => {
     let resolveExecute!: (v: unknown) => void
-    mockHttpExecute.mockReturnValue(new Promise((r) => { resolveExecute = r }))
+    mockHttpExecute.mockReturnValue(new Promise((resolve) => { resolveExecute = resolve }))
 
     useRequestsStore.setState({ editingRequest: makeRequest() })
 
@@ -107,15 +104,12 @@ describe('useRequestsStore — sendRequest', () => {
 
   it('blocks a second sendRequest call while one is already in flight', async () => {
     let resolveFirst!: (v: unknown) => void
-    mockHttpExecute.mockReturnValueOnce(new Promise((r) => { resolveFirst = r }))
+    mockHttpExecute.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
 
     useRequestsStore.setState({ editingRequest: makeRequest() })
 
     const firstSend = useRequestsStore.getState().sendRequest()
-    // Attempt second send while first is in flight
     await useRequestsStore.getState().sendRequest()
-
-    // Only one http.execute call should have been made
     expect(mockHttpExecute).toHaveBeenCalledTimes(1)
 
     resolveFirst({ data: makeResponse() })
@@ -131,9 +125,8 @@ describe('useRequestsStore — sendRequest', () => {
     mockHttpExecute.mockResolvedValue({ data: makeResponse() })
     useRequestsStore.setState({ editingRequest: makeRequest(), response: makeResponse() })
 
-    // Start but don't await — check that response was cleared immediately
     let resolveExecute!: (v: unknown) => void
-    mockHttpExecute.mockReturnValue(new Promise((r) => { resolveExecute = r }))
+    mockHttpExecute.mockReturnValue(new Promise((resolve) => { resolveExecute = resolve }))
 
     const sendPromise = useRequestsStore.getState().sendRequest()
     expect(useRequestsStore.getState().response).toBeNull()

@@ -16,7 +16,7 @@ interface IntegrationRow {
 
 interface RequestRow {
   id: string
-  group_id: string
+  folder_id: string
   name: string
   method: string
   url: string
@@ -32,16 +32,13 @@ interface RequestRow {
   is_dirty: number
 }
 
-interface GroupRow {
+interface FolderRow {
   id: string
-  collection_id: string
+  parent_id: string | null
   name: string
-}
-
-interface CollectionRow {
-  source_meta: string
   source: string
-  integration_id?: string
+  source_meta: string | null
+  integration_id?: string | null
 }
 
 function getIntegration(id: string): IntegrationRow {
@@ -50,47 +47,85 @@ function getIntegration(id: string): IntegrationRow {
   return row
 }
 
+function getRootFolder(folderId: string): FolderRow | null {
+  return queryOne<FolderRow>(
+    `WITH RECURSIVE lineage AS (
+       SELECT id, parent_id, name, source, source_meta, integration_id FROM folders WHERE id = ?
+       UNION ALL
+       SELECT f.id, f.parent_id, f.name, f.source, f.source_meta, f.integration_id
+       FROM folders f
+       JOIN lineage l ON l.parent_id = f.id
+     )
+     SELECT id, parent_id, name, source, source_meta, integration_id
+     FROM lineage
+     WHERE parent_id IS NULL
+     LIMIT 1`,
+    [folderId]
+  )
+}
+
+function getTreeFolderIds(collectionId: string): string[] {
+  return queryAll<{ id: string }>(
+    `WITH RECURSIVE tree AS (
+       SELECT id FROM folders WHERE id = ?
+       UNION ALL
+       SELECT child.id
+       FROM folders child
+       JOIN tree parent ON child.parent_id = parent.id
+     )
+     SELECT id FROM tree`,
+    [collectionId]
+  ).map((row) => row.id)
+}
+
+function clearDirtyForCollection(collectionId: string): void {
+  run(
+    `WITH RECURSIVE tree AS (
+       SELECT id FROM folders WHERE id = ?
+       UNION ALL
+       SELECT child.id
+       FROM folders child
+       JOIN tree parent ON child.parent_id = parent.id
+     )
+     UPDATE requests
+     SET is_dirty = 0, updated_at = ?
+     WHERE folder_id IN (SELECT id FROM tree)`,
+    [collectionId, Date.now()]
+  )
+}
+
 function getSourceMetaForRequest(requestId: string): {
   source: string
   sourceMeta: Record<string, string>
   integration: IntegrationRow | null
+  collection: FolderRow | null
 } {
   const request = queryOne<RequestRow>('SELECT * FROM requests WHERE id = ?', [requestId])
   if (!request) throw new Error('Request not found')
 
-  const group = queryOne<GroupRow>('SELECT collection_id FROM groups WHERE id = ?', [request.group_id])
-  const collection = group
-    ? queryOne<CollectionRow>('SELECT source, source_meta, integration_id FROM collections WHERE id = ?', [group.collection_id])
-    : undefined
-  const sourceMeta: Record<string, string> = collection?.source_meta
-    ? JSON.parse(collection.source_meta)
-    : {}
+  const collection = getRootFolder(request.folder_id)
+  const sourceMeta: Record<string, string> = collection?.source_meta ? JSON.parse(collection.source_meta) : {}
   const source = collection?.source ?? ''
 
-  // Prefer integration_id stored on collection, then fall back to matching by source type
   const integrationId = collection?.integration_id ?? sourceMeta.integrationId
   const integration = integrationId
     ? queryOne<IntegrationRow>('SELECT * FROM integrations WHERE id = ?', [integrationId])
     : source === 'github' || source === 'gitlab'
-    ? queryOne<IntegrationRow>(
-        `SELECT * FROM integrations WHERE type = ? ORDER BY updated_at DESC LIMIT 1`,
-        [source]
-      )
-    : null
+      ? queryOne<IntegrationRow>(
+          `SELECT * FROM integrations WHERE type = ? ORDER BY updated_at DESC LIMIT 1`,
+          [source]
+        )
+      : null
 
-  return { source, sourceMeta, integration }
+  return { source, sourceMeta, integration, collection }
 }
 
 export function registerGitHandlers(): void {
-  // ── Current branch ────────────────────────────────────────────────────────────
-
   ipcMain.handle('postly:git:current-branch', async (_, args: { integrationId: string }) => {
     try {
       return { data: await gitLocal.getCurrentBranch(args.integrationId) }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── List branches ────────────────────────────────────────────────────────────
 
   ipcMain.handle('postly:git:branches:list', async (_, args: { integrationId: string }) => {
     try {
@@ -106,8 +141,6 @@ export function registerGitHandlers(): void {
       return { data: [] }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── Create branch ────────────────────────────────────────────────────────────
 
   ipcMain.handle('postly:git:branch:create', async (_, args: {
     integrationId: string; newBranch: string; fromBranch: string
@@ -126,8 +159,6 @@ export function registerGitHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  // ── Switch branch ─────────────────────────────────────────────────────────────
-
   ipcMain.handle('postly:git:branch:switch', async (_, args: { integrationId: string; branch: string }) => {
     try {
       const integration = getIntegration(args.integrationId)
@@ -138,8 +169,6 @@ export function registerGitHandlers(): void {
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── Sync / pull ────────────────────────────────────────────────────────────
 
   ipcMain.handle('postly:git:sync', async (_, args: { integrationId: string; collectionId?: string; collectionName?: string }) => {
     try {
@@ -166,8 +195,6 @@ export function registerGitHandlers(): void {
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── Diff ──────────────────────────────────────────────────────────────────
 
   ipcMain.handle('postly:git:diff', async (_, args: { requestId: string }) => {
     try {
@@ -198,8 +225,6 @@ export function registerGitHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  // ── Commit ─────────────────────────────────────────────────────────────────
-
   ipcMain.handle('postly:git:commit', async (_, args: {
     requestId: string
     commitMessage: string
@@ -210,20 +235,15 @@ export function registerGitHandlers(): void {
       const request = queryOne<RequestRow>('SELECT * FROM requests WHERE id = ?', [args.requestId])
       if (!request) return { error: 'Request not found' }
 
-      const { source, sourceMeta, integration } = getSourceMetaForRequest(args.requestId)
+      const { source, sourceMeta, integration, collection } = getSourceMetaForRequest(args.requestId)
       if (!integration) return { error: 'No integration found for this collection' }
+      if (!collection) return { error: 'Collection not found' }
 
-      // Resolve the collection this request belongs to
-      const group = queryOne<GroupRow>('SELECT id, name, collection_id FROM groups WHERE id = ?', [request.group_id])
-      if (!group) return { error: 'Group not found' }
-      const collectionId = group.collection_id
-
-      // Build the full collection in postly/v1 export format — same as File → Export
+      const collectionId = collection.id
       const exportData = buildExport([collectionId])
       const collectionExport = exportData.collections[0]
       if (!collectionExport) return { error: 'Collection not found' }
 
-      // File is stored as <collection-slug>.postly.json at the repo root
       const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
       const scmPath = `${slug(collectionExport.name)}.postly.json`
       const fileContent = JSON.stringify(
@@ -238,17 +258,10 @@ export function registerGitHandlers(): void {
           await gitLocal.createAndPushBranch(integration.id, branch, args.fromBranch)
         }
         await gitLocal.commitAndPush(integration.id, scmPath, fileContent, args.commitMessage, branch)
-        // Clear dirty flag for all requests in this collection
-        run(
-          `UPDATE requests SET is_dirty = 0, updated_at = ? WHERE group_id IN (
-             SELECT id FROM groups WHERE collection_id = ?
-           )`,
-          [Date.now(), collectionId]
-        )
+        clearDirtyForCollection(collectionId)
         return { data: true }
       }
 
-      // Legacy github / gitlab REST API path
       if (args.fromBranch && branch !== args.fromBranch) {
         if (source === 'github') {
           const [owner, ...repoParts] = (sourceMeta.repo ?? integration.repo).split('/')
@@ -274,11 +287,10 @@ export function registerGitHandlers(): void {
       }
 
       run('UPDATE requests SET scm_sha = ?, is_dirty = 0, updated_at = ? WHERE id = ?', [newSha, Date.now(), args.requestId])
+      clearDirtyForCollection(collectionId)
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── Import into a specific collection (used during setup) ──────────────────
 
   ipcMain.handle('postly:git:import', async (_, args: {
     integrationId: string
@@ -293,15 +305,13 @@ export function registerGitHandlers(): void {
         collectionName: args.collectionName,
       })
       const collection = queryOne<{ id: string; name: string }>(
-        `SELECT id, name FROM collections WHERE id = ?`,
+        `SELECT id, name FROM folders WHERE id = ?`,
         [collectionId]
       )
       return { data: collection }
     } catch (err) {
-      // discoverAndImport creates the collection before cloning, so it may already
-      // exist even when clone/scan throws. Return it so the UI can still navigate there.
       const collection = queryOne<{ id: string; name: string }>(
-        `SELECT id, name FROM collections WHERE integration_id = ? AND source = 'git'`,
+        `SELECT id, name FROM folders WHERE parent_id IS NULL AND integration_id = ? AND source = 'git'`,
         [args.integrationId]
       )
       if (collection) return { data: collection }
@@ -309,22 +319,20 @@ export function registerGitHandlers(): void {
     }
   })
 
-  // ── List dirty requests for a collection ────────────────────────────────────
-
   ipcMain.handle('postly:git:dirty-requests', async (_, args: { collectionId: string }) => {
     try {
-      const rows = queryAll<RequestRow & { group_name: string; request_name: string }>(
-        `SELECT r.id, r.group_id, r.scm_path, r.name as request_name, g.name as group_name
+      const folderIds = getTreeFolderIds(args.collectionId)
+      if (folderIds.length === 0) return { data: [] }
+      const rows = queryAll<Array<RequestRow & { folder_name: string; group_name: string; request_name: string }> extends never ? never : RequestRow & { folder_name: string; group_name: string; request_name: string }>(
+        `SELECT r.id, r.folder_id, r.scm_path, r.name as request_name, f.name as folder_name, f.name as group_name
          FROM requests r
-         JOIN groups g ON g.id = r.group_id
-         WHERE g.collection_id = ? AND r.is_dirty = 1`,
-        [args.collectionId]
+         JOIN folders f ON f.id = r.folder_id
+         WHERE r.is_dirty = 1 AND r.folder_id IN (${folderIds.map(() => '?').join(',')})`,
+        folderIds
       )
       return { data: rows }
     } catch (err) { return { error: String(err) } }
   })
-
-  // ── Push collection — re-export and commit + push ───────────────────────────
 
   ipcMain.handle('postly:git:push-collection', async (_, args: {
     collectionId: string
@@ -333,7 +341,7 @@ export function registerGitHandlers(): void {
   }) => {
     try {
       const collection = queryOne<{ id: string; name: string; source: string; source_meta: string | null; integration_id: string | null }>(
-        'SELECT id, name, source, source_meta, integration_id FROM collections WHERE id = ?',
+        'SELECT id, name, source, source_meta, integration_id FROM folders WHERE id = ?',
         [args.collectionId]
       )
       if (!collection) return { error: 'Collection not found' }
@@ -357,17 +365,12 @@ export function registerGitHandlers(): void {
 
       await gitLocal.commitAndPush(integration.id, fileName, fileContent, args.commitMessage, args.branch)
 
-      // Persist the fileName in source_meta so future syncs can match
       if (!meta.fileName) {
-        run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
+        run('UPDATE folders SET source_meta = ?, updated_at = ? WHERE id = ?',
           [JSON.stringify({ ...meta, integrationId, fileName }), Date.now(), args.collectionId])
       }
 
-      // Clear dirty flags for all requests in this collection
-      run(`UPDATE requests SET is_dirty = 0, updated_at = ? WHERE group_id IN (
-             SELECT id FROM groups WHERE collection_id = ?
-           )`, [Date.now(), args.collectionId])
-
+      clearDirtyForCollection(args.collectionId)
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })

@@ -57,11 +57,7 @@ function resolveOpenApiSpec(definition: string | Record<string, unknown>): objec
   return null
 }
 
-/** Normalise a Backstage entity ref to just the name portion */
 function refName(ref: string): string {
-  // e.g. 'api:default/user-management-api' → 'user-management-api'
-  //       'default/user-management-api'    → 'user-management-api'
-  //       'user-management-api'            → 'user-management-api'
   return ref.replace(/^[^:]+:/i, '').split('/').pop() ?? ref
 }
 
@@ -79,7 +75,6 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
     ? new https.Agent({ rejectUnauthorized: false })
     : undefined
 
-  // Fetch all API + Component entities in parallel
   const [apisRes, compsRes] = await Promise.all([
     axios.get<BackstageApiEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=API`, { headers, httpsAgent }),
     axios.get<BackstageComponentEntity[]>(`${settings.baseUrl}/api/catalog/entities?filter=kind=Component`, { headers, httpsAgent }),
@@ -88,35 +83,29 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   const allApis = Array.isArray(apisRes.data) ? apisRes.data : []
   const allComponents = Array.isArray(compsRes.data) ? compsRes.data : []
 
-  // Build fast-lookup: name → API entity
   const apiByName = new Map<string, BackstageApiEntity>()
   for (const api of allApis) apiByName.set(api.metadata.name, api)
 
-  // Group APIs by component using spec.providesApis or relations
   const componentApis = new Map<BackstageComponentEntity, BackstageApiEntity[]>()
   const claimedApiNames = new Set<string>()
 
   for (const comp of allComponents) {
-    // Collect API names via spec.providesApis
     const providedRefs: string[] = comp.spec?.providesApis ?? []
-    // Also collect via relations (type: 'providesApi')
     for (const rel of comp.relations ?? []) {
       if (rel.type === 'providesApi') providedRefs.push(rel.targetRef)
     }
     const apis = [...new Set(providedRefs.map(refName))]
-      .map(name => apiByName.get(name))
-      .filter((a): a is BackstageApiEntity => !!a)
+      .map((name) => apiByName.get(name))
+      .filter((api): api is BackstageApiEntity => !!api)
 
     if (apis.length > 0) {
       componentApis.set(comp, apis)
-      apis.forEach(a => claimedApiNames.add(a.metadata.name))
+      apis.forEach((api) => claimedApiNames.add(api.metadata.name))
     }
   }
 
-  // APIs with no owning component become standalone collections
-  const standaloneApis = allApis.filter(a => !claimedApiNames.has(a.metadata.name))
+  const standaloneApis = allApis.filter((api) => !claimedApiNames.has(api.metadata.name))
 
-  // Build collection list: [{ label, apis }]
   type CollectionSpec = { label: string; sourceMeta: string; apis: BackstageApiEntity[] }
   const collections: CollectionSpec[] = [
     ...Array.from(componentApis.entries()).map(([comp, apis]) => ({
@@ -124,7 +113,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
       sourceMeta: JSON.stringify({ component: comp.metadata.name, namespace: comp.metadata.namespace ?? 'default' }),
       apis,
     })),
-    ...standaloneApis.map(api => ({
+    ...standaloneApis.map((api) => ({
       label: api.metadata.name,
       sourceMeta: JSON.stringify({ entityName: api.metadata.name, entityNamespace: api.metadata.namespace ?? 'default' }),
       apis: [api],
@@ -134,29 +123,30 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   result.entitiesFound = collections.length
   console.warn(`[Backstage] syncCatalog: ${allComponents.length} components, ${allApis.length} APIs → ${collections.length} collections`)
 
-  for (const col of collections) {
-    // Upsert the collection row
-    const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'backstage' AND source_meta = ?`, [col.sourceMeta])
+  for (const collection of collections) {
+    const existing = queryOne<{ id: string }>(`SELECT id FROM folders WHERE parent_id IS NULL AND source = 'backstage' AND source_meta = ?`, [collection.sourceMeta])
     let collectionId: string
     if (existing) {
       collectionId = existing.id
-      run('UPDATE collections SET name = ?, integration_id = ?, updated_at = ? WHERE id = ?', [col.label, settings.integrationId ?? null, now, collectionId])
+      run('UPDATE folders SET name = ?, integration_id = ?, updated_at = ? WHERE id = ?', [collection.label, settings.integrationId ?? null, now, collectionId])
     } else {
       collectionId = crypto.randomUUID()
-    run(`INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'backstage', ?, ?, ?, ?)`,
-        [collectionId, col.label, col.sourceMeta, settings.integrationId ?? null, now, now])
+      run(
+        `INSERT INTO folders (id, parent_id, name, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+         VALUES (?, NULL, ?, 'backstage', ?, ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
+        [collectionId, collection.label, collection.sourceMeta, settings.integrationId ?? null, now, now]
+      )
     }
 
-    // Clear old groups + requests before re-importing
-    run('DELETE FROM requests WHERE group_id IN (SELECT id FROM groups WHERE collection_id = ?)', [collectionId])
-    run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+    run('DELETE FROM requests WHERE folder_id = ?', [collectionId])
+    run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
 
     let anySucceeded = false
-    for (const api of col.apis) {
+    for (const api of collection.apis) {
       const apiName = api.metadata.name
       const apiType = api.spec?.type ?? 'openapi'
       const rawDefinition = api.spec?.definition
-      console.warn(`[Backstage] ${col.label}/${apiName} type=${apiType} hasDefinition=${!!rawDefinition}`)
+      console.warn(`[Backstage] ${collection.label}/${apiName} type=${apiType} hasDefinition=${!!rawDefinition}`)
 
       try {
         if (apiType === 'openapi' || apiType === 'swagger') {
@@ -164,51 +154,65 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
           if (!spec) {
             const specUrl = api.metadata.annotations?.['backstage.io/api-spec']
             if (specUrl) {
-              try { spec = (await axios.get(specUrl, { headers, httpsAgent })).data }
-              catch (err) { result.errors.push(`${col.label}/${apiName}: failed to fetch spec — ${String(err)}`); continue }
+              try {
+                spec = (await axios.get(specUrl, { headers, httpsAgent })).data
+              } catch (err) {
+                result.errors.push(`${collection.label}/${apiName}: failed to fetch spec — ${String(err)}`)
+                continue
+              }
             }
           }
           if (!spec) {
-            result.errors.push(`${col.label}/${apiName}: no definition found (definition=${JSON.stringify(rawDefinition)?.slice(0, 100)})`)
+            result.errors.push(`${collection.label}/${apiName}: no definition found (definition=${JSON.stringify(rawDefinition)?.slice(0, 100)})`)
             continue
           }
-          const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
-          for (const g of groups) {
-            run(`INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt])
+
+          const { folders, requests } = await parseOpenApiToRequests(spec, collectionId)
+          for (const folder of folders) {
+            run(
+              `INSERT INTO folders (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'local', NULL, NULL, 'none', '{}', 'inherit', ?, ?, ?, ?, ?)`,
+              [folder.id, folder.parentId, folder.name, folder.description ?? '', folder.hidden ? 1 : 0, folder.collapsed ? 1 : 0, folder.sortOrder, folder.createdAt, folder.updatedAt]
+            )
           }
-          for (const req of requests) {
-            run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
-               req.bodyContent, req.authType, req.authConfig, req.description ?? null, req.scmPath ?? null,
-               req.scmSha ?? null, req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt])
+          for (const request of requests) {
+            run(
+              `INSERT INTO requests (id, folder_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [request.id, request.folderId, request.name, request.method, request.url, request.params, request.headers, request.bodyType,
+                request.bodyContent, request.authType, request.authConfig, request.description ?? null, request.scmPath ?? null,
+                request.scmSha ?? null, request.isDirty ? 1 : 0, request.sortOrder, request.createdAt, request.updatedAt]
+            )
           }
           anySucceeded = true
         } else {
-          // graphql / grpc / asyncapi — store raw definition as a schema request
-          const groupId = crypto.randomUUID()
+          const folderId = crypto.randomUUID()
           const label = apiType === 'graphql' ? 'GraphQL' : apiType === 'grpc' ? 'gRPC' : apiType.toUpperCase()
-          run(`INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)`,
-            [groupId, collectionId, `${label} Schema`, `${label} API from Backstage`, now, now])
+          run(
+            `INSERT INTO folders (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'local', NULL, NULL, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
+            [folderId, collectionId, `${label} Schema`, `${label} API from Backstage`, now, now]
+          )
           const requestId = crypto.randomUUID()
           const definitionStr = typeof rawDefinition === 'string' ? rawDefinition : JSON.stringify(rawDefinition ?? '', null, 2)
           const protocol = apiType === 'grpc' ? 'grpc' : apiType === 'graphql' ? 'graphql' : 'http'
-          // GraphQL: store SDL in protocol_config.schema so it's visible in the schema tab
-          // gRPC: store proto in protocol_config.protoContent (matches GrpcView prop)
           const protocolConfig = apiType === 'graphql'
             ? JSON.stringify({ schema: definitionStr })
             : apiType === 'grpc'
               ? JSON.stringify({ protoContent: definitionStr })
               : '{}'
-          run(`INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, protocol, protocol_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
-            [requestId, groupId, apiName, 'POST', settings.baseUrl, '[]', '[]',
-             'none', '', 'none', '{}', protocol, protocolConfig,
-             `${label} definition synced from Backstage`, null, null, now, now])
+          run(
+            `INSERT INTO requests (id, folder_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, protocol, protocol_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+            [requestId, folderId, apiName, 'POST', settings.baseUrl, '[]', '[]',
+              'none', '', 'none', '{}', protocol, protocolConfig,
+              `${label} definition synced from Backstage`, null, null, now, now]
+          )
           anySucceeded = true
         }
       } catch (err) {
-        console.error(`[Backstage] failed to process ${col.label}/${apiName}:`, err)
-        result.errors.push(`${col.label}/${apiName}: ${String(err)}`)
+        console.error(`[Backstage] failed to process ${collection.label}/${apiName}:`, err)
+        result.errors.push(`${collection.label}/${apiName}: ${String(err)}`)
       }
     }
 
@@ -222,10 +226,6 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000
 
-/**
- * Fetch a Backstage guest token. No browser window — just a direct HTTP call
- * to /api/auth/guest/refresh. Works when dangerouslyAllowOutsideDevelopment is true.
- */
 export async function authenticateWithBackstageGuest(
   baseUrl: string,
   options: { sslVerification?: boolean } = {},
@@ -253,13 +253,6 @@ export async function authenticateWithBackstageGuest(
   }
 }
 
-/**
- * Opens a BrowserWindow to the Backstage auth start endpoint for the given
- * provider (e.g. 'gitlab', 'github', 'google'). After the OAuth dance
- * completes and Backstage sets a session, the window's JavaScript context
- * calls the Backstage refresh endpoint (with the session cookies) to
- * retrieve the Backstage-signed token.
- */
 export async function authenticateWithBackstage(
   baseUrl: string,
   provider: string,
@@ -300,7 +293,6 @@ export async function authenticateWithBackstage(
 
     const tryExtract = async () => {
       const url = win.webContents.getURL()
-      // Skip while still in the OAuth redirect dance
       if (url.includes('/api/auth/') || url.includes('/oauth/') || url.includes('/login')) return
       try {
         const result = await win.webContents.executeJavaScript(`

@@ -1,8 +1,4 @@
-import type { Group, KeyValuePair, Request } from '@/types'
-
-// ---------------------------------------------------------------------------
-// JSON field parsing
-// ---------------------------------------------------------------------------
+import type { Folder, KeyValuePair, Request } from '@/types'
 
 export function parseJsonField<T>(value: unknown, fallback: T): T {
   if (typeof value === 'string') {
@@ -16,14 +12,10 @@ export function parseJsonField<T>(value: unknown, fallback: T): T {
   return fallback
 }
 
-// ---------------------------------------------------------------------------
-// Request / Group normalization (raw DB row → typed object)
-// ---------------------------------------------------------------------------
-
 export function normalizeRequest(raw: Record<string, unknown>): Request {
   return {
     id: raw.id as string,
-    groupId: (raw.groupId ?? raw.group_id) as string,
+    folderId: (raw.folderId ?? raw.folder_id ?? raw.groupId ?? raw.group_id) as string,
     name: raw.name as string,
     method: (raw.method ?? 'GET') as Request['method'],
     url: (raw.url ?? '') as string,
@@ -44,24 +36,28 @@ export function normalizeRequest(raw: Record<string, unknown>): Request {
   }
 }
 
-export function normalizeGroup(raw: Record<string, unknown>): Group {
+export function normalizeFolder(raw: Record<string, unknown>): Folder {
   return {
     id: raw.id as string,
-    collectionId: (raw.collectionId ?? raw.collection_id) as string,
+    parentId: ((raw.parentId ?? raw.parent_id ?? undefined) as string | undefined) || undefined,
     name: raw.name as string,
-    description: raw.description as string | undefined,
-    collapsed: Boolean(raw.collapsed ?? false),
-    hidden: Boolean(raw.hidden ?? false),
-    sortOrder: (raw.sortOrder ?? raw.sort_order ?? 0) as number,
-    authType: (raw.authType ?? raw.auth_type ?? 'none') as Group['authType'],
+    description: (raw.description as string | undefined) ?? '',
+    source: (raw.source ?? 'local') as Folder['source'],
+    sourceMeta: parseJsonField<Record<string, string> | undefined>(raw.sourceMeta ?? raw.source_meta, undefined),
+    integrationId: (raw.integrationId ?? raw.integration_id ?? undefined) as string | undefined,
+    authType: (raw.authType ?? raw.auth_type ?? 'none') as Folder['authType'],
     authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
-    sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Group['sslVerification'],
+    sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Folder['sslVerification'],
+    hidden: Boolean(raw.hidden ?? false),
+    collapsed: Boolean(raw.collapsed ?? false),
+    sortOrder: (raw.sortOrder ?? raw.sort_order ?? 0) as number,
+    createdAt: (raw.createdAt ?? raw.created_at ?? 0) as number,
+    updatedAt: (raw.updatedAt ?? raw.updated_at ?? 0) as number,
   }
 }
 
-// ---------------------------------------------------------------------------
-// Key-value pair helpers
-// ---------------------------------------------------------------------------
+export const normalizeGroup = normalizeFolder
+export const normalizeCollection = normalizeFolder
 
 export function kvpToRecord(pairs: KeyValuePair[]): Record<string, string> {
   return pairs

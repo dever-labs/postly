@@ -17,6 +17,21 @@ function getGitHubSettings(): GitHubSettings {
   return JSON.parse(row.value) as GitHubSettings
 }
 
+function getRootSourceMeta(folderId: string): Record<string, string> {
+  const row = queryOne<{ source_meta: string | null }>(
+    `WITH RECURSIVE lineage AS (
+       SELECT id, parent_id, source_meta FROM folders WHERE id = ?
+       UNION ALL
+       SELECT f.id, f.parent_id, f.source_meta
+       FROM folders f
+       JOIN lineage l ON l.parent_id = f.id
+     )
+     SELECT source_meta FROM lineage WHERE parent_id IS NULL LIMIT 1`,
+    [folderId]
+  )
+  return row?.source_meta ? JSON.parse(row.source_meta) : {}
+}
+
 export function registerGitHubHandlers(): void {
   ipcMain.handle('postly:github:sync', async () => {
     try { await discoverApis(getGitHubSettings()); return { data: true } }
@@ -63,10 +78,7 @@ export function registerGitHubHandlers(): void {
 
       const scmPath = String(request['scm_path'] ?? '')
       const localContent = String(request['body_content'] ?? '')
-
-      const group = queryOne<{ collection_id: string }>('SELECT collection_id FROM groups WHERE id = ?', [String(request['group_id'])])
-      const collection = group ? queryOne<{ source_meta: string }>('SELECT source_meta FROM collections WHERE id = ?', [group.collection_id]) : undefined
-      const sourceMeta = collection?.source_meta ? JSON.parse(collection.source_meta) : {}
+      const sourceMeta = getRootSourceMeta(String(request['folder_id']))
       const [owner, repo] = (sourceMeta.repo ?? '/').split('/')
 
       const remoteContent = await getFileContent(settings.token, owner, repo, scmPath, 'main')

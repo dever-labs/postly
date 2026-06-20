@@ -17,16 +17,16 @@ const CAMEL_TO_SNAKE: Record<string, string> = {
   scmSha: 'scm_sha',
   isDirty: 'is_dirty',
   sortOrder: 'sort_order',
-  groupId: 'group_id',
+  folderId: 'folder_id',
   sslVerification: 'ssl_verification',
   protocol: 'protocol',
   protocolConfig: 'protocol_config',
 }
 
 export function registerRequestHandlers(): void {
-  ipcMain.handle('postly:requests:list', async (_, args: { groupId: string }) => {
+  ipcMain.handle('postly:requests:list', async (_, args: { folderId: string }) => {
     try {
-      return { data: queryAll('SELECT * FROM requests WHERE group_id = ? ORDER BY sort_order ASC', [args.groupId]) }
+      return { data: queryAll('SELECT * FROM requests WHERE folder_id = ? ORDER BY sort_order ASC', [args.folderId]) }
     } catch (err) { return { error: String(err) } }
   })
 
@@ -38,14 +38,14 @@ export function registerRequestHandlers(): void {
 
   ipcMain.handle(
     'postly:requests:create',
-    async (_, args: { groupId: string; name?: string; method?: string }) => {
+    async (_, args: { folderId: string; name?: string; method?: string }) => {
       try {
         const id = crypto.randomUUID()
         const now = Date.now()
         run(
-          `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, is_dirty, sort_order, created_at, updated_at)
+          `INSERT INTO requests (id, folder_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, is_dirty, sort_order, created_at, updated_at)
            VALUES (?, ?, ?, ?, '', '[]', '[]', 'none', '', 'none', '{}', 0, 0, ?, ?)`,
-          [id, args.groupId, args.name ?? 'New Request', args.method ?? 'GET', now, now]
+          [id, args.folderId, args.name ?? 'New Request', args.method ?? 'GET', now, now]
         )
         return { data: queryOne('SELECT * FROM requests WHERE id = ?', [id]) }
       } catch (err) { return { error: String(err) } }

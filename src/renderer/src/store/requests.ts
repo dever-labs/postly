@@ -80,6 +80,14 @@ function clearUndo(): void {
   if (undoPushTimer) { clearTimeout(undoPushTimer); undoPushTimer = null }
 }
 
+function getRootCollectionId(folderId: string, folders: Array<{ id: string; parentId?: string }>): string | null {
+  let current = folders.find((folder) => folder.id === folderId)
+  while (current?.parentId) {
+    current = folders.find((folder) => folder.id === current?.parentId)
+  }
+  return current?.id ?? null
+}
+
 function isEqualToSaved(a: Request, b: Request): boolean {
   for (const field of DIRTY_FIELDS) {
     const av = a[field]
@@ -234,7 +242,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       authType: editingRequest.authType,
       authConfig: editingRequest.authConfig,
       sslVerification: editingRequest.sslVerification,
-      groupId: editingRequest.groupId,
+      folderId: editingRequest.folderId,
     }
     httpRequest.params = kvpToRecord(editingRequest.params)
 
@@ -294,9 +302,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     useCollectionsStore.getState().syncRequest(saved)
 
     // For git-sourced collections, mark the request as uncommitted to git
-    const { groups, collections, markDirty } = useCollectionsStore.getState()
-    const group = groups.find((g) => g.id === editingRequest.groupId)
-    const collection = group ? collections.find((c) => c.id === group.collectionId) : null
+    const { folders, collections, markDirty } = useCollectionsStore.getState()
+    const collectionId = getRootCollectionId(editingRequest.folderId, folders)
+    const collection = collectionId ? collections.find((item) => item.id === collectionId) : null
     if (['git', 'github', 'gitlab'].includes(collection?.source ?? '')) {
       markDirty(editingRequest.id)
     }
@@ -317,7 +325,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     // Normalise snake_case DB row to camelCase Request
     const saved: Request = {
       id: data.id as string,
-      groupId: data.group_id as string,
+      folderId: data.folder_id as string,
       name: data.name as string,
       protocol: (data.protocol as Request['protocol']) ?? 'http',
       method: data.method as Request['method'],

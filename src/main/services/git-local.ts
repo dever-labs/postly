@@ -7,7 +7,7 @@ import crypto from 'crypto'
 import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
-import type { PostlyExportFile, ExportCollection } from '../ipc/export-import'
+import type { PostlyExportFile, ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
 
 export function getDataDir(): string {
   return app.getPath('userData')
@@ -203,6 +203,57 @@ export async function commitAndPush(
   await git.push('origin', branch)
 }
 
+function insertExportRequest(
+  request: ExportRequest,
+  folderId: string,
+  scmPath: string,
+  sortOrder: number,
+  now: number
+): void {
+  const reqId = crypto.randomUUID()
+  run(
+    `INSERT INTO requests
+       (id, folder_id, name, method, url, params, headers, body_type, body_content,
+        auth_type, auth_config, ssl_verification, protocol, protocol_config,
+        description, scm_path, is_dirty, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+    [reqId, folderId, request.name, request.method ?? 'GET', request.url ?? '',
+      JSON.stringify(request.params ?? []), JSON.stringify(request.headers ?? []),
+      request.bodyType ?? 'none', request.bodyContent ?? '',
+      request.auth?.type ?? 'none',
+      JSON.stringify(request.auth?.config ?? {}),
+      request.ssl ?? 'inherit', request.protocol ?? 'http',
+      JSON.stringify(request.protocolConfig ?? {}),
+      request.description ?? '', scmPath, sortOrder, now, now]
+  )
+}
+
+function insertExportFolder(
+  folder: ExportFolder,
+  parentId: string,
+  scmPath: string,
+  sortOrder: number,
+  now: number
+): void {
+  const folderId = crypto.randomUUID()
+  run(
+    `INSERT INTO folders
+      (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
+       ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, 0, 0, ?, ?, ?)`,
+    [folderId, parentId, folder.name, folder.description ?? '',
+      folder.auth?.type ?? 'none', JSON.stringify(folder.auth?.config ?? {}),
+      folder.ssl ?? 'inherit', sortOrder, now, now]
+  )
+  for (const [ri, req] of (folder.requests ?? []).entries()) {
+    insertExportRequest(req, folderId, scmPath, ri, now)
+  }
+  // fall back to `groups` for .postly.json files committed before the folder-tree refactor
+  for (const [fi, child] of (folder.folders ?? folder.groups ?? []).entries()) {
+    insertExportFolder(child, folderId, scmPath, fi, now)
+  }
+}
+
 /** Import a single Postly collection entry into a DB collection (create or update). */
 function upsertPostlyCollection(
   integrationId: string,
@@ -211,38 +262,18 @@ function upsertPostlyCollection(
   fileName: string,
   now: number
 ) {
-  run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+  run('DELETE FROM requests WHERE folder_id = ?', [collectionId])
+  run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
   run(
-    'UPDATE collections SET name = ?, source_meta = ?, updated_at = ? WHERE id = ?',
+    'UPDATE folders SET name = ?, source_meta = ?, updated_at = ? WHERE id = ?',
     [col.name, JSON.stringify({ integrationId, fileName }), now, collectionId]
   )
-  for (const [gi, grp] of (col.groups ?? []).entries()) {
-    const grpId = crypto.randomUUID()
-    run(
-      `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, auth_type, auth_config, ssl_verification, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-      [grpId, collectionId, grp.name, grp.description ?? '', gi,
-       grp.auth?.type ?? 'none', JSON.stringify(grp.auth?.config ?? {}),
-       grp.ssl ?? 'inherit', now, now]
-    )
-    for (const [ri, req] of ((grp.requests ?? []) as unknown as Array<Record<string,unknown>>).entries()) {
-      const reqId = crypto.randomUUID()
-      run(
-        `INSERT INTO requests
-           (id, group_id, name, method, url, params, headers, body_type, body_content,
-            auth_type, auth_config, ssl_verification, protocol, protocol_config,
-            description, scm_path, is_dirty, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-        [reqId, grpId, req.name, req.method ?? 'GET', req.url ?? '',
-         JSON.stringify(req.params ?? []), JSON.stringify(req.headers ?? []),
-         req.bodyType ?? 'none', req.bodyContent ?? '',
-         (req.auth as Record<string,string>)?.type ?? 'none',
-         JSON.stringify((req.auth as Record<string,unknown>)?.config ?? {}),
-         req.ssl ?? 'inherit', req.protocol ?? 'http',
-         JSON.stringify(req.protocolConfig ?? {}),
-         req.description ?? '', fileName, ri, now, now]
-      )
-    }
+  for (const [ri, req] of (col.requests ?? []).entries()) {
+    insertExportRequest(req, collectionId, fileName, ri, now)
+  }
+  // fall back to `groups` for .postly.json files committed before the folder-tree refactor
+  for (const [fi, folder] of (col.folders ?? col.groups ?? []).entries()) {
+    insertExportFolder(folder, collectionId, fileName, fi, now)
   }
 }
 
@@ -263,21 +294,23 @@ async function importOpenApi(integrationId: string, localPath: string, collectio
     if (!fs.existsSync(fullPath)) continue
     let spec: object
     try { spec = await SwaggerParser.dereference(fullPath) } catch { continue }
-    run('UPDATE collections SET source_meta = ?, updated_at = ? WHERE id = ?',
+    run('UPDATE folders SET source_meta = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify({ integrationId, filePath }), now, collectionId])
     try {
-      const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
-      run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
-      for (const g of groups) {
+      const { folders, requests } = await parseOpenApiToRequests(spec, collectionId)
+      run('DELETE FROM requests WHERE folder_id = ?', [collectionId])
+      run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
+      for (const folder of folders) {
         run(
-          `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt]
+          `INSERT INTO folders (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'local', NULL, NULL, 'none', '{}', 'inherit', ?, ?, ?, ?, ?)`,
+          [folder.id, folder.parentId, folder.name, folder.description ?? '', folder.hidden ? 1 : 0, folder.collapsed ? 1 : 0, folder.sortOrder, folder.createdAt, folder.updatedAt]
         )
       }
       for (const req of requests) {
         run(
-          `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
+          `INSERT INTO requests (id, folder_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [req.id, req.folderId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
            req.bodyContent, req.authType, req.authConfig, req.description ?? null, filePath, null,
            0, req.sortOrder, req.createdAt, req.updatedAt]
         )
@@ -314,11 +347,11 @@ export async function discoverAndImport(
 
           // Find existing collection by fileName in source_meta, or by name
           const byFile = queryOne<{ id: string }>(
-            `SELECT id FROM collections WHERE integration_id = ? AND source_meta LIKE ?`,
+            `SELECT id FROM folders WHERE parent_id IS NULL AND integration_id = ? AND source_meta LIKE ?`,
             [integrationId, `%"fileName":"${file}"%`]
           )
           const byName = !byFile ? queryOne<{ id: string }>(
-            `SELECT id FROM collections WHERE integration_id = ? AND name = ? AND source = 'git'`,
+            `SELECT id FROM folders WHERE parent_id IS NULL AND integration_id = ? AND name = ? AND source = 'git'`,
             [integrationId, col.name]
           ) : null
 
@@ -330,7 +363,8 @@ export async function discoverAndImport(
           } else {
             colId = crypto.randomUUID()
             run(
-              `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+              `INSERT INTO folders (id, parent_id, name, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+               VALUES (?, NULL, ?, 'git', ?, ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
               [colId, col.name, JSON.stringify({ integrationId, fileName: file }), integrationId, now, now]
             )
           }
@@ -342,17 +376,18 @@ export async function discoverAndImport(
     }
     // No postly files — fall through to OpenAPI for the single-collection sync path
     const existing = queryOne<{ id: string }>(
-      `SELECT id FROM collections WHERE integration_id = ? AND source = 'git' ORDER BY created_at ASC LIMIT 1`,
+      `SELECT id FROM folders WHERE parent_id IS NULL AND integration_id = ? AND source = 'git' ORDER BY created_at ASC LIMIT 1`,
       [integrationId]
     )
     let collectionId: string
     if (existing) {
       collectionId = existing.id
-      run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+      run('UPDATE folders SET updated_at = ? WHERE id = ?', [now, collectionId])
     } else {
       collectionId = crypto.randomUUID()
       run(
-        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        `INSERT INTO folders (id, parent_id, name, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+         VALUES (?, NULL, ?, 'git', ?, ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
         [collectionId, repoName, JSON.stringify({ integrationId }), integrationId, now, now]
       )
     }
@@ -363,17 +398,18 @@ export async function discoverAndImport(
   let collectionId: string
 
   if (opts?.collectionId) {
-    const found = queryOne<{ id: string }>('SELECT id FROM collections WHERE id = ?', [opts.collectionId])
+    const found = queryOne<{ id: string }>('SELECT id FROM folders WHERE id = ?', [opts.collectionId])
     if (found) {
       collectionId = found.id
       run(
-        'UPDATE collections SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
+        'UPDATE folders SET source = ?, integration_id = ?, updated_at = ? WHERE id = ?',
         ['git', integrationId, now, collectionId]
       )
     } else {
       collectionId = opts.collectionId
       run(
-        `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+        `INSERT INTO folders (id, parent_id, name, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+         VALUES (?, NULL, ?, 'git', ?, ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
         [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
       )
     }
@@ -381,7 +417,8 @@ export async function discoverAndImport(
     // collectionName supplied → always new
     collectionId = crypto.randomUUID()
     run(
-      `INSERT INTO collections (id, name, source, source_meta, integration_id, created_at, updated_at) VALUES (?, ?, 'git', ?, ?, ?, ?)`,
+      `INSERT INTO folders (id, parent_id, name, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+       VALUES (?, NULL, ?, 'git', ?, ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
       [collectionId, opts.collectionName ?? repoName, JSON.stringify({ integrationId }), integrationId, now, now]
     )
   }

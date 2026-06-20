@@ -37,7 +37,6 @@ let _autoUpdater: AutoUpdater | null = null
 function getAutoUpdater(): AutoUpdater {
   if (_autoUpdater) return _autoUpdater
   // Lazy import — only in packaged builds to avoid cross-platform binary issues
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return (require('electron-updater') as { autoUpdater: AutoUpdater }).autoUpdater
 }
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Capture registered handlers by channel name so tests can call them directly.
 const handlers: Record<string, (ev: unknown, args: unknown) => Promise<unknown>> = {}
 
 vi.mock('electron', () => ({
@@ -30,22 +29,15 @@ beforeEach(() => {
   registerCollectionHandlers()
 })
 
-// ── list ─────────────────────────────────────────────────────────────────────
-
 describe('postly:collections:list', () => {
-  it('returns collections and groups from the database', async () => {
-    const cols = [{ id: 'c1', name: 'My API', collapsed: 0 }]
-    const grps = [{ id: 'g1', collection_id: 'c1', name: 'Default', collapsed: 0 }]
-    mockQueryAll
-      .mockReturnValueOnce(cols)
-      .mockReturnValueOnce(grps)
+  it('returns folders from the database', async () => {
+    const folders = [{ id: 'c1', name: 'My API', parent_id: null, collapsed: 0 }]
+    mockQueryAll.mockReturnValueOnce(folders)
 
     const result = await handlers['postly:collections:list'](null, undefined) as { data: unknown }
-    expect(result.data).toEqual({ collections: cols, groups: grps })
+    expect(result.data).toEqual(folders)
   })
 })
-
-// ── update ───────────────────────────────────────────────────────────────────
 
 describe('postly:collections:update', () => {
   it('persists collapsed=true as integer 1', async () => {
@@ -55,7 +47,6 @@ describe('postly:collections:update', () => {
     }) as { data: unknown }
 
     expect(result.data).toBe(true)
-    expect(mockRun).toHaveBeenCalledOnce()
     const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('collapsed = ?')
     expect(params).toContain(1)
@@ -78,7 +69,6 @@ describe('postly:collections:update', () => {
 
   it('returns data:true with no-op when no fields provided', async () => {
     const result = await handlers['postly:collections:update'](null, { id: 'c1' }) as { data: unknown }
-
     expect(result.data).toBe(true)
     expect(mockRun).not.toHaveBeenCalled()
   })
@@ -95,5 +85,13 @@ describe('postly:collections:update', () => {
     expect(sql).toContain('collapsed = ?')
     expect(params).toContain('Updated')
     expect(params).toContain(1)
+  })
+
+  it('maps parentId to parent_id for folder moves', async () => {
+    await handlers['postly:collections:update'](null, { id: 'f1', parentId: 'root-1' })
+
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('parent_id = ?')
+    expect(params).toContain('root-1')
   })
 })

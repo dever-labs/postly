@@ -52,8 +52,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 
 export function RequestEditor() {
   const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
-  const collections = useCollectionsStore((s) => s.collections)
-  const groups = useCollectionsStore((s) => s.groups)
+  const folders = useCollectionsStore((s) => s.folders)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { selectItem } = useUIStore()
   const openGitAction = useUIStore((s) => s.openGitAction)
@@ -62,15 +61,19 @@ export function RequestEditor() {
 
   const breadcrumb = useMemo(() => {
     if (!editingRequest) return null
-    const group = groups.find((g) => g.id === editingRequest.groupId)
-    const collection = group ? collections.find((c) => c.id === group.collectionId) : undefined
+    const folder = folders.find((item) => item.id === editingRequest.folderId)
+    let collection = folder
+    while (collection?.parentId) {
+      collection = folders.find((item) => item.id === collection?.parentId)
+    }
+    const isRootRequest = folder && collection && folder.id === collection.id
     const integration = collection?.integrationId
       ? integrations.find((i) => i.id === collection.integrationId)
       : null
     const sourceLabel = integration ? integration.name : 'Local'
     const sourceType = collection?.source ?? 'local'
-    return { group, collection, integration, sourceLabel, sourceType }
-  }, [editingRequest, groups, collections, integrations])
+    return { folder, collection, integration, sourceLabel, sourceType, isRootRequest }
+  }, [editingRequest, folders, integrations])
 
   const sourceIcon = (type: string) => {
     if (type === 'github') return <GitFork className="h-3 w-3" />
@@ -181,13 +184,13 @@ export function RequestEditor() {
                 />
               </>
             )}
-            {breadcrumb.group && (
+            {breadcrumb.folder && !breadcrumb.isRootRequest && (
               <>
                 <ChevronRight className="h-3 w-3 shrink-0 text-th-text-faint" />
                 <BreadcrumbItem
                   icon={<Folder className="h-3 w-3" />}
-                  label={breadcrumb.group.name}
-                  onClick={() => selectItem('group', breadcrumb.group?.id ?? '')}
+                  label={breadcrumb.folder.name}
+                  onClick={() => selectItem('group', breadcrumb.folder?.id ?? '')}
                 />
               </>
             )}
