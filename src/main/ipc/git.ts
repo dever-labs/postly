@@ -323,7 +323,7 @@ export function registerGitHandlers(): void {
     try {
       const folderIds = getTreeFolderIds(args.collectionId)
       if (folderIds.length === 0) return { data: [] }
-      const rows = queryAll<Array<RequestRow & { folder_name: string; group_name: string; request_name: string }> extends never ? never : RequestRow & { folder_name: string; group_name: string; request_name: string }>(
+      const rows = queryAll<RequestRow & { folder_name: string; group_name: string; request_name: string }>(
         `SELECT r.id, r.folder_id, r.scm_path, r.name as request_name, f.name as folder_name, f.name as group_name
          FROM requests r
          JOIN folders f ON f.id = r.folder_id

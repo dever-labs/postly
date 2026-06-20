@@ -26,6 +26,7 @@ const api = {
   },
   requests: {
     list: (data: { folderId: string }) => ipcRenderer.invoke('postly:requests:list', data),
+    listAll: () => ipcRenderer.invoke('postly:requests:list-all'),
     get: (data: { id: string }) => ipcRenderer.invoke('postly:requests:get', data),
     create: (data: { folderId: string; name?: string; method?: string }) => ipcRenderer.invoke('postly:requests:create', data),
     update: (data: { id: string; [key: string]: unknown }) => ipcRenderer.invoke('postly:requests:update', data),

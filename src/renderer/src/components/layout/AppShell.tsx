@@ -16,7 +16,7 @@ import { ImportPage } from '@/components/export-import/ImportPage'
 import { WindowControls } from '@/components/layout/WindowControls'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
-import type { AiContext, } from '@/lib/aiContext'
+import type { AiContext } from '@/lib/aiContext'
 import type { Folder } from '@/types'
 
 function findRootCollection(folderId: string, folders: Folder[]): Folder | undefined {

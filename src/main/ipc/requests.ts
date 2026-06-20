@@ -30,6 +30,12 @@ export function registerRequestHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
+  ipcMain.handle('postly:requests:list-all', async () => {
+    try {
+      return { data: queryAll('SELECT * FROM requests ORDER BY sort_order ASC') }
+    } catch (err) { return { error: String(err) } }
+  })
+
   ipcMain.handle('postly:requests:get', async (_, args: { id: string }) => {
     try {
       return { data: queryOne('SELECT * FROM requests WHERE id = ?', [args.id]) }

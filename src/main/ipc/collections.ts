@@ -155,7 +155,7 @@ export function registerCollectionHandlers(): void {
 
   const handleReorder = async (_: unknown, args: {
     type: 'request' | 'folder' | 'group'
-    updates: Array<{ id: string; sortOrder: number; newParentId?: string }>
+    updates: Array<{ id: string; sortOrder: number; newParentId?: string | null }>
   }) => {
     try {
       const now = Date.now()

@@ -76,21 +76,18 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       return
     }
 
+    const { data: reqData, error: reqError } = await window.api.requests.listAll()
+    if (reqError) {
+      console.error('Failed to load requests:', reqError)
+      return
+    }
+
     const folders = (data as Record<string, unknown>[]).map(normalizeFolder)
-    const requestResults = await Promise.all(
-      folders.map(async (folder) => {
-        const result = await window.api.requests.list({ folderId: folder.id })
-        if (result.error) {
-          console.error(`Failed to load requests for folder ${folder.id}:`, result.error)
-          return [] as Request[]
-        }
-        return ((result.data ?? []) as Record<string, unknown>[]).map(normalizeRequest)
-      })
-    )
+    const requests = ((reqData ?? []) as Record<string, unknown>[]).map(normalizeRequest)
 
     set({
       ...deriveFoldersState(folders),
-      requests: requestResults.flat(),
+      requests,
     })
   },
 
@@ -354,7 +351,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     })
 
     const updates = [
-      ...targetFolders.map((item, index) => ({ id: item.id, sortOrder: index, newParentId: newParentId ?? undefined })),
+      ...targetFolders.map((item, index) => ({ id: item.id, sortOrder: index, newParentId: newParentId })),
       ...sourceFolders.map((item, index) => ({ id: item.id, sortOrder: index })),
     ]
     await window.api.reorder({ type: 'folder', updates })
