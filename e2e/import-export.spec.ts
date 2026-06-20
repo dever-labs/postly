@@ -198,3 +198,70 @@ test.describe('Import — old format (groups)', () => {
     await expect(window.locator('[data-testid="sidebar"]').getByText(legacyRequestName, { exact: true })).toBeVisible()
   })
 })
+
+// ── 3-level deep nesting ────────────────────────────────────────────────────
+
+const deepCollectionName = `Deep API ${timestamp}`
+const deepLevel1Name = `Level 1 ${timestamp}`
+const deepLevel2Name = `Level 2 ${timestamp}`
+const deepRequestName = `Deep Request ${timestamp}`
+
+test.describe('Import — 3-level deep nesting', () => {
+  test.beforeAll(async ({ window }) => {
+    await importCollectionsAndReload(window, [
+      {
+        name: deepCollectionName,
+        description: '',
+        source: 'local',
+        auth: { type: 'none', config: {} },
+        ssl: 'inherit',
+        requests: [],
+        folders: [
+          {
+            name: deepLevel1Name,
+            description: '',
+            auth: { type: 'none', config: {} },
+            ssl: 'inherit',
+            requests: [],
+            folders: [
+              {
+                name: deepLevel2Name,
+                description: '',
+                auth: { type: 'none', config: {} },
+                ssl: 'inherit',
+                requests: [buildRequest(deepRequestName, 'GET', '/deep')],
+                folders: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
+
+    const collectionId = await getRootFolderIdByName(window, deepCollectionName)
+    if (!collectionId) throw new Error(`Imported collection not found: ${deepCollectionName}`)
+    importedCollectionIds.push(collectionId)
+  })
+
+  test('shows the root collection', async ({ window }) => {
+    await expect(window.locator('[data-testid="sidebar"]').getByText(deepCollectionName, { exact: true })).toBeVisible()
+  })
+
+  test('shows level-1 sub-folder after expanding root', async ({ window }) => {
+    await expandTreeItem(window, deepCollectionName, deepLevel1Name)
+    await expect(window.locator('[data-testid="sidebar"]').getByText(deepLevel1Name, { exact: true })).toBeVisible()
+  })
+
+  test('shows level-2 sub-folder after expanding level-1', async ({ window }) => {
+    await expandTreeItem(window, deepCollectionName, deepLevel1Name)
+    await expandTreeItem(window, deepLevel1Name, deepLevel2Name)
+    await expect(window.locator('[data-testid="sidebar"]').getByText(deepLevel2Name, { exact: true })).toBeVisible()
+  })
+
+  test('shows the request inside the level-2 sub-folder', async ({ window }) => {
+    await expandTreeItem(window, deepCollectionName, deepLevel1Name)
+    await expandTreeItem(window, deepLevel1Name, deepLevel2Name)
+    await expandTreeItem(window, deepLevel2Name, deepRequestName)
+    await expect(window.locator('[data-testid="sidebar"]').getByText(deepRequestName, { exact: true })).toBeVisible()
+  })
+})
