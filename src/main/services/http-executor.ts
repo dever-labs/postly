@@ -18,7 +18,7 @@ export interface HttpRequest {
   bodyType: string
   authType: string
   authConfig: Record<string, string>
-  groupId?: string
+  folderId?: string
   sslVerification?: string
 }
 

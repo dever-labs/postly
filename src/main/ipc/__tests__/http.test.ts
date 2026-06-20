@@ -47,21 +47,56 @@ type Result = { data?: Record<string, unknown> & { logs: LogEntry[] }; error?: s
 function setupDb({
   envName = null as string | null,
   envVars = [] as { key: string; value: string }[],
-  group = null as Record<string, unknown> | null,
+  folder = null as Record<string, unknown> | null,
   collection = null as Record<string, unknown> | null,
   integration = null as Record<string, unknown> | null,
   settings = null as string | null,
 } = {}) {
   mockQ1.mockImplementation((sql: string) => {
     if (sql.includes('environments')) return envName ? { id: 'e1', name: envName } : null
-    if (sql.includes('groups')) return group
-    if (sql.includes('collections')) return collection
     if (sql.includes('integrations')) return integration
     if (sql.includes('settings')) return settings ? { value: settings } : null
     return null
   })
   mockQA.mockImplementation((sql: string) => {
     if (sql.includes('env_vars')) return envVars
+    if (sql.includes('WITH RECURSIVE lineage')) {
+      if (!folder) return []
+      // Build a lineage array: [direct folder, ..., root collection]
+      // If folder == collection (or collection is null), just one row as root
+      const rows: { id: string; name: string; parent_id: string | null; auth_type: string | null; auth_config: string | null; ssl_verification: string | null; integration_id: string | null }[] = []
+      if (collection && collection.id !== folder.id) {
+        rows.push({
+          id: String(folder.id ?? 'f1'),
+          name: String(folder.name ?? 'Folder'),
+          parent_id: String(collection.id ?? 'c1'),
+          auth_type: (folder.auth_type as string | null) ?? null,
+          auth_config: (folder.auth_config as string | null) ?? null,
+          ssl_verification: (folder.ssl_verification as string | null) ?? null,
+          integration_id: null,
+        })
+        rows.push({
+          id: String(collection.id ?? 'c1'),
+          name: String(collection.name ?? 'Collection'),
+          parent_id: null,
+          auth_type: (collection.auth_type as string | null) ?? null,
+          auth_config: (collection.auth_config as string | null) ?? null,
+          ssl_verification: (collection.ssl_verification as string | null) ?? null,
+          integration_id: (collection.integration_id as string | null) ?? null,
+        })
+      } else {
+        rows.push({
+          id: String(folder.id ?? 'c1'),
+          name: String(folder.name ?? 'Collection'),
+          parent_id: null,
+          auth_type: ((folder.auth_type ?? collection?.auth_type) as string | null) ?? null,
+          auth_config: ((folder.auth_config ?? collection?.auth_config) as string | null) ?? null,
+          ssl_verification: ((folder.ssl_verification ?? collection?.ssl_verification) as string | null) ?? null,
+          integration_id: (collection?.integration_id as string | null) ?? null,
+        })
+      }
+      return rows
+    }
     return []
   })
 }
@@ -83,11 +118,15 @@ function baseResp() {
 }
 
 async function invoke(req: unknown): Promise<Result> {
-  return state.handlers['postly:http:execute']!(null, req) as Promise<Result>   // eslint-disable-line @typescript-eslint/no-non-null-assertion
+  const handler = state.handlers['postly:http:execute']
+  if (!handler) throw new Error('postly:http:execute handler not registered')
+  return handler(null, req) as Promise<Result>
 }
 
 async function invokeCancel(): Promise<void> {
-  await state.handlers['postly:http:cancel']!(null, null as never)
+  const cancelHandler = state.handlers['postly:http:cancel']
+  if (!cancelHandler) throw new Error('postly:http:cancel handler not registered')
+  await cancelHandler(null, null as never)
 }
 
 /** Asserts the invocation succeeded and returns the data object (never null). */
@@ -175,30 +214,30 @@ describe('http IPC handler', () => {
       expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Auth: bearer' }))
     })
 
-    it('inherits bearer auth from the group when request is "inherit"', async () => {
+    it('inherits bearer auth from the folder when request is "inherit"', async () => {
       setupDb({
-        group: {
-          id: 'g1', name: 'My Group', auth_type: 'bearer',
-          auth_config: '{"token":"grp-tok"}', collection_id: null
+        folder: {
+          id: 'f1', name: 'My Folder', auth_type: 'bearer',
+          auth_config: '{"token":"grp-tok"}', parent_id: null
         }
       })
-      const data = await invokeOk(baseReq({ authType: 'inherit', groupId: 'g1' }))
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'f1' }))
       expect(data.logs).toContainEqual(expect.objectContaining({
-        message: 'Auth: bearer (inherited from group "My Group")'
+        message: 'Auth: bearer (inherited from folder "My Folder")'
       }))
       const [calledReq] = mockExec.mock.calls[0]
       expect(calledReq.authConfig.token).toBe('grp-tok')
     })
 
-    it('inherits auth from collection when group has no auth', async () => {
+    it('inherits auth from collection when folder has no auth', async () => {
       setupDb({
-        group: { id: 'g1', name: 'G', auth_type: 'inherit', collection_id: 'c1' },
+        folder: { id: 'f1', name: 'F', auth_type: 'inherit', parent_id: 'c1' },
         collection: {
           id: 'c1', name: 'My API', auth_type: 'bearer',
           auth_config: '{"token":"col-tok"}', integration_id: null
         }
       })
-      const data = await invokeOk(baseReq({ authType: 'inherit', groupId: 'g1' }))
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'f1' }))
       expect(data.logs).toContainEqual(expect.objectContaining({
         message: 'Auth: bearer (inherited from collection "My API")'
       }))
@@ -206,13 +245,153 @@ describe('http IPC handler', () => {
       expect(calledReq.authConfig.token).toBe('col-tok')
     })
 
+    it('inherits auth from the nearest non-inherit ancestor in a 3-level lineage', async () => {
+      const lineage = [
+        {
+          id: 'leaf-1',
+          name: 'Leaf Folder',
+          parent_id: 'mid-1',
+          auth_type: 'inherit',
+          auth_config: null,
+          ssl_verification: null,
+          integration_id: null,
+        },
+        {
+          id: 'mid-1',
+          name: 'Intermediate Folder',
+          parent_id: 'root-1',
+          auth_type: 'bearer',
+          auth_config: '{"token":"mid-tok"}',
+          ssl_verification: null,
+          integration_id: null,
+        },
+        {
+          id: 'root-1',
+          name: 'Root Collection',
+          parent_id: null,
+          auth_type: 'basic',
+          auth_config: '{"username":"root","password":"secret"}',
+          ssl_verification: null,
+          integration_id: null,
+        },
+      ]
+
+      mockQA.mockImplementation((sql: string) => {
+        if (sql.includes('env_vars')) return []
+        if (sql.includes('WITH RECURSIVE lineage')) return lineage
+        return []
+      })
+
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'leaf-1' }))
+      expect(data.logs).toContainEqual(expect.objectContaining({
+        message: 'Auth: bearer (inherited from folder "Intermediate Folder")'
+      }))
+      const [calledReq] = mockExec.mock.calls[0]
+      expect(calledReq.authType).toBe('bearer')
+      expect(calledReq.authConfig.token).toBe('mid-tok')
+    })
+
+    it('uses the nearest non-inherit SSL setting from an intermediate folder in a 3-level lineage', async () => {
+      const lineage = [
+        {
+          id: 'leaf-1',
+          name: 'Leaf Folder',
+          parent_id: 'mid-1',
+          auth_type: null,
+          auth_config: null,
+          ssl_verification: 'inherit',
+          integration_id: null,
+        },
+        {
+          id: 'mid-1',
+          name: 'Intermediate Folder',
+          parent_id: 'root-1',
+          auth_type: null,
+          auth_config: null,
+          ssl_verification: 'disabled',
+          integration_id: null,
+        },
+        {
+          id: 'root-1',
+          name: 'Root Collection',
+          parent_id: null,
+          auth_type: null,
+          auth_config: null,
+          ssl_verification: 'enabled',
+          integration_id: null,
+        },
+      ]
+
+      mockQA.mockImplementation((sql: string) => {
+        if (sql.includes('env_vars')) return []
+        if (sql.includes('WITH RECURSIVE lineage')) return lineage
+        return []
+      })
+
+      const data = await invokeOk(baseReq({ folderId: 'leaf-1', sslVerification: 'inherit' }))
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ sslVerification: false })
+      )
+      expect(data.logs).toContainEqual(expect.objectContaining({
+        level: 'warn',
+        message: 'SSL verification disabled (folder "Intermediate Folder")'
+      }))
+    })
+
+    it('labels an intermediate inherited auth source as a folder, not a collection', async () => {
+      const lineage = [
+        {
+          id: 'leaf-1',
+          name: 'Leaf Folder',
+          parent_id: 'mid-1',
+          auth_type: 'inherit',
+          auth_config: null,
+          ssl_verification: null,
+          integration_id: null,
+        },
+        {
+          id: 'mid-1',
+          name: 'Intermediate Folder',
+          parent_id: 'root-1',
+          auth_type: 'bearer',
+          auth_config: '{"token":"mid-tok"}',
+          ssl_verification: null,
+          integration_id: null,
+        },
+        {
+          id: 'root-1',
+          name: 'Root Collection',
+          parent_id: null,
+          auth_type: 'basic',
+          auth_config: '{"username":"root","password":"secret"}',
+          ssl_verification: null,
+          integration_id: null,
+        },
+      ]
+
+      mockQA.mockImplementation((sql: string) => {
+        if (sql.includes('env_vars')) return []
+        if (sql.includes('WITH RECURSIVE lineage')) return lineage
+        return []
+      })
+
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'leaf-1' }))
+      expect(data.logs).toContainEqual(expect.objectContaining({
+        message: 'Auth: bearer (inherited from folder "Intermediate Folder")'
+      }))
+      expect(data.logs).not.toContainEqual(expect.objectContaining({
+        message: 'Auth: bearer (inherited from collection "Intermediate Folder")'
+      }))
+    })
+
     it('uses integration bearer token when collection has an integration', async () => {
       setupDb({
-        group: { id: 'g1', name: 'G', auth_type: null, collection_id: 'c1' },
+        folder: { id: 'f1', name: 'F', auth_type: null, parent_id: 'c1' },
         collection: { id: 'c1', name: 'Coll', auth_type: null, integration_id: 'i1' },
         integration: { id: 'i1', name: 'GitHub', token: 'int-tok' }
       })
-      const data = await invokeOk(baseReq({ authType: 'inherit', groupId: 'g1' }))
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'f1' }))
       expect(data.logs).toContainEqual(expect.objectContaining({
         message: 'Auth: bearer (inherited from integration "GitHub")'
       }))
@@ -221,8 +400,8 @@ describe('http IPC handler', () => {
     })
 
     it('falls back to "Auth: none" when full inherit chain has no auth', async () => {
-      setupDb({ group: { id: 'g1', name: 'G', auth_type: null, collection_id: null } })
-      const data = await invokeOk(baseReq({ authType: 'inherit', groupId: 'g1' }))
+      setupDb({ folder: { id: 'f1', name: 'F', auth_type: null, parent_id: null } })
+      const data = await invokeOk(baseReq({ authType: 'inherit', folderId: 'f1' }))
       expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Auth: none' }))
     })
   })

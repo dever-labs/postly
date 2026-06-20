@@ -1,24 +1,34 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 const api = {
+  folders: {
+    list: () => ipcRenderer.invoke('postly:folders:list'),
+    create: (data: { parentId?: string; name: string; source?: string; integrationId?: string }) => ipcRenderer.invoke('postly:folders:create', data),
+    delete: (data: { id: string; commitMessage?: string }) => ipcRenderer.invoke('postly:folders:delete', data),
+    rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:folders:rename', data),
+    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; collapsed?: boolean; parentId?: string | null; sortOrder?: number; hidden?: boolean }) =>
+      ipcRenderer.invoke('postly:folders:update', data),
+    moveSource: (data: { id: string; source: string }) => ipcRenderer.invoke('postly:folders:move-source', data),
+  },
   collections: {
-    list: () => ipcRenderer.invoke('postly:collections:list'),
-    create: (data: { name: string; source?: string; integrationId?: string }) => ipcRenderer.invoke('postly:collections:create', data),
-    delete: (data: { id: string; commitMessage?: string }) => ipcRenderer.invoke('postly:collections:delete', data),
-    rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:collections:rename', data),
-    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; collapsed?: boolean }) =>
-      ipcRenderer.invoke('postly:collections:update', data),
-    moveSource: (data: { id: string; source: string }) => ipcRenderer.invoke('postly:collections:move-source', data),
+    list: () => ipcRenderer.invoke('postly:folders:list'),
+    create: (data: { parentId?: string; name: string; source?: string; integrationId?: string }) => ipcRenderer.invoke('postly:folders:create', data),
+    delete: (data: { id: string; commitMessage?: string }) => ipcRenderer.invoke('postly:folders:delete', data),
+    rename: (data: { id: string; name: string }) => ipcRenderer.invoke('postly:folders:rename', data),
+    update: (data: { id: string; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sslVerification?: string; collapsed?: boolean; parentId?: string | null; sortOrder?: number; hidden?: boolean }) =>
+      ipcRenderer.invoke('postly:folders:update', data),
+    moveSource: (data: { id: string; source: string }) => ipcRenderer.invoke('postly:folders:move-source', data),
   },
   groups: {
-    create: (data: { collectionId: string; name: string; description?: string }) => ipcRenderer.invoke('postly:groups:create', data),
+    create: (data: { collectionId?: string; parentId?: string; name: string; description?: string }) => ipcRenderer.invoke('postly:groups:create', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:groups:delete', data),
-    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sortOrder?: number; collectionId?: string }) => ipcRenderer.invoke('postly:groups:update', data),
+    update: (data: { id: string; collapsed?: boolean; hidden?: boolean; name?: string; description?: string; authType?: string; authConfig?: Record<string, string>; sortOrder?: number; collectionId?: string; parentId?: string | null; sslVerification?: string }) => ipcRenderer.invoke('postly:groups:update', data),
   },
   requests: {
-    list: (data: { groupId: string }) => ipcRenderer.invoke('postly:requests:list', data),
+    list: (data: { folderId: string }) => ipcRenderer.invoke('postly:requests:list', data),
+    listAll: () => ipcRenderer.invoke('postly:requests:list-all'),
     get: (data: { id: string }) => ipcRenderer.invoke('postly:requests:get', data),
-    create: (data: { groupId: string; name?: string; method?: string }) => ipcRenderer.invoke('postly:requests:create', data),
+    create: (data: { folderId: string; name?: string; method?: string }) => ipcRenderer.invoke('postly:requests:create', data),
     update: (data: { id: string; [key: string]: unknown }) => ipcRenderer.invoke('postly:requests:update', data),
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:requests:delete', data),
     markDirty: (data: { id: string; isDirty: boolean }) => ipcRenderer.invoke('postly:requests:mark-dirty', data),
@@ -197,7 +207,7 @@ const api = {
       return () => { ipcRenderer.removeListener('postly:window:maximize-change', handler) }
     },
   },
-  reorder: (data: { type: 'request' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
+  reorder: (data: { type: 'request' | 'folder' | 'group'; updates: Array<{ id: string; sortOrder: number; newParentId?: string }> }) =>
     ipcRenderer.invoke('postly:reorder', data),
   drafts: {
     request: {

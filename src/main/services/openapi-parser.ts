@@ -1,9 +1,9 @@
 import SwaggerParser from '@apidevtools/swagger-parser'
 import crypto from 'crypto'
 
-export interface ParsedGroup {
+export interface ParsedFolder {
   id: string
-  collectionId: string
+  parentId: string
   name: string
   description: string
   collapsed: boolean
@@ -15,7 +15,7 @@ export interface ParsedGroup {
 
 export interface ParsedRequest {
   id: string
-  groupId: string
+  folderId: string
   name: string
   method: string
   url: string
@@ -34,14 +34,15 @@ export interface ParsedRequest {
   updatedAt: number
 }
 
-/** Build a minimal JSON skeleton from an OpenAPI schema object */
 function buildJsonSkeleton(schema: Record<string, unknown>, depth = 0): string {
   if (depth > 4) return 'null'
   const type = schema['type'] as string | undefined
   if (type === 'object' || schema['properties']) {
     const props = (schema['properties'] ?? {}) as Record<string, Record<string, unknown>>
     const pairs = Object.entries(props).map(([k, v]) => `  "${k}": ${buildJsonSkeleton(v, depth + 1)}`)
-    return pairs.length > 0 ? `{\n${pairs.join(',\n')}\n}` : '{}'
+    return pairs.length > 0 ? `{
+${pairs.join(',\n')}
+}` : '{}'
   }
   if (type === 'array' && schema['items']) {
     return `[${buildJsonSkeleton(schema['items'] as Record<string, unknown>, depth + 1)}]`
@@ -54,46 +55,44 @@ function buildJsonSkeleton(schema: Record<string, unknown>, depth = 0): string {
 
 export async function parseOpenApiToRequests(
   spec: object,
-  collectionId: string
-): Promise<{ groups: ParsedGroup[]; requests: ParsedRequest[] }> {
+  parentId: string
+): Promise<{ folders: ParsedFolder[]; requests: ParsedRequest[] }> {
   const dereferenced = (await SwaggerParser.dereference(spec as never)) as Record<string, unknown>
 
   const now = Date.now()
-  const groups: ParsedGroup[] = []
+  const folders: ParsedFolder[] = []
   const requests: ParsedRequest[] = []
 
-  const groupMap = new Map<string, ParsedGroup>()
+  const folderMap = new Map<string, ParsedFolder>()
 
-  function getOrCreateGroup(tag: string): ParsedGroup {
-    const existing = groupMap.get(tag)
+  function getOrCreateFolder(tag: string): ParsedFolder {
+    const existing = folderMap.get(tag)
     if (existing) return existing
-    const group: ParsedGroup = {
+    const folder: ParsedFolder = {
       id: crypto.randomUUID(),
-      collectionId,
+      parentId,
       name: tag,
       description: '',
       collapsed: false,
       hidden: false,
-      sortOrder: groups.length,
+      sortOrder: folders.length,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     }
-    groupMap.set(tag, group)
-    groups.push(group)
-    return group
+    folderMap.set(tag, folder)
+    folders.push(folder)
+    return folder
   }
 
   const paths = dereferenced['paths'] as Record<string, Record<string, unknown>> | undefined
-  if (!paths) return { groups, requests }
+  if (!paths) return { folders, requests }
 
-  // Determine base URL
   let baseUrl = ''
   const isOas3 = !!(dereferenced['openapi'] as string | undefined)?.startsWith('3')
   if (isOas3) {
     const servers = dereferenced['servers'] as Array<{ url: string }> | undefined
     baseUrl = servers?.[0]?.url ?? ''
   } else {
-    // Swagger 2.x
     const schemes = dereferenced['schemes'] as string[] | undefined
     const scheme = schemes?.[0] ?? 'https'
     const host = (dereferenced['host'] as string | undefined) ?? ''
@@ -109,15 +108,12 @@ export async function parseOpenApiToRequests(
       if (!operation) continue
 
       const tags = (operation['tags'] as string[] | undefined) ?? []
-      const tag = tags[0] ?? 'Default'
-      const group = getOrCreateGroup(tag)
+      const folder = tags[0] ? getOrCreateFolder(tags[0]) : null
 
       const operationId = (operation['operationId'] as string | undefined) ?? ''
       const summary = (operation['summary'] as string | undefined) ?? ''
       const description = (operation['description'] as string | undefined) ?? summary
-
       const name = summary || operationId || `${method.toUpperCase()} ${pathKey}`
-
       const parameters = (operation['parameters'] as Array<Record<string, unknown>> | undefined) ?? []
 
       const queryParams = parameters
@@ -128,8 +124,7 @@ export async function parseOpenApiToRequests(
         .filter((p) => p['in'] === 'header')
         .map((p) => ({ id: crypto.randomUUID(), key: String(p['name'] ?? ''), value: '', enabled: true }))
 
-      // Derive body type and content from requestBody
-      let bodyType: string = 'none'
+      let bodyType = 'none'
       let bodyContent = ''
       const requestBody = operation['requestBody'] as { content?: Record<string, { schema?: unknown }> } | undefined
       if (requestBody?.content) {
@@ -149,7 +144,7 @@ export async function parseOpenApiToRequests(
 
       requests.push({
         id: crypto.randomUUID(),
-        groupId: group.id,
+        folderId: folder?.id ?? parentId,
         name,
         method: method.toUpperCase(),
         url: `${baseUrl}${pathKey}`,
@@ -163,12 +158,12 @@ export async function parseOpenApiToRequests(
         scmPath: null,
         scmSha: null,
         isDirty: 0,
-        sortOrder: requests.length,
+        sortOrder: requests.filter((request) => request.folderId === (folder?.id ?? parentId)).length,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
       })
     }
   }
 
-  return { groups, requests }
+  return { folders, requests }
 }

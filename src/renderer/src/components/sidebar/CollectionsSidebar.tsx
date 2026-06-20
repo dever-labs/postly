@@ -11,7 +11,7 @@ import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
-import type { CollectionSource } from '@/types'
+import type { CollectionSource, Folder } from '@/types'
 
 const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
   GET: 'green',
@@ -25,95 +25,94 @@ const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orang
 
 function DragOverlayContent({ id }: { id: string }) {
   const [type, itemId] = id.split(':')
-  const { collections, groups, requests } = useCollectionsStore()
+  const { folders, requests } = useCollectionsStore()
 
   let label = ''
   let badge: React.ReactNode = null
 
   if (type === 'req') {
-    const req = requests.find((r) => r.id === itemId)
+    const req = requests.find((request) => request.id === itemId)
     label = req?.name ?? 'Request'
     badge = <Badge variant={METHOD_COLORS[req?.method ?? ''] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{req?.method ?? 'GET'}</Badge>
-  } else if (type === 'grp') {
-    label = groups.find((g) => g.id === itemId)?.name ?? 'Group'
-  } else if (type === 'col') {
-    label = collections.find((c) => c.id === itemId)?.name ?? 'Collection'
+  } else if (type === 'fld') {
+    const folder = folders.find((item) => item.id === itemId)
+    label = folder?.name ?? 'Folder'
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-sm border border-blue-500/50 bg-th-surface-raised px-3 py-1.5 text-sm text-th-text-primary shadow-lg opacity-90">
+    <div className="flex items-center gap-2 rounded-sm border border-blue-500/50 bg-th-surface-raised px-3 py-1.5 text-sm text-th-text-primary opacity-90 shadow-lg">
       {badge}
-      <span className="truncate max-w-48">{label}</span>
+      <span className="max-w-48 truncate">{label}</span>
     </div>
   )
 }
 
-function handleDragEnd(event: DragEndEvent) {
+function isDescendant(candidateParentId: string, folderId: string, folders: Folder[]): boolean {
+  let current = folders.find((folder) => folder.id === candidateParentId)
+  while (current?.parentId) {
+    if (current.parentId === folderId) return true
+    current = folders.find((folder) => folder.id === current?.parentId)
+  }
+  return current?.id === folderId
+}
+
+async function handleDragEnd(event: DragEndEvent) {
   const { active, over } = event
   if (!over || active.id === over.id) return
 
-  const activeStr = String(active.id)
-  const overStr = String(over.id)
+  const [activeType, activeId] = String(active.id).split(':') as [string, string]
+  const [overType, overId] = String(over.id).split(':') as [string, string]
 
-  const [activeType, activeId] = activeStr.split(':') as [string, string]
-  const [overType, overId] = overStr.split(':') as [string, string]
-
-  const { collections, groups, requests, moveRequestToGroup, moveGroupToCollection, moveCollectionToSource } = useCollectionsStore.getState()
+  const { folders, requests, moveRequestToFolder, moveFolder, moveCollectionToSource } = useCollectionsStore.getState()
 
   if (activeType === 'req') {
-    const activeReq = requests.find((r) => r.id === activeId)
+    const activeReq = requests.find((request) => request.id === activeId)
     if (!activeReq) return
 
     if (overType === 'req') {
-      const overReq = requests.find((r) => r.id === overId)
+      const overReq = requests.find((request) => request.id === overId)
       if (!overReq) return
-      // Determine insert position based on drag direction
-      const sortedGroupReqs = requests
-        .filter((r) => r.groupId === overReq.groupId)
+      const sortedFolderRequests = requests
+        .filter((request) => request.folderId === overReq.folderId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
-      const activeIdx = sortedGroupReqs.findIndex((r) => r.id === activeId)
-      const overIdx = sortedGroupReqs.findIndex((r) => r.id === overId)
-      // Dragging down: insert after over item (before the item after it)
+      const activeIdx = sortedFolderRequests.findIndex((request) => request.id === activeId)
+      const overIdx = sortedFolderRequests.findIndex((request) => request.id === overId)
       const insertBeforeId = activeIdx < overIdx
-        ? sortedGroupReqs[overIdx + 1]?.id ?? null
+        ? sortedFolderRequests[overIdx + 1]?.id ?? null
         : overReq.id
-      moveRequestToGroup(activeId, overReq.groupId, insertBeforeId)
-    } else if (overType === 'grp') {
-      moveRequestToGroup(activeId, overId, null)
+      await moveRequestToFolder(activeId, overReq.folderId, insertBeforeId)
+    } else if (overType === 'fld') {
+      await moveRequestToFolder(activeId, overId, null)
     }
-  } else if (activeType === 'grp') {
-    const activeGrp = groups.find((g) => g.id === activeId)
-    if (!activeGrp) return
+    return
+  }
 
-    if (overType === 'grp') {
-      const overGrp = groups.find((g) => g.id === overId)
-      if (!overGrp) return
-      const sortedColGroups = groups
-        .filter((g) => g.collectionId === overGrp.collectionId)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-      const activeIdx = sortedColGroups.findIndex((g) => g.id === activeId)
-      const overIdx = sortedColGroups.findIndex((g) => g.id === overId)
-      const insertBeforeId = activeIdx < overIdx
-        ? sortedColGroups[overIdx + 1]?.id ?? null
-        : overGrp.id
-      moveGroupToCollection(activeId, overGrp.collectionId, insertBeforeId)
-    } else if (overType === 'col') {
-      moveGroupToCollection(activeId, overId, null)
-    }
-  } else if (activeType === 'col') {
-    if (overType === 'col') {
-      const overCol = collections.find((c) => c.id === overId)
-      if (!overCol) return
-      moveCollectionToSource(activeId, overCol.source as CollectionSource)
+  if (activeType === 'fld' && overType === 'fld') {
+    const activeFolder = folders.find((folder) => folder.id === activeId)
+    const overFolder = folders.find((folder) => folder.id === overId)
+    if (!activeFolder || !overFolder) return
+    if (isDescendant(overFolder.id, activeFolder.id, folders)) return
+
+    const targetParentId = overFolder.parentId ?? null
+    const siblings = folders
+      .filter((folder) => (folder.parentId ?? null) === targetParentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const activeIdx = siblings.findIndex((folder) => folder.id === activeId)
+    const overIdx = siblings.findIndex((folder) => folder.id === overId)
+    const insertBeforeId = activeIdx < overIdx ? siblings[overIdx + 1]?.id ?? null : overFolder.id
+
+    await moveFolder(activeId, targetParentId, insertBeforeId)
+    if (!activeFolder.parentId && !overFolder.parentId && activeFolder.source !== overFolder.source) {
+      await moveCollectionToSource(activeId, overFolder.source as CollectionSource)
     }
   }
 }
 
 export function CollectionsSidebar() {
-  const { collections, groups, requests, searchQuery, load } = useCollectionsStore()
+  const { folders, requests, searchQuery, load } = useCollectionsStore()
   const { integrations, load: loadIntegrations } = useIntegrationsStore()
   const { load: loadEnvironments } = useEnvironmentsStore()
-  const selectItem = useUIStore((s) => s.selectItem)
+  const selectItem = useUIStore((state) => state.selectItem)
   const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -121,15 +120,13 @@ export function CollectionsSidebar() {
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   useEffect(() => {
-    load()
-    loadIntegrations()
-    loadEnvironments()
+    void load()
+    void loadIntegrations()
+    void loadEnvironments()
   }, [load, loadIntegrations, loadEnvironments])
 
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
-
-      {/* Tab switcher — pt-8 on macOS clears the hiddenInset traffic lights */}
       <div className={cn('flex shrink-0 border-b border-th-border', window.api.platform === 'darwin' && 'pt-8')}>
         <button
           data-testid="tab-apis"
@@ -159,103 +156,96 @@ export function CollectionsSidebar() {
         </button>
       </div>
 
-      {/* ── APIs tab ─────────────────────────────────────────────────────── */}
       {sidebarTab === 'apis' && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={({ active }) => { setDragActiveId(String(active.id)); setDragOverId(null) }}
           onDragOver={({ over }: DragOverEvent) => setDragOverId(over ? String(over.id) : null)}
-          onDragEnd={(event) => { setDragActiveId(null); setDragOverId(null); handleDragEnd(event) }}
+          onDragEnd={(event) => { setDragActiveId(null); setDragOverId(null); void handleDragEnd(event) }}
           onDragCancel={() => { setDragActiveId(null); setDragOverId(null) }}
         >
-        <>
-          <div className="shrink-0 p-2">
-            <SidebarSearch />
-          </div>
+          <>
+            <div className="shrink-0 p-2">
+              <SidebarSearch />
+            </div>
 
-          {/* Scrollable tree */}
-          <div className="flex-1 overflow-y-auto py-1">
-            <GroupSection
-              source="local"
-              integration={null}
-              collections={collections}
-              groups={groups}
-              requests={requests}
-              searchQuery={searchQuery}
-              dragActiveId={dragActiveId}
-              dragOverId={dragOverId}
-            />
-
-            {integrations.map((integration) => (
+            <div className="flex-1 overflow-y-auto py-1">
               <GroupSection
-                key={integration.id}
-                source={integration.type}
-                integration={integration}
-                collections={collections}
-                groups={groups}
+                source="local"
+                integration={null}
+                folders={folders}
                 requests={requests}
                 searchQuery={searchQuery}
                 dragActiveId={dragActiveId}
                 dragOverId={dragOverId}
               />
-            ))}
 
-            {/* Connect source row — lives in the tree so context is clear */}
-            <div className="mx-2 mt-2 mb-1">
-              <button
-                onClick={() => selectItem('add-integration', '')}
-                className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-th-surface-raised focus:outline-hidden group"
-              >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-dashed border-th-border-strong text-th-text-faint group-hover:border-th-text-muted group-hover:text-th-text-subtle">
-                  <Link className="h-3 w-3" />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-xs text-th-text-subtle group-hover:text-th-text-secondary">Connect a source</span>
-                  <span className="text-[10px] text-th-text-faint">Git · Backstage · GitHub · GitLab</span>
-                </span>
-              </button>
+              {integrations.map((integration) => (
+                <GroupSection
+                  key={integration.id}
+                  source={integration.type}
+                  integration={integration}
+                  folders={folders}
+                  requests={requests}
+                  searchQuery={searchQuery}
+                  dragActiveId={dragActiveId}
+                  dragOverId={dragOverId}
+                />
+              ))}
+
+              <div className="mx-2 mb-1 mt-2">
+                <button
+                  onClick={() => selectItem('add-integration', '')}
+                  className="group flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-th-surface-raised focus:outline-hidden"
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-dashed border-th-border-strong text-th-text-faint group-hover:border-th-text-muted group-hover:text-th-text-subtle">
+                    <Link className="h-3 w-3" />
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-xs text-th-text-subtle group-hover:text-th-text-secondary">Connect a source</span>
+                    <span className="text-[10px] text-th-text-faint">Git · Backstage · GitHub · GitLab</span>
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* APIs footer — always visible */}
-          <div className="shrink-0 border-t border-th-border">
-            <div data-testid="sidebar-footer" className="flex items-center gap-1 px-2 py-2">
-              <button
-                data-testid="btn-export"
-                onClick={() => selectItem('export-page', '')}
-                className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
-                title="Export collections"
-              >
-                <Download className="h-4 w-4" />
-              </button>
-              <button
-                data-testid="btn-import"
-                onClick={() => selectItem('import-page', '')}
-                className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
-                title="Import collections"
-              >
-                <Upload className="h-4 w-4" />
-              </button>
-              <button
-                data-testid="btn-settings"
-                onClick={() => openSettings()}
-                className="ml-auto rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
-                title="Settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+            <div className="shrink-0 border-t border-th-border">
+              <div data-testid="sidebar-footer" className="flex items-center gap-1 px-2 py-2">
+                <button
+                  data-testid="btn-export"
+                  onClick={() => selectItem('export-page', '')}
+                  className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
+                  title="Export collections"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  data-testid="btn-import"
+                  onClick={() => selectItem('import-page', '')}
+                  className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
+                  title="Import collections"
+                >
+                  <Upload className="h-4 w-4" />
+                </button>
+                <button
+                  data-testid="btn-settings"
+                  onClick={() => openSettings()}
+                  className="ml-auto rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
+                  title="Settings"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
 
-          <DragOverlay dropAnimation={null}>
-            {dragActiveId ? <DragOverlayContent id={dragActiveId} /> : null}
-          </DragOverlay>
-        </>
+            <DragOverlay dropAnimation={null}>
+              {dragActiveId ? <DragOverlayContent id={dragActiveId} /> : null}
+            </DragOverlay>
+          </>
         </DndContext>
       )}
 
-      {/* ── Environments tab ──────────────────────────────────────────────── */}
       {sidebarTab === 'environments' && (
         <div className="flex flex-1 flex-col overflow-hidden">
           <EnvironmentsPanel />
@@ -264,4 +254,3 @@ export function CollectionsSidebar() {
     </div>
   )
 }
-

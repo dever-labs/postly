@@ -38,41 +38,51 @@ export async function discoverApis(settings: GitHubSettings): Promise<void> {
       try {
         const rawResponse = await axios.get(rawUrl, { headers })
         spec = await SwaggerParser.dereference(rawResponse.data)
-      } catch { continue }
+      } catch {
+        continue
+      }
 
       const sourceMeta = JSON.stringify({ org, repo: item.repository.full_name, path: item.path })
-      const existing = queryOne<{ id: string }>(`SELECT id FROM collections WHERE source = 'github' AND source_meta = ?`, [sourceMeta])
+      const existing = queryOne<{ id: string }>(`SELECT id FROM folders WHERE parent_id IS NULL AND source = 'github' AND source_meta = ?`, [sourceMeta])
 
       let collectionId: string
       if (existing) {
         collectionId = existing.id
-        run('UPDATE collections SET updated_at = ? WHERE id = ?', [now, collectionId])
+        run('UPDATE folders SET updated_at = ? WHERE id = ?', [now, collectionId])
       } else {
         collectionId = crypto.randomUUID()
-        run(`INSERT INTO collections (id, name, source, source_meta, created_at, updated_at) VALUES (?, ?, 'github', ?, ?, ?)`,
-          [collectionId, `${item.repository.full_name} / ${item.path}`, sourceMeta, now, now])
+        run(
+          `INSERT INTO folders (id, parent_id, name, source, source_meta, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+           VALUES (?, NULL, ?, 'github', ?, 'none', '{}', 'inherit', 0, 0, 0, ?, ?)`,
+          [collectionId, `${item.repository.full_name} / ${item.path}`, sourceMeta, now, now]
+        )
       }
 
       try {
-        const { groups, requests } = await parseOpenApiToRequests(spec, collectionId)
-        run('DELETE FROM groups WHERE collection_id = ?', [collectionId])
+        const { folders, requests } = await parseOpenApiToRequests(spec, collectionId)
+        run('DELETE FROM requests WHERE folder_id = ?', [collectionId])
+        run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
 
-        for (const g of groups) {
+        for (const folder of folders) {
           run(
-            `INSERT INTO groups (id, collection_id, name, description, collapsed, hidden, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [g.id, g.collectionId, g.name, g.description ?? null, g.collapsed ? 1 : 0, g.hidden ? 1 : 0, g.sortOrder, g.createdAt, g.updatedAt]
+            `INSERT INTO folders (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config, ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'local', NULL, NULL, 'none', '{}', 'inherit', ?, ?, ?, ?, ?)`,
+            [folder.id, folder.parentId, folder.name, folder.description ?? '', folder.hidden ? 1 : 0, folder.collapsed ? 1 : 0, folder.sortOrder, folder.createdAt, folder.updatedAt]
           )
         }
 
-        for (const req of requests) {
+        for (const request of requests) {
           run(
-            `INSERT INTO requests (id, group_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.id, req.groupId, req.name, req.method, req.url, req.params, req.headers, req.bodyType,
-             req.bodyContent, req.authType, req.authConfig, req.description ?? null, item.path, item.sha,
-             req.isDirty ? 1 : 0, req.sortOrder, req.createdAt, req.updatedAt]
+            `INSERT INTO requests (id, folder_id, name, method, url, params, headers, body_type, body_content, auth_type, auth_config, description, scm_path, scm_sha, is_dirty, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [request.id, request.folderId, request.name, request.method, request.url, request.params, request.headers, request.bodyType,
+              request.bodyContent, request.authType, request.authConfig, request.description ?? null, item.path, item.sha,
+              request.isDirty ? 1 : 0, request.sortOrder, request.createdAt, request.updatedAt]
           )
         }
-      } catch { /* skip unparseable */ }
+      } catch {
+        /* skip unparseable */
+      }
     }
   }
 }

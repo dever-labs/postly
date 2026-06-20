@@ -1,10 +1,20 @@
-import { ipcMain } from 'electron'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 import { getGeneralSettings } from './settings-utils'
 
 type LogLevel = 'info' | 'warn' | 'error'
+
+type FolderLineageRow = {
+  id: string
+  name: string
+  parent_id: string | null
+  auth_type: string | null
+  auth_config: string | null
+  ssl_verification: string | null
+  integration_id: string | null
+}
 
 let currentAbortController: AbortController | null = null
 
@@ -37,18 +47,37 @@ function formatExpiry(expiresAt: number | undefined): string {
   return `expires in ${Math.floor(hours / 24)}d`
 }
 
+/** Returns all folders from the given folder up to the root, ordered nearest-first (depth ASC). */
+function getFolderLineage(folderId?: string): FolderLineageRow[] {
+  if (!folderId) return []
+  return queryAll<FolderLineageRow>(
+    `WITH RECURSIVE lineage AS (
+       SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, integration_id, 0 AS depth
+       FROM folders
+       WHERE id = ?
+       UNION ALL
+       SELECT f.id, f.parent_id, f.name, f.auth_type, f.auth_config, f.ssl_verification, f.integration_id, lineage.depth + 1
+       FROM folders f
+       JOIN lineage ON lineage.parent_id = f.id
+     )
+     SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, integration_id
+     FROM lineage
+     ORDER BY depth ASC`,
+    [folderId]
+  )
+}
+
 export function registerHttpHandlers(): void {
   ipcMain.handle('postly:http:cancel', () => {
     currentAbortController?.abort()
     currentAbortController = null
   })
 
-  ipcMain.handle('postly:http:execute', async (_, req: HttpRequest) => {
+  ipcMain.handle('postly:http:execute', async (_: IpcMainInvokeEvent, req: HttpRequest) => {
     const logs: LogEntry[] = []
     const log = (level: LogLevel, message: string, detail?: string) => logs.push({ level, message, detail })
 
     try {
-      // ── Environment ──────────────────────────────────────────────────────────
       const activeEnv = queryOne<{ id: string; name: string }>(
         'SELECT id, name FROM environments WHERE is_active = 1 LIMIT 1'
       )
@@ -65,40 +94,31 @@ export function registerHttpHandlers(): void {
         log('info', 'No active environment')
       }
 
-      // ── Eager group/collection fetch ─────────────────────────────────────────
-      // Fetch once when a groupId is present; reused for both auth and SSL
-      // resolution below to avoid redundant DB round-trips.
-      const groupRow = req.groupId
-        ? queryOne<Record<string, unknown>>('SELECT * FROM groups WHERE id = ?', [req.groupId])
-        : null
-      const collectionRow = groupRow?.collection_id
-        ? queryOne<Record<string, unknown>>('SELECT * FROM collections WHERE id = ?', [groupRow.collection_id])
-        : null
+      const lineage = getFolderLineage(req.folderId)
+      const rootFolder = lineage.find((f) => !f.parent_id)
 
-      // ── Auth resolution ───────────────────────────────────────────────────────
       let resolvedAuthType = req.authType
       let resolvedAuthConfig = req.authConfig
       let authSource = 'request'
 
       const shouldInherit = (t: string) => t === 'inherit' || !t
 
-      if (shouldInherit(resolvedAuthType) && groupRow) {
-        if (groupRow?.auth_type && !shouldInherit(groupRow.auth_type as string)) {
-          resolvedAuthType = groupRow.auth_type as string
-          resolvedAuthConfig = safeParseJSON(groupRow.auth_config as string, {})
-          authSource = `group "${groupRow.name as string}"`
-        } else {
-          if (collectionRow?.auth_type && !shouldInherit(collectionRow.auth_type as string)) {
-            resolvedAuthType = collectionRow.auth_type as string
-            resolvedAuthConfig = safeParseJSON(collectionRow.auth_config as string, {})
-            authSource = `collection "${collectionRow.name as string}"`
-          } else if (collectionRow?.integration_id) {
-            const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [collectionRow.integration_id])
-            if (integration?.token) {
-              resolvedAuthType = 'bearer'
-              resolvedAuthConfig = { token: integration.token as string }
-              authSource = `integration "${integration.name as string}"`
-            }
+      if (shouldInherit(resolvedAuthType) && lineage.length > 0) {
+        // Walk up from the direct folder to the root — use the nearest ancestor with explicit auth
+        const inheritedIdx = lineage.findIndex((f) => f.auth_type && !shouldInherit(f.auth_type))
+        const inherited = inheritedIdx >= 0 ? lineage[inheritedIdx] : null
+        if (inherited) {
+          resolvedAuthType = inherited.auth_type ?? 'none'
+          resolvedAuthConfig = safeParseJSON(inherited.auth_config, {})
+          // depth 0 = direct folder of the request; root ancestors (parent_id IS NULL, depth > 0) = "collection"
+          const isDirectFolder = inheritedIdx === 0
+          authSource = (isDirectFolder || inherited.parent_id) ? `folder "${inherited.name}"` : `collection "${inherited.name}"`
+        } else if (rootFolder?.integration_id) {
+          const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [rootFolder.integration_id])
+          if (integration?.token) {
+            resolvedAuthType = 'bearer'
+            resolvedAuthConfig = { token: integration.token as string }
+            authSource = `integration "${integration.name as string}"`
           }
         }
       }
@@ -113,23 +133,20 @@ export function registerHttpHandlers(): void {
         log('info', `Auth: ${resolvedAuthType} (inherited from ${authSource})`)
       }
 
-      // ── Settings ─────────────────────────────────────────────────────────────
       const generalSettings = getGeneralSettings()
       let sslVerification = generalSettings.sslVerification
       const followRedirects = generalSettings.followRedirects
       const timeout = generalSettings.defaultTimeout
 
-      // ── SSL resolution ────────────────────────────────────────────────────────
       const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
       let resolvedSsl: string | undefined = req.sslVerification
       let sslSource = 'global setting'
-      if (shouldInheritSsl(resolvedSsl) && groupRow) {
-        if (groupRow?.ssl_verification && !shouldInheritSsl(groupRow.ssl_verification as string)) {
-          resolvedSsl = groupRow.ssl_verification as string
-          sslSource = `group "${groupRow.name as string}"`
-        } else if (collectionRow?.ssl_verification && !shouldInheritSsl(collectionRow.ssl_verification as string)) {
-          resolvedSsl = collectionRow.ssl_verification as string
-          sslSource = `collection "${collectionRow.name as string}"`
+      if (shouldInheritSsl(resolvedSsl) && lineage.length > 0) {
+        // Walk up from the direct folder to the root — use the nearest ancestor with explicit ssl
+        const inheritedSsl = lineage.find((f) => f.ssl_verification && !shouldInheritSsl(f.ssl_verification))
+        if (inheritedSsl) {
+          resolvedSsl = inheritedSsl.ssl_verification ?? undefined
+          sslSource = inheritedSsl.parent_id ? `folder "${inheritedSsl.name}"` : `collection "${inheritedSsl.name}"`
         }
       }
       if (resolvedSsl === 'enabled') sslVerification = true
@@ -138,7 +155,6 @@ export function registerHttpHandlers(): void {
       if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
       if (!followRedirects) log('info', 'Following redirects: disabled')
 
-      // ── OAuth 2.0 token resolution ────────────────────────────────────────────
       if (resolvedAuthType === 'oauth2') {
         const cfg = {
           id: '',
@@ -179,9 +195,8 @@ export function registerHttpHandlers(): void {
         }
       }
 
-      // ── Environment variable interpolation ───────────────────────────────────
       const urlCount = countInterpolations(req.url, envVars)
-      const headerCount = Object.values(req.headers).reduce((s, v) => s + countInterpolations(v, envVars), 0)
+      const headerCount = Object.values(req.headers).reduce((sum, value) => sum + countInterpolations(value, envVars), 0)
       const totalCount = urlCount + headerCount
       if (totalCount > 0) {
         log('info', `Interpolated ${totalCount} environment variable${totalCount !== 1 ? 's' : ''}`)
@@ -193,11 +208,10 @@ export function registerHttpHandlers(): void {
         authConfig: resolvedAuthConfig,
         url: interpolateEnvVars(req.url, envVars),
         headers: Object.fromEntries(
-          Object.entries(req.headers).map(([k, v]) => [k, interpolateEnvVars(v, envVars)])
+          Object.entries(req.headers).map(([key, value]) => [key, interpolateEnvVars(value, envVars)])
         )
       }
 
-      // ── Execute ───────────────────────────────────────────────────────────────
       const controller = new AbortController()
       currentAbortController = controller
       const response = await executeRequest(interpolatedReq, {

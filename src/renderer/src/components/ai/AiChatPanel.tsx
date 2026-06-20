@@ -26,7 +26,7 @@ interface ChatMessage {
 
 interface Props {
   context: AiContext
-  groupId?: string
+  folderId?: string
 }
 
 function parseEndpoints(content: string): { text: string; endpoints: EndpointDraft[] } {
@@ -59,7 +59,7 @@ const STARTERS_BY_TYPE: Record<string, string[]> = {
   ],
 }
 
-export function AiChatPanel({ context, groupId }: Props) {
+export function AiChatPanel({ context, folderId }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -68,9 +68,8 @@ export function AiChatPanel({ context, groupId }: Props) {
   const requestIdRef = useRef<string>('')
   const streamBufferRef = useRef<string>('')
 
-  const createLocalRequest = useCollectionsStore((s) => s.createLocalRequest)
-  const groups = useCollectionsStore((s) => s.groups)
-  const aiSettings = useSettingsStore((s) => s.ai)
+  const createLocalRequest = useCollectionsStore((state) => state.createLocalRequest)
+  const aiSettings = useSettingsStore((state) => state.ai)
 
   useEffect(() => {
     const unsub = window.api.ai.onChunk((payload) => {
@@ -118,7 +117,7 @@ export function AiChatPanel({ context, groupId }: Props) {
     const systemPrompt = buildSystemPrompt(context)
     const apiMessages = [
       { role: 'system', content: systemPrompt },
-      ...newMessages.map((m) => ({ role: m.role, content: m.content })),
+      ...newMessages.map((message) => ({ role: message.role, content: message.content })),
     ]
     await window.api.ai.chat({ requestId, provider, model, messages: apiMessages })
   }
@@ -126,22 +125,18 @@ export function AiChatPanel({ context, groupId }: Props) {
   const cancel = () => { window.api.ai.cancel({ requestId: requestIdRef.current }); setStreaming(false) }
 
   const addEndpoint = async (msgIdx: number, epIdx: number, ep: EndpointDraft) => {
-    let targetGroupId = groupId
-    if (!targetGroupId) {
-      const colGroups = context.collectionId ? groups.filter((g) => g.collectionId === context.collectionId) : []
-      targetGroupId = colGroups[0]?.id
-    }
-    if (!targetGroupId) return
-    const beforeIds = new Set(useCollectionsStore.getState().requests.map((r) => r.id))
-    await createLocalRequest(targetGroupId)
-    await new Promise((r) => setTimeout(r, 150))
-    const newReq = useCollectionsStore.getState().requests.find((r) => !beforeIds.has(r.id) && r.groupId === targetGroupId)
+    const targetFolderId = folderId ?? context.folderId ?? context.collectionId
+    if (!targetFolderId) return
+    const beforeIds = new Set(useCollectionsStore.getState().requests.map((request) => request.id))
+    await createLocalRequest(targetFolderId)
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    const newReq = useCollectionsStore.getState().requests.find((request) => !beforeIds.has(request.id) && request.folderId === targetFolderId)
     if (newReq) {
       await window.api.requests.update({
         id: newReq.id, name: ep.name, protocol: ep.protocol, method: ep.method, url: ep.url,
         description: ep.description,
-        params: JSON.stringify(ep.params.map((p) => ({ ...p, id: p.id || crypto.randomUUID() }))),
-        headers: JSON.stringify(ep.headers.map((h) => ({ ...h, id: h.id || crypto.randomUUID() }))),
+        params: JSON.stringify(ep.params.map((param) => ({ ...param, id: param.id || crypto.randomUUID() }))),
+        headers: JSON.stringify(ep.headers.map((header) => ({ ...header, id: header.id || crypto.randomUUID() }))),
         bodyType: ep.bodyType, bodyContent: ep.bodyContent,
       })
       await useCollectionsStore.getState().load()
@@ -156,14 +151,13 @@ export function AiChatPanel({ context, groupId }: Props) {
 
   return (
     <div className="flex h-full w-full flex-col bg-th-bg">
-      {/* Header */}
       <div className="drag-region flex shrink-0 items-center border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag">
-          <div className="flex items-center gap-2 mb-0.5">
+          <div className="mb-0.5 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-blue-400" />
             <h1 className="text-sm font-semibold text-th-text-primary">AI Assistant</h1>
           </div>
-          <p className="text-xs text-th-text-muted flex items-center gap-1.5 flex-wrap">
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-th-text-muted">
             <span>{context.type === 'request' ? '🔍 Reviewing' : '✨ Building'}</span>
             {context.collectionName && (
               <>
@@ -171,127 +165,125 @@ export function AiChatPanel({ context, groupId }: Props) {
                 <span className="text-th-text-subtle">{context.collectionName}</span>
               </>
             )}
-            {context.groupName && (
+            {context.folderName && (
               <>
                 <span className="text-th-text-faint">/</span>
-                <span className="text-th-text-subtle">{context.groupName}</span>
+                <span className="text-th-text-subtle">{context.folderName}</span>
               </>
             )}
             <span className="text-th-text-faint">·</span>
-            <span className="text-th-text-secondary font-medium">{contextLabel}</span>
+            <span className="font-medium text-th-text-secondary">{contextLabel}</span>
           </p>
         </div>
       </div>
 
-      {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-6">
-        <div className="mx-auto w-full max-w-3xl px-8 space-y-5">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center max-w-md mx-auto">
-            <Sparkles className="h-10 w-10 text-blue-400/50" />
-            <div>
-              <p className="text-base font-medium text-th-text-secondary mb-1">
-                {context.type === 'request' ? 'Review or extend this endpoint' : 'What would you like to build?'}
-              </p>
-              <p className="text-sm text-th-text-faint">
-                {context.type === 'request'
-                  ? 'Ask for a review, improvements, or generate related endpoints.'
-                  : 'Describe the API endpoints you need — REST, GraphQL, WebSocket, gRPC, or MQTT.'}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 w-full mt-2">
-              {starters.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setInput(s)}
-                  className="rounded-lg border border-th-border px-4 py-2.5 text-left text-sm text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/5 hover:text-th-text-primary transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, msgIdx) => (
-          <div key={msgIdx} className={cn('flex flex-col gap-2', msg.role === 'user' ? 'items-end' : 'items-start')}>
-            <div className={cn(
-              'max-w-[80%] rounded-xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
-              msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-th-surface-raised text-th-text-primary'
-            )}>
-              {msg.content || (streaming && msgIdx === messages.length - 1
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-th-text-faint" />
-                : '')}
-            </div>
-
-            {msg.endpoints && msg.endpoints.length > 0 && (
-              <div className="w-full max-w-[80%] space-y-2 mt-1">
-                <p className="text-xs text-th-text-faint px-1">{msg.endpoints.length} endpoint{msg.endpoints.length !== 1 ? 's' : ''} generated</p>
-                {msg.endpoints.map((ep, epIdx) => {
-                  const isAdded = addedMap[msgIdx]?.has(epIdx)
-                  return (
-                    <div key={epIdx} className="rounded-lg border border-th-border bg-th-surface px-4 py-3 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={cn(
-                            'rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase shrink-0',
-                            ep.protocol === 'http'
-                              ? ep.method === 'GET' ? 'bg-emerald-900/40 text-emerald-400'
-                              : ep.method === 'POST' ? 'bg-blue-900/40 text-blue-400'
-                              : ep.method === 'PUT' || ep.method === 'PATCH' ? 'bg-amber-900/40 text-amber-400'
-                              : ep.method === 'DELETE' ? 'bg-rose-900/40 text-rose-400'
-                              : 'bg-th-surface-raised text-th-text-muted'
-                              : 'bg-purple-900/40 text-purple-400'
-                          )}>
-                            {ep.protocol === 'http' ? ep.method : ep.protocol.toUpperCase()}
-                          </span>
-                          <span className="text-sm font-medium text-th-text-primary truncate">{ep.name}</span>
-                        </div>
-                        <p className="text-xs text-th-text-faint font-mono truncate">{ep.url}</p>
-                        {ep.description && <p className="text-xs text-th-text-subtle mt-1 line-clamp-2">{ep.description}</p>}
-                      </div>
-                      <button
-                        onClick={() => addEndpoint(msgIdx, epIdx, ep)}
-                        disabled={isAdded}
-                        className={cn(
-                          'shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-hidden',
-                          isAdded ? 'bg-emerald-900/30 text-emerald-500 cursor-default' : 'bg-blue-600 text-white hover:bg-blue-500'
-                        )}
-                      >
-                        {isAdded ? '✓ Added' : <><Plus className="h-3 w-3" /> Add</>}
-                      </button>
-                    </div>
-                  )
-                })}
+        <div className="mx-auto w-full max-w-3xl space-y-5 px-8">
+          {messages.length === 0 && (
+            <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center gap-4 text-center">
+              <Sparkles className="h-10 w-10 text-blue-400/50" />
+              <div>
+                <p className="mb-1 text-base font-medium text-th-text-secondary">
+                  {context.type === 'request' ? 'Review or extend this endpoint' : 'What would you like to build?'}
+                </p>
+                <p className="text-sm text-th-text-faint">
+                  {context.type === 'request'
+                    ? 'Ask for a review, improvements, or generate related endpoints.'
+                    : 'Describe the API endpoints you need — REST, GraphQL, WebSocket, gRPC, or MQTT.'}
+                </p>
               </div>
-            )}
-          </div>
-        ))}
+              <div className="mt-2 flex w-full flex-col gap-2">
+                {starters.map((starter) => (
+                  <button
+                    key={starter}
+                    onClick={() => setInput(starter)}
+                    className="rounded-lg border border-th-border px-4 py-2.5 text-left text-sm text-th-text-muted transition-colors hover:border-blue-500/50 hover:bg-blue-500/5 hover:text-th-text-primary"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, msgIdx) => (
+            <div key={msgIdx} className={cn('flex flex-col gap-2', msg.role === 'user' ? 'items-end' : 'items-start')}>
+              <div className={cn(
+                'max-w-[80%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm leading-relaxed',
+                msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-th-surface-raised text-th-text-primary'
+              )}>
+                {msg.content || (streaming && msgIdx === messages.length - 1
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-th-text-faint" />
+                  : '')}
+              </div>
+
+              {msg.endpoints && msg.endpoints.length > 0 && (
+                <div className="mt-1 w-full max-w-[80%] space-y-2">
+                  <p className="px-1 text-xs text-th-text-faint">{msg.endpoints.length} endpoint{msg.endpoints.length !== 1 ? 's' : ''} generated</p>
+                  {msg.endpoints.map((ep, epIdx) => {
+                    const isAdded = addedMap[msgIdx]?.has(epIdx)
+                    return (
+                      <div key={epIdx} className="flex items-start justify-between gap-3 rounded-lg border border-th-border bg-th-surface px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className={cn(
+                              'shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase',
+                              ep.protocol === 'http'
+                                ? ep.method === 'GET' ? 'bg-emerald-900/40 text-emerald-400'
+                                  : ep.method === 'POST' ? 'bg-blue-900/40 text-blue-400'
+                                    : ep.method === 'PUT' || ep.method === 'PATCH' ? 'bg-amber-900/40 text-amber-400'
+                                      : ep.method === 'DELETE' ? 'bg-rose-900/40 text-rose-400'
+                                        : 'bg-th-surface-raised text-th-text-muted'
+                                : 'bg-purple-900/40 text-purple-400'
+                            )}>
+                              {ep.protocol === 'http' ? ep.method : ep.protocol.toUpperCase()}
+                            </span>
+                            <span className="truncate text-sm font-medium text-th-text-primary">{ep.name}</span>
+                          </div>
+                          <p className="truncate font-mono text-xs text-th-text-faint">{ep.url}</p>
+                          {ep.description && <p className="mt-1 line-clamp-2 text-xs text-th-text-subtle">{ep.description}</p>}
+                        </div>
+                        <button
+                          onClick={() => addEndpoint(msgIdx, epIdx, ep)}
+                          disabled={isAdded}
+                          className={cn(
+                            'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-hidden',
+                            isAdded ? 'cursor-default bg-emerald-900/30 text-emerald-500' : 'bg-blue-600 text-white hover:bg-blue-500'
+                          )}
+                        >
+                          {isAdded ? '✓ Added' : <><Plus className="h-3 w-3" /> Add</>}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Input */}
       <div className="shrink-0 border-t border-th-border py-4">
         <div className="mx-auto w-full max-w-3xl px-8">
           <div className="flex items-end gap-3">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder={context.type === 'request' ? 'Ask for a review or request changes…' : 'Describe the endpoints you need…'}
-            rows={2}
-            className="flex-1 resize-none rounded-lg border border-th-border bg-th-surface px-4 py-2.5 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-blue-500/50 focus:outline-hidden focus:ring-1 focus:ring-blue-500/30"
-          />
-          <button
-            onClick={streaming ? cancel : send}
-            disabled={!streaming && !input.trim()}
-            className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-hidden',
-              streaming ? 'bg-rose-600 text-white hover:bg-rose-500' : 'bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40'
-            )}
-          >
-            {streaming ? <StopCircle className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          </button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+              placeholder={context.type === 'request' ? 'Ask for a review or request changes…' : 'Describe the endpoints you need…'}
+              rows={2}
+              className="flex-1 resize-none rounded-lg border border-th-border bg-th-surface px-4 py-2.5 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-blue-500/50 focus:outline-hidden focus:ring-1 focus:ring-blue-500/30"
+            />
+            <button
+              onClick={streaming ? cancel : send}
+              disabled={!streaming && !input.trim()}
+              className={cn(
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-hidden',
+                streaming ? 'bg-rose-600 text-white hover:bg-rose-500' : 'bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40'
+              )}
+            >
+              {streaming ? <StopCircle className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            </button>
           </div>
           <p className="mt-2 text-[11px] text-th-text-faint">Enter to send · Shift+Enter for new line · Configure API key in Settings → AI</p>
         </div>

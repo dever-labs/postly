@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseJsonField, normalizeRequest, normalizeGroup, kvpToRecord, serializeRequest } from '../normalizers'
+import { parseJsonField, normalizeRequest, normalizeGroup, normalizeFolder, kvpToRecord, serializeRequest } from '../normalizers'
 
-// ---------------------------------------------------------------------------
-// parseJsonField
-// ---------------------------------------------------------------------------
 describe('parseJsonField', () => {
   it('parses valid JSON string', () => {
     expect(parseJsonField('{"a":1}', {})).toEqual({ a: 1 })
@@ -31,64 +28,60 @@ describe('parseJsonField', () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// normalizeRequest
-// ---------------------------------------------------------------------------
 describe('normalizeRequest', () => {
   const base = {
     id: 'req-1',
-    group_id: 'grp-1',
+    folder_id: 'fld-1',
     name: 'Get Users',
     method: 'GET',
     url: '/api/users',
   }
 
   it('maps camelCase and snake_case fields', () => {
-    const r = normalizeRequest(base)
-    expect(r.id).toBe('req-1')
-    expect(r.groupId).toBe('grp-1')
-    expect(r.name).toBe('Get Users')
+    const request = normalizeRequest(base)
+    expect(request.id).toBe('req-1')
+    expect(request.folderId).toBe('fld-1')
+    expect(request.name).toBe('Get Users')
+  })
+
+  it('maps folder_id to folderId', () => {
+    const request = normalizeRequest({ ...base, folder_id: 'folder-from-snake' })
+    expect(request.folderId).toBe('folder-from-snake')
   })
 
   it('defaults method to GET', () => {
-    const r = normalizeRequest({ ...base, method: undefined })
-    expect(r.method).toBe('GET')
+    expect(normalizeRequest({ ...base, method: undefined }).method).toBe('GET')
   })
 
   it('defaults url to empty string', () => {
-    const r = normalizeRequest({ ...base, url: undefined })
-    expect(r.url).toBe('')
+    expect(normalizeRequest({ ...base, url: undefined }).url).toBe('')
   })
 
   it('defaults bodyType to none', () => {
-    const r = normalizeRequest(base)
-    expect(r.bodyType).toBe('none')
+    expect(normalizeRequest(base).bodyType).toBe('none')
   })
 
   it('defaults protocol to http', () => {
-    const r = normalizeRequest(base)
-    expect(r.protocol).toBe('http')
+    expect(normalizeRequest(base).protocol).toBe('http')
   })
 
   it('defaults authType to none', () => {
-    const r = normalizeRequest(base)
-    expect(r.authType).toBe('none')
+    expect(normalizeRequest(base).authType).toBe('none')
   })
 
   it('parses params JSON string', () => {
-    const r = normalizeRequest({ ...base, params: '[{"id":"1","key":"q","value":"test","enabled":true}]' })
-    expect(r.params).toHaveLength(1)
-    expect(r.params[0].key).toBe('q')
+    const request = normalizeRequest({ ...base, params: '[{"id":"1","key":"q","value":"test","enabled":true}]' })
+    expect(request.params).toHaveLength(1)
+    expect(request.params[0].key).toBe('q')
   })
 
   it('defaults params to empty array on bad JSON', () => {
-    const r = normalizeRequest({ ...base, params: 'bad' })
-    expect(r.params).toEqual([])
+    expect(normalizeRequest({ ...base, params: 'bad' }).params).toEqual([])
   })
 
-  it('prefers camelCase over snake_case for groupId', () => {
-    const r = normalizeRequest({ ...base, groupId: 'camel', group_id: 'snake' })
-    expect(r.groupId).toBe('camel')
+  it('prefers camelCase over snake_case for folderId', () => {
+    const request = normalizeRequest({ ...base, folderId: 'camel', folder_id: 'snake' })
+    expect(request.folderId).toBe('camel')
   })
 
   it('maps isDirty correctly', () => {
@@ -101,26 +94,84 @@ describe('normalizeRequest', () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// normalizeGroup
-// ---------------------------------------------------------------------------
-describe('normalizeGroup', () => {
+describe('normalizeFolder', () => {
   const base = {
-    id: 'grp-1',
-    collection_id: 'col-1',
+    id: 'fld-1',
+    parent_id: 'col-1',
     name: 'Auth',
   }
 
-  it('maps collection_id to collectionId', () => {
-    expect(normalizeGroup(base).collectionId).toBe('col-1')
+  it('normalizes all folder fields from snake_case input', () => {
+    const folder = normalizeFolder({
+      id: 'fld-1',
+      parent_id: 'col-1',
+      name: 'Auth',
+      description: 'Folder description',
+      source: 'local',
+      hidden: 0,
+      collapsed: 0,
+      sort_order: 7,
+      created_at: 123,
+      updated_at: 456,
+      auth_type: 'bearer',
+      auth_config: '{"token":"abc"}',
+      ssl_verification: 'disabled',
+    })
+
+    expect(folder).toEqual({
+      id: 'fld-1',
+      parentId: 'col-1',
+      name: 'Auth',
+      description: 'Folder description',
+      source: 'local',
+      sourceMeta: undefined,
+      integrationId: undefined,
+      authType: 'bearer',
+      authConfig: { token: 'abc' },
+      sslVerification: 'disabled',
+      hidden: false,
+      collapsed: false,
+      sortOrder: 7,
+      createdAt: 123,
+      updatedAt: 456,
+    })
+  })
+
+  it('maps parent_id to parentId', () => {
+    expect(normalizeFolder(base).parentId).toBe('col-1')
+  })
+
+  it('handles missing optional fields with defaults', () => {
+    expect(normalizeFolder({ id: 'fld-2', name: 'Empty' })).toEqual({
+      id: 'fld-2',
+      parentId: undefined,
+      name: 'Empty',
+      description: '',
+      source: 'local',
+      sourceMeta: undefined,
+      integrationId: undefined,
+      authType: 'none',
+      authConfig: {},
+      sslVerification: 'inherit',
+      hidden: false,
+      collapsed: false,
+      sortOrder: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    })
+  })
+
+  it('handles camelCase parentId as well as snake_case parent_id', () => {
+    const folder = normalizeFolder({ ...base, parentId: 'camel-parent', parent_id: 'snake-parent' })
+    expect(folder.parentId).toBe('camel-parent')
   })
 
   it('defaults collapsed to false', () => {
-    expect(normalizeGroup(base).collapsed).toBe(false)
+    expect(normalizeFolder(base).collapsed).toBe(false)
   })
 
   it('defaults hidden to false', () => {
-    expect(normalizeGroup(base).hidden).toBe(false)
+    expect(normalizeFolder(base).hidden).toBe(false)
   })
 
   it('defaults authType to none', () => {
@@ -132,14 +183,11 @@ describe('normalizeGroup', () => {
   })
 
   it('parses authConfig JSON', () => {
-    const r = normalizeGroup({ ...base, auth_config: '{"token":"abc"}' })
-    expect(r.authConfig).toEqual({ token: 'abc' })
+    const folder = normalizeGroup({ ...base, auth_config: '{"token":"abc"}' })
+    expect(folder.authConfig).toEqual({ token: 'abc' })
   })
 })
 
-// ---------------------------------------------------------------------------
-// kvpToRecord
-// ---------------------------------------------------------------------------
 describe('kvpToRecord', () => {
   it('converts enabled pairs to a record', () => {
     const result = kvpToRecord([
@@ -179,12 +227,9 @@ describe('kvpToRecord', () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// serializeRequest
-// ---------------------------------------------------------------------------
 describe('serializeRequest', () => {
   const req = {
-    id: 'r1', groupId: 'g1', name: 'Test', method: 'POST' as const,
+    id: 'r1', folderId: 'f1', name: 'Test', method: 'POST' as const,
     url: '/api', params: [{ id: '1', key: 'q', value: '1', enabled: true }],
     headers: [{ id: '2', key: 'Accept', value: '*/*', enabled: true }],
     bodyType: 'json' as const, bodyContent: '{}',
@@ -194,26 +239,26 @@ describe('serializeRequest', () => {
   }
 
   it('stringifies params', () => {
-    const s = serializeRequest(req)
-    expect(typeof s.params).toBe('string')
-    expect(JSON.parse(s.params as string)).toEqual(req.params)
+    const serialized = serializeRequest(req)
+    expect(typeof serialized.params).toBe('string')
+    expect(JSON.parse(serialized.params as string)).toEqual(req.params)
   })
 
   it('stringifies headers', () => {
-    const s = serializeRequest(req)
-    expect(typeof s.headers).toBe('string')
+    const serialized = serializeRequest(req)
+    expect(typeof serialized.headers).toBe('string')
   })
 
   it('stringifies authConfig', () => {
-    const s = serializeRequest(req)
-    expect(JSON.parse(s.authConfig as string)).toEqual({ token: 'abc' })
+    const serialized = serializeRequest(req)
+    expect(JSON.parse(serialized.authConfig as string)).toEqual({ token: 'abc' })
   })
 
   it('preserves non-serialized fields', () => {
-    const s = serializeRequest(req)
-    expect(s.id).toBe('r1')
-    expect(s.url).toBe('/api')
-    expect(s.method).toBe('POST')
+    const serialized = serializeRequest(req)
+    expect(serialized.id).toBe('r1')
+    expect(serialized.url).toBe('/api')
+    expect(serialized.method).toBe('POST')
   })
 
   it('does not mutate the original request', () => {

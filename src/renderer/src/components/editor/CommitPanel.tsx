@@ -17,7 +17,7 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
   const addToast = useUIStore((s) => s.addToast)
   const theme = useUIStore((s) => s.theme)
   const requests = useCollectionsStore((s) => s.requests)
-  const groups = useCollectionsStore((s) => s.groups)
+  const folders = useCollectionsStore((s) => s.folders)
   const collections = useCollectionsStore((s) => s.collections)
   const [commitMessage, setCommitMessage] = useState('')
   const [branches, setBranches] = useState<string[]>([])
@@ -32,8 +32,11 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
 
   useEffect(() => {
     const request = requests.find((r) => r.id === requestId)
-    const group = request ? groups.find((g) => g.id === request.groupId) : undefined
-    const collection = group ? collections.find((c) => c.id === group.collectionId) : undefined
+    let folder = request ? folders.find((item) => item.id === request.folderId) : undefined
+    while (folder?.parentId) {
+      folder = folders.find((item) => item.id === folder?.parentId)
+    }
+    const collection = folder ? collections.find((item) => item.id === folder.id) : undefined
     const sourceMeta = collection?.sourceMeta ?? {}
 
     if (source === 'github') {
@@ -49,7 +52,7 @@ export function CommitPanel({ requestId, source }: CommitPanelProps) {
         if (data) { setBranches(data); setSelectedBranch(data[0] ?? ''); setFromBranch(data[0] ?? '') }
       })
     }
-  }, [requestId, source, requests, groups, collections])
+  }, [requestId, source, requests, folders, collections])
 
   const handleShowDiff = async () => {
     if (showDiff) { setShowDiff(false); return }

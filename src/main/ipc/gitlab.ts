@@ -17,6 +17,21 @@ function getGitLabSettings(): GitLabSettings {
   return JSON.parse(row.value) as GitLabSettings
 }
 
+function getRootSourceMeta(folderId: string): Record<string, string> {
+  const row = queryOne<{ source_meta: string | null }>(
+    `WITH RECURSIVE lineage AS (
+       SELECT id, parent_id, source_meta FROM folders WHERE id = ?
+       UNION ALL
+       SELECT f.id, f.parent_id, f.source_meta
+       FROM folders f
+       JOIN lineage l ON l.parent_id = f.id
+     )
+     SELECT source_meta FROM lineage WHERE parent_id IS NULL LIMIT 1`,
+    [folderId]
+  )
+  return row?.source_meta ? JSON.parse(row.source_meta) : {}
+}
+
 export function registerGitLabHandlers(): void {
   ipcMain.handle('postly:gitlab:sync', async () => {
     try { await discoverApis(getGitLabSettings()); return { data: true } }
@@ -62,10 +77,7 @@ export function registerGitLabHandlers(): void {
 
       const scmPath = String(request['scm_path'] ?? '')
       const localContent = String(request['body_content'] ?? '')
-
-      const group = queryOne<{ collection_id: string }>('SELECT collection_id FROM groups WHERE id = ?', [String(request['group_id'])])
-      const collection = group ? queryOne<{ source_meta: string }>('SELECT source_meta FROM collections WHERE id = ?', [group.collection_id]) : undefined
-      const sourceMeta = collection?.source_meta ? JSON.parse(collection.source_meta) : {}
+      const sourceMeta = getRootSourceMeta(String(request['folder_id']))
       const projectId = String(sourceMeta.projectId ?? '')
 
       const remoteContent = await getFileContent(settings.token, settings.baseUrl, projectId, scmPath, 'main')

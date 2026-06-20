@@ -28,30 +28,57 @@ beforeEach(() => {
   registerRequestHandlers()
 })
 
-// ── list ──────────────────────────────────────────────────────────────────────
-
 describe('postly:requests:list', () => {
-  it('returns requests for a group ordered by sort_order', async () => {
-    const requests = [{ id: 'r1', group_id: 'g1', name: 'Get Users' }]
+  it('returns requests for a folder ordered by sort_order', async () => {
+    const requests = [{ id: 'r1', folder_id: 'f1', name: 'Get Users' }]
     mockQueryAll.mockReturnValueOnce(requests)
 
-    const result = await handlers['postly:requests:list'](null, { groupId: 'g1' }) as { data: unknown }
+    const result = await handlers['postly:requests:list'](null, { folderId: 'f1' }) as { data: unknown }
     expect(result.data).toEqual(requests)
 
     const [sql, params] = mockQueryAll.mock.calls[0] as [string, unknown[]]
-    expect(sql).toContain('WHERE group_id = ?')
-    expect(params).toContain('g1')
+    expect(sql).toContain('WHERE folder_id = ?')
+    expect(params).toContain('f1')
   })
 
   it('returns error string on db failure', async () => {
     mockQueryAll.mockImplementationOnce(() => { throw new Error('db error') })
 
-    const result = await handlers['postly:requests:list'](null, { groupId: 'g1' }) as { error: string }
+    const result = await handlers['postly:requests:list'](null, { folderId: 'f1' }) as { error: string }
     expect(result.error).toContain('db error')
   })
 })
 
-// ── get ───────────────────────────────────────────────────────────────────────
+describe('postly:requests:list-all', () => {
+  it('returns all requests ordered by sort_order with no folder filter', async () => {
+    const requests = [
+      { id: 'r1', folder_id: 'f1', sort_order: 0, name: 'Get Users' },
+      { id: 'r2', folder_id: 'f2', sort_order: 1, name: 'Get Health' },
+    ]
+    mockQueryAll.mockReturnValueOnce(requests)
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { data: unknown }
+    expect(result.data).toEqual(requests)
+
+    const [sql, params] = mockQueryAll.mock.calls[0] as [string, unknown[] | undefined]
+    expect(sql).toBe('SELECT * FROM requests ORDER BY sort_order ASC')
+    expect(params).toBeUndefined()
+  })
+
+  it('returns an empty array when no requests exist', async () => {
+    mockQueryAll.mockReturnValueOnce([])
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { data: unknown[] }
+    expect(result.data).toEqual([])
+  })
+
+  it('wraps database errors', async () => {
+    mockQueryAll.mockImplementationOnce(() => { throw new Error('db error') })
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { error: string }
+    expect(result.error).toContain('db error')
+  })
+})
 
 describe('postly:requests:get', () => {
   it('returns a single request by id', async () => {
@@ -71,26 +98,24 @@ describe('postly:requests:get', () => {
   })
 })
 
-// ── create ────────────────────────────────────────────────────────────────────
-
 describe('postly:requests:create', () => {
   it('inserts a row and returns the new request', async () => {
-    const created = { id: 'new-id', group_id: 'g1', name: 'New Request', method: 'GET' }
+    const created = { id: 'new-id', folder_id: 'f1', name: 'New Request', method: 'GET' }
     mockQueryOne.mockReturnValueOnce(created)
 
-    const result = await handlers['postly:requests:create'](null, { groupId: 'g1' }) as { data: unknown }
+    const result = await handlers['postly:requests:create'](null, { folderId: 'f1' }) as { data: unknown }
     expect(result.data).toEqual(created)
     expect(mockRun).toHaveBeenCalledOnce()
 
     const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT INTO requests')
-    expect(params).toContain('g1')
+    expect(params).toContain('f1')
   })
 
   it('uses provided name and method', async () => {
     mockQueryOne.mockReturnValueOnce({ id: 'x' })
 
-    await handlers['postly:requests:create'](null, { groupId: 'g1', name: 'My Request', method: 'POST' })
+    await handlers['postly:requests:create'](null, { folderId: 'f1', name: 'My Request', method: 'POST' })
 
     const [, params] = mockRun.mock.calls[0] as [string, unknown[]]
     expect(params).toContain('My Request')
@@ -100,7 +125,7 @@ describe('postly:requests:create', () => {
   it('defaults to name "New Request" and method "GET" when omitted', async () => {
     mockQueryOne.mockReturnValueOnce({ id: 'x' })
 
-    await handlers['postly:requests:create'](null, { groupId: 'g1' })
+    await handlers['postly:requests:create'](null, { folderId: 'f1' })
 
     const [, params] = mockRun.mock.calls[0] as [string, unknown[]]
     expect(params).toContain('New Request')
@@ -110,12 +135,10 @@ describe('postly:requests:create', () => {
   it('returns error string on db failure', async () => {
     mockRun.mockImplementationOnce(() => { throw new Error('constraint') })
 
-    const result = await handlers['postly:requests:create'](null, { groupId: 'g1' }) as { error: string }
+    const result = await handlers['postly:requests:create'](null, { folderId: 'f1' }) as { error: string }
     expect(result.error).toContain('constraint')
   })
 })
-
-// ── update ────────────────────────────────────────────────────────────────────
 
 describe('postly:requests:update', () => {
   it('updates mapped fields and sets updated_at', async () => {
@@ -148,6 +171,13 @@ describe('postly:requests:update', () => {
     expect(sql).toContain('auth_config = ?')
   })
 
+  it('maps folderId to folder_id', async () => {
+    await handlers['postly:requests:update'](null, { id: 'r1', folderId: 'f2' })
+
+    const [sql] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('folder_id = ?')
+  })
+
   it('returns data:true with no db call when no fields provided', async () => {
     const result = await handlers['postly:requests:update'](null, { id: 'r1' }) as { data: unknown }
     expect(result.data).toBe(true)
@@ -161,8 +191,6 @@ describe('postly:requests:update', () => {
     expect(result.error).toContain('lock')
   })
 })
-
-// ── delete ────────────────────────────────────────────────────────────────────
 
 describe('postly:requests:delete', () => {
   it('deletes the request by id', async () => {
@@ -181,8 +209,6 @@ describe('postly:requests:delete', () => {
     expect(result.error).toContain('fk')
   })
 })
-
-// ── mark-dirty ────────────────────────────────────────────────────────────────
 
 describe('postly:requests:mark-dirty', () => {
   it('sets is_dirty=1 when isDirty=true', async () => {

@@ -3,7 +3,7 @@ import { buildSystemPrompt } from '../aiContext'
 import type { AiContext } from '../aiContext'
 
 const makeRequest = (overrides = {}) => ({
-  id: 'r1', groupId: 'g1', name: 'Get Users', method: 'GET' as const,
+  id: 'r1', folderId: 'f1', name: 'Get Users', method: 'GET' as const,
   url: '/api/users', params: [], headers: [], bodyType: 'none' as const,
   bodyContent: '', authType: 'none' as const, authConfig: {},
   sslVerification: 'inherit' as const, protocol: 'http' as const,
@@ -24,8 +24,7 @@ describe('buildSystemPrompt – collection context', () => {
   })
 
   it('includes REST best practices', () => {
-    const prompt = buildSystemPrompt(ctx)
-    expect(prompt).toMatch(/REST|HTTP/i)
+    expect(buildSystemPrompt(ctx)).toMatch(/REST|HTTP/i)
   })
 
   it('reports no existing endpoints when list is empty', () => {
@@ -33,30 +32,26 @@ describe('buildSystemPrompt – collection context', () => {
   })
 
   it('lists existing endpoints when present', () => {
-    const ctxWithRequests: AiContext = {
-      ...ctx,
-      existingRequests: [makeRequest({ name: 'List Posts', url: '/api/posts' })],
-    }
-    const prompt = buildSystemPrompt(ctxWithRequests)
+    const prompt = buildSystemPrompt({ ...ctx, existingRequests: [makeRequest({ name: 'List Posts', url: '/api/posts' })] })
     expect(prompt).toContain('List Posts')
     expect(prompt).toContain('/api/posts')
   })
 
   it('includes description when provided', () => {
-    const ctxWithDesc: AiContext = { ...ctx, description: 'Blog management API' }
-    expect(buildSystemPrompt(ctxWithDesc)).toContain('Blog management API')
+    expect(buildSystemPrompt({ ...ctx, description: 'Blog management API' })).toContain('Blog management API')
   })
 })
 
 describe('buildSystemPrompt – group context', () => {
   const ctx: AiContext = {
     type: 'group',
+    folderId: 'f1',
     name: 'Auth Endpoints',
     collectionName: 'My API',
     existingRequests: [],
   }
 
-  it('mentions the group name', () => {
+  it('mentions the folder name', () => {
     expect(buildSystemPrompt(ctx)).toContain('Auth Endpoints')
   })
 
@@ -72,6 +67,7 @@ describe('buildSystemPrompt – group context', () => {
 describe('buildSystemPrompt – request context', () => {
   const ctx: AiContext = {
     type: 'request',
+    folderId: 'f1',
     name: 'Get User by ID',
     existingRequests: [],
     currentRequest: makeRequest({
@@ -94,24 +90,20 @@ describe('buildSystemPrompt – request context', () => {
   })
 
   it('produces a review-oriented prompt', () => {
-    const prompt = buildSystemPrompt(ctx)
-    expect(prompt).toMatch(/review|best practice|improvement/i)
+    expect(buildSystemPrompt(ctx)).toMatch(/review|best practice|improvement/i)
   })
 })
 
 describe('buildSystemPrompt – protocol best practices', () => {
   it('includes GraphQL guidance', () => {
-    const ctx: AiContext = { type: 'collection', name: 'GQL', existingRequests: [] }
-    expect(buildSystemPrompt(ctx)).toMatch(/graphql/i)
+    expect(buildSystemPrompt({ type: 'collection', name: 'GQL', existingRequests: [] })).toMatch(/graphql/i)
   })
 
   it('includes WebSocket guidance', () => {
-    const ctx: AiContext = { type: 'collection', name: 'WS', existingRequests: [] }
-    expect(buildSystemPrompt(ctx)).toMatch(/websocket/i)
+    expect(buildSystemPrompt({ type: 'collection', name: 'WS', existingRequests: [] })).toMatch(/websocket/i)
   })
 
   it('includes endpoint block format spec', () => {
-    const ctx: AiContext = { type: 'collection', name: 'API', existingRequests: [] }
-    expect(buildSystemPrompt(ctx)).toContain('```endpoints')
+    expect(buildSystemPrompt({ type: 'collection', name: 'API', existingRequests: [] })).toContain('```endpoints')
   })
 })

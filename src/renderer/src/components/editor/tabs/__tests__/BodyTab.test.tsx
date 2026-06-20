@@ -2,14 +2,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type React from 'react'
 import type { BodyType } from '@/types'
 
 // ── Monaco mock ───────────────────────────────────────────────────────────────
 // @monaco-editor/react is a heavy runtime dependency not available in jsdom.
 
 vi.mock('@monaco-editor/react', async () => {
-  const React = await import('react')
   const Editor = ({ value, onChange, 'data-testid': testId }: {
     value?: string
     onChange?: (v: string) => void

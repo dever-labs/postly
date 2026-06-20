@@ -74,41 +74,62 @@ describe('parseOpenApiToRequests — OAS3', () => {
     mockDereference.mockResolvedValue(OAS3_SPEC as never)
   })
 
-  it('creates one group per unique tag', async () => {
-    const { groups } = await parseOpenApiToRequests({}, 'col-1')
-    const names = groups.map((g) => g.name)
+  it('creates one folder per unique tag', async () => {
+    const { folders } = await parseOpenApiToRequests({}, 'col-1')
+    const names = folders.map((folder) => folder.name)
     expect(names).toContain('Users')
     expect(names).toContain('Products')
-    expect(groups).toHaveLength(2)
+    expect(folders).toHaveLength(2)
   })
 
-  it('sets collectionId on every group', async () => {
-    const { groups } = await parseOpenApiToRequests({}, 'col-1')
-    for (const g of groups) expect(g.collectionId).toBe('col-1')
+  it('places a multi-tag operation in the first tag folder', async () => {
+    const spec = {
+      ...OAS3_SPEC,
+      paths: {
+        '/reports': {
+          get: {
+            tags: ['Reports', 'Admin'],
+            summary: 'List reports',
+          }
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const reportsFolder = folders.find((folder) => folder.name === 'Reports')
+
+    expect(folders.map((folder) => folder.name)).toEqual(['Reports'])
+    expect(reportsFolder).toBeDefined()
+    expect(requests[0].folderId).toBe(reportsFolder?.id)
+  })
+
+  it('sets parentId on every folder', async () => {
+    const { folders } = await parseOpenApiToRequests({}, 'col-1')
+    for (const folder of folders) expect(folder.parentId).toBe('col-1')
   })
 
   it('creates a request for every operation', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    // GET /users, POST /users, GET /users/{id}, DELETE /users/{id}, GET /products = 5
     expect(requests).toHaveLength(5)
   })
 
   it('prepends server base URL to each request URL', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    for (const r of requests) {
-      expect(r.url).toMatch(/^https:\/\/api\.example\.com\/v1\//)
+    for (const request of requests) {
+      expect(request.url).toMatch(/^https:\/\/api\.example\.com\/v1\//)
     }
   })
 
   it('uses summary as request name when available', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const listUsers = requests.find((r) => r.method === 'GET' && r.url.endsWith('/users'))
+    const listUsers = requests.find((request) => request.method === 'GET' && request.url.endsWith('/users'))
     expect(listUsers?.name).toBe('List users')
   })
 
   it('falls back to operationId when summary is absent', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const deleteUser = requests.find((r) => r.method === 'DELETE')
+    const deleteUser = requests.find((request) => request.method === 'DELETE')
     expect(deleteUser?.name).toBe('deleteUser')
   })
 
@@ -124,65 +145,66 @@ describe('parseOpenApiToRequests — OAS3', () => {
 
   it('uppercases the HTTP method', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    for (const r of requests) {
-      expect(r.method).toBe(r.method.toUpperCase())
+    for (const request of requests) {
+      expect(request.method).toBe(request.method.toUpperCase())
     }
   })
 
   it('extracts query parameters', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const listUsers = requests.find((r) => r.method === 'GET' && r.url.endsWith('/users'))
+    const listUsers = requests.find((request) => request.method === 'GET' && request.url.endsWith('/users'))
     if (!listUsers) throw new Error('GET /users request not found')
     const params = JSON.parse(listUsers.params) as Array<{ key: string }>
-    expect(params.map((p) => p.key)).toEqual(['page', 'limit'])
+    expect(params.map((param) => param.key)).toEqual(['page', 'limit'])
   })
 
   it('extracts header parameters', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const listUsers = requests.find((r) => r.method === 'GET' && r.url.endsWith('/users'))
+    const listUsers = requests.find((request) => request.method === 'GET' && request.url.endsWith('/users'))
     if (!listUsers) throw new Error('GET /users request not found')
     const headers = JSON.parse(listUsers.headers) as Array<{ key: string }>
-    expect(headers.map((h) => h.key)).toEqual(['X-Tenant-Id'])
+    expect(headers.map((header) => header.key)).toEqual(['X-Tenant-Id'])
   })
 
-  it('assigns requests to the correct group', async () => {
-    const { groups, requests } = await parseOpenApiToRequests({}, 'col-1')
-    const usersGroup = groups.find((g) => g.name === 'Users')
-    const productsGroup = groups.find((g) => g.name === 'Products')
-    if (!usersGroup) throw new Error('Users group not found')
-    if (!productsGroup) throw new Error('Products group not found')
-    const userRequests = requests.filter((r) => r.groupId === usersGroup.id)
-    const productRequests = requests.filter((r) => r.groupId === productsGroup.id)
+  it('assigns requests to the correct folder', async () => {
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const usersFolder = folders.find((folder) => folder.name === 'Users')
+    const productsFolder = folders.find((folder) => folder.name === 'Products')
+    if (!usersFolder) throw new Error('Users folder not found')
+    if (!productsFolder) throw new Error('Products folder not found')
+    const userRequests = requests.filter((request) => request.folderId === usersFolder.id)
+    const productRequests = requests.filter((request) => request.folderId === productsFolder.id)
     expect(userRequests).toHaveLength(4)
     expect(productRequests).toHaveLength(1)
   })
 
   it('initialises all requests with isDirty = 0', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    for (const r of requests) expect(r.isDirty).toBe(0)
+    for (const request of requests) expect(request.isDirty).toBe(0)
   })
 
   it('initialises all requests with authType none', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    for (const r of requests) expect(r.authType).toBe('none')
+    for (const request of requests) expect(request.authType).toBe('none')
   })
 
-  it('assigns incrementing sortOrder to requests', async () => {
-    const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const orders = requests.map((r) => r.sortOrder)
-    expect(orders).toEqual([...Array(requests.length).keys()])
+  it('assigns incrementing sortOrder within each folder', async () => {
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    for (const folder of folders) {
+      const orders = requests.filter((request) => request.folderId === folder.id).map((request) => request.sortOrder)
+      expect(orders).toEqual([...Array(orders.length).keys()])
+    }
   })
 
-  it('assigns unique UUIDs to all groups and requests', async () => {
-    const { groups, requests } = await parseOpenApiToRequests({}, 'col-1')
-    const allIds = [...groups.map((g) => g.id), ...requests.map((r) => r.id)]
-    const unique = new Set(allIds)
-    expect(unique.size).toBe(allIds.length)
+  it('assigns unique UUIDs to all folders and requests', async () => {
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const allIds = [...folders.map((folder) => folder.id), ...requests.map((request) => request.id)]
+    expect(new Set(allIds).size).toBe(allIds.length)
   })
 
   it('uses description from operation when present', async () => {
     const { requests } = await parseOpenApiToRequests({}, 'col-1')
-    const deleteUser = requests.find((r) => r.method === 'DELETE')
+    const deleteUser = requests.find((request) => request.method === 'DELETE')
     expect(deleteUser?.description).toBe('Permanently removes a user')
   })
 })
@@ -213,33 +235,76 @@ describe('parseOpenApiToRequests — Swagger 2.x', () => {
 })
 
 describe('parseOpenApiToRequests — edge cases', () => {
-  it('returns empty groups and requests when paths is absent', async () => {
+  it('returns empty folders and requests when paths is absent', async () => {
     mockDereference.mockResolvedValue({ openapi: '3.0.0' } as never)
     const result = await parseOpenApiToRequests({}, 'col-1')
-    expect(result.groups).toHaveLength(0)
+    expect(result.folders).toHaveLength(0)
     expect(result.requests).toHaveLength(0)
   })
 
-  it('uses "Default" tag group for operations without tags', async () => {
+  it('places untagged operations directly in the parent folder', async () => {
     const spec = {
       openapi: '3.0.0',
       servers: [{ url: '' }],
       paths: { '/ping': { get: { summary: 'Ping' } } }
     }
     mockDereference.mockResolvedValue(spec as never)
-    const { groups } = await parseOpenApiToRequests({}, 'col-1')
-    expect(groups[0].name).toBe('Default')
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    expect(folders).toHaveLength(0)
+    expect(requests[0].folderId).toBe('col-1')
   })
 
-  it('reuses the same group for multiple operations sharing a tag', async () => {
+  it('treats an empty tags array as untagged and keeps the request in the parent folder', async () => {
+    const spec = {
+      openapi: '3.0.0',
+      servers: [{ url: '' }],
+      paths: {
+        '/health': {
+          get: {
+            tags: [],
+            summary: 'Get health',
+          }
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    expect(folders).toHaveLength(0)
+    expect(requests[0].folderId).toBe('col-1')
+  })
+
+  it('reuses the same folder for multiple operations sharing a tag', async () => {
     mockDereference.mockResolvedValue(OAS3_SPEC as never)
-    const { groups, requests } = await parseOpenApiToRequests({}, 'col-1')
-    const usersGroup = groups.find((g) => g.name === 'Users')
-    if (!usersGroup) throw new Error('Users group not found')
-    const usersRequests = requests.filter((r) => r.groupId === usersGroup.id)
-    // GET /users, POST /users, GET /users/{id}, DELETE /users/{id}
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const usersFolder = folders.find((folder) => folder.name === 'Users')
+    if (!usersFolder) throw new Error('Users folder not found')
+    const usersRequests = requests.filter((request) => request.folderId === usersFolder.id)
     expect(usersRequests).toHaveLength(4)
-    // Only one Users group was created
-    expect(groups.filter((g) => g.name === 'Users')).toHaveLength(1)
+    expect(folders.filter((folder) => folder.name === 'Users')).toHaveLength(1)
+  })
+
+  it('sets request folderId values to the deduplicated folder id for shared tags', async () => {
+    const spec = {
+      openapi: '3.0.0',
+      servers: [{ url: '' }],
+      paths: {
+        '/users': {
+          get: { tags: ['Users'], summary: 'List users' },
+          post: { tags: ['Users'], summary: 'Create user' },
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const usersFolder = folders.find((folder) => folder.name === 'Users')
+
+    expect(folders.filter((folder) => folder.name === 'Users')).toHaveLength(1)
+    expect(usersFolder).toBeDefined()
+    expect(requests.map((request) => request.folderId)).toEqual([
+      usersFolder?.id,
+      usersFolder?.id,
+    ])
   })
 })

@@ -140,7 +140,7 @@ describe('syncCatalog — standalone API entity', () => {
   it('inserts a new collection row for the API', async () => {
     await syncCatalog(settings())
     const insertCalls = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO collections'),
+      (sql as string).startsWith('INSERT INTO folders') && (sql as string).includes("'backstage'"),
     )
     expect(insertCalls).toHaveLength(1)
     const [sql, params] = insertCalls[0]
@@ -152,10 +152,10 @@ describe('syncCatalog — standalone API entity', () => {
     vi.mocked(queryOne).mockReturnValue({ id: 'existing-coll-id' })
     await syncCatalog(settings())
     const updateCalls = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('UPDATE collections'),
+      (sql as string).startsWith('UPDATE folders'),
     )
     const insertCalls = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO collections'),
+      (sql as string).startsWith('INSERT INTO folders') && (sql as string).includes("'backstage'"),
     )
     expect(updateCalls).toHaveLength(1)
     expect(insertCalls).toHaveLength(0)
@@ -164,7 +164,7 @@ describe('syncCatalog — standalone API entity', () => {
   it('inserts a group row for the pets tag', async () => {
     await syncCatalog(settings())
     const groupInserts = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO groups'),
+      (sql as string).startsWith('INSERT INTO folders'),
     )
     expect(groupInserts.length).toBeGreaterThanOrEqual(1)
     const groupNames = groupInserts.map(([, params]) => (params as unknown[])[2])
@@ -182,7 +182,7 @@ describe('syncCatalog — standalone API entity', () => {
   it('clears old groups and requests before re-importing', async () => {
     await syncCatalog(settings())
     const deleteGroupsCalls = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('DELETE FROM groups'),
+      (sql as string).startsWith('DELETE FROM folders'),
     )
     const deleteRequestsCalls = vi.mocked(run).mock.calls.filter(([sql]) =>
       (sql as string).startsWith('DELETE FROM requests'),
@@ -347,7 +347,7 @@ describe('syncCatalog — component owning API via providesApis', () => {
     expect(result.synced).toBe(1)
 
     const collectionInserts = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO collections'),
+      (sql as string).startsWith('INSERT INTO folders'),
     )
     // The collection should be named after the component, not the API
     expect(collectionInserts[0][1] as unknown[]).toContain('my-service')
@@ -389,7 +389,7 @@ describe('syncCatalog — component owning API via relations', () => {
     expect(result.synced).toBe(1)
 
     const collectionInserts = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO collections'),
+      (sql as string).startsWith('INSERT INTO folders'),
     )
     expect(collectionInserts[0][1] as unknown[]).toContain('my-service')
   })
@@ -424,7 +424,7 @@ describe('syncCatalog — GraphQL API type', () => {
     expect(result.errors).toHaveLength(0)
 
     const groupInserts = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO groups'),
+      (sql as string).startsWith('INSERT INTO folders'),
     )
     const groupNames = groupInserts.map(([, params]) => (params as unknown[])[2])
     expect(groupNames).toContain('GraphQL Schema')
@@ -466,7 +466,7 @@ describe('syncCatalog — gRPC API type', () => {
     expect(result.errors).toHaveLength(0)
 
     const groupInserts = vi.mocked(run).mock.calls.filter(([sql]) =>
-      (sql as string).startsWith('INSERT INTO groups'),
+      (sql as string).startsWith('INSERT INTO folders'),
     )
     const groupNames = groupInserts.map(([, params]) => (params as unknown[])[2])
     expect(groupNames).toContain('gRPC Schema')
