@@ -95,3 +95,61 @@ describe('postly:collections:update', () => {
     expect(params).toContain('root-1')
   })
 })
+
+describe('postly:reorder', () => {
+  it('updates sort_order for a folder without changing parent', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'folder',
+      updates: [{ id: 'f1', sortOrder: 2 }],
+    })
+
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('sort_order = ?')
+    expect(sql).not.toContain('parent_id')
+    expect(params).toContain(2)
+  })
+
+  it('sets parent_id to a new folder id when moving a folder between parents', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'folder',
+      updates: [{ id: 'f1', sortOrder: 0, newParentId: 'parent-2' }],
+    })
+
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('parent_id = ?')
+    expect(params).toContain('parent-2')
+  })
+
+  it('sets parent_id to NULL when moving a folder to the root level (newParentId = null)', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'folder',
+      updates: [{ id: 'f1', sortOrder: 0, newParentId: null }],
+    })
+
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('parent_id = ?')
+    // null must be passed so SQLite stores NULL — not undefined which would skip the update
+    expect(params).toContain(null)
+  })
+
+  it('does NOT update parent_id when newParentId is absent (reorder within same parent)', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'folder',
+      updates: [{ id: 'f1', sortOrder: 1 }],
+    })
+
+    const [sql] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).not.toContain('parent_id')
+  })
+
+  it('sets folder_id when moving a request to a different folder', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'request',
+      updates: [{ id: 'r1', sortOrder: 0, newParentId: 'f2' }],
+    })
+
+    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('folder_id = ?')
+    expect(params).toContain('f2')
+  })
+})
