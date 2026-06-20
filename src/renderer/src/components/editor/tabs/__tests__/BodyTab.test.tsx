@@ -8,7 +8,7 @@ import type { BodyType } from '@/types'
 // @monaco-editor/react is a heavy runtime dependency not available in jsdom.
 
 vi.mock('@monaco-editor/react', async () => {
-  const React = await import('react')
+  const _React = await import('react')
   const Editor = ({ value, onChange, 'data-testid': testId }: {
     value?: string
     onChange?: (v: string) => void

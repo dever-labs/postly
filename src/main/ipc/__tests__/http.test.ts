@@ -118,7 +118,9 @@ function baseResp() {
 }
 
 async function invoke(req: unknown): Promise<Result> {
-  return state.handlers['postly:http:execute']!(null, req) as Promise<Result>   // eslint-disable-line @typescript-eslint/no-non-null-assertion
+  const handler = state.handlers['postly:http:execute']
+  if (!handler) throw new Error('postly:http:execute handler not registered')
+  return handler(null, req) as Promise<Result>
 }
 
 async function invokeCancel(): Promise<void> {
