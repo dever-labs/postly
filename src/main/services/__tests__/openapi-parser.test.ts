@@ -82,6 +82,28 @@ describe('parseOpenApiToRequests — OAS3', () => {
     expect(folders).toHaveLength(2)
   })
 
+  it('places a multi-tag operation in the first tag folder', async () => {
+    const spec = {
+      ...OAS3_SPEC,
+      paths: {
+        '/reports': {
+          get: {
+            tags: ['Reports', 'Admin'],
+            summary: 'List reports',
+          }
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const reportsFolder = folders.find((folder) => folder.name === 'Reports')
+
+    expect(folders.map((folder) => folder.name)).toEqual(['Reports'])
+    expect(reportsFolder).toBeDefined()
+    expect(requests[0].folderId).toBe(reportsFolder?.id)
+  })
+
   it('sets parentId on every folder', async () => {
     const { folders } = await parseOpenApiToRequests({}, 'col-1')
     for (const folder of folders) expect(folder.parentId).toBe('col-1')
@@ -232,6 +254,26 @@ describe('parseOpenApiToRequests — edge cases', () => {
     expect(requests[0].folderId).toBe('col-1')
   })
 
+  it('treats an empty tags array as untagged and keeps the request in the parent folder', async () => {
+    const spec = {
+      openapi: '3.0.0',
+      servers: [{ url: '' }],
+      paths: {
+        '/health': {
+          get: {
+            tags: [],
+            summary: 'Get health',
+          }
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    expect(folders).toHaveLength(0)
+    expect(requests[0].folderId).toBe('col-1')
+  })
+
   it('reuses the same folder for multiple operations sharing a tag', async () => {
     mockDereference.mockResolvedValue(OAS3_SPEC as never)
     const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
@@ -240,5 +282,29 @@ describe('parseOpenApiToRequests — edge cases', () => {
     const usersRequests = requests.filter((request) => request.folderId === usersFolder.id)
     expect(usersRequests).toHaveLength(4)
     expect(folders.filter((folder) => folder.name === 'Users')).toHaveLength(1)
+  })
+
+  it('sets request folderId values to the deduplicated folder id for shared tags', async () => {
+    const spec = {
+      openapi: '3.0.0',
+      servers: [{ url: '' }],
+      paths: {
+        '/users': {
+          get: { tags: ['Users'], summary: 'List users' },
+          post: { tags: ['Users'], summary: 'Create user' },
+        }
+      }
+    }
+    mockDereference.mockResolvedValue(spec as never)
+
+    const { folders, requests } = await parseOpenApiToRequests({}, 'col-1')
+    const usersFolder = folders.find((folder) => folder.name === 'Users')
+
+    expect(folders.filter((folder) => folder.name === 'Users')).toHaveLength(1)
+    expect(usersFolder).toBeDefined()
+    expect(requests.map((request) => request.folderId)).toEqual([
+      usersFolder?.id,
+      usersFolder?.id,
+    ])
   })
 })

@@ -44,6 +44,11 @@ describe('normalizeRequest', () => {
     expect(request.name).toBe('Get Users')
   })
 
+  it('maps folder_id to folderId', () => {
+    const request = normalizeRequest({ ...base, folder_id: 'folder-from-snake' })
+    expect(request.folderId).toBe('folder-from-snake')
+  })
+
   it('defaults method to GET', () => {
     expect(normalizeRequest({ ...base, method: undefined }).method).toBe('GET')
   })
@@ -96,8 +101,69 @@ describe('normalizeFolder', () => {
     name: 'Auth',
   }
 
+  it('normalizes all folder fields from snake_case input', () => {
+    const folder = normalizeFolder({
+      id: 'fld-1',
+      parent_id: 'col-1',
+      name: 'Auth',
+      description: 'Folder description',
+      source: 'local',
+      hidden: 0,
+      collapsed: 0,
+      sort_order: 7,
+      created_at: 123,
+      updated_at: 456,
+      auth_type: 'bearer',
+      auth_config: '{"token":"abc"}',
+      ssl_verification: 'disabled',
+    })
+
+    expect(folder).toEqual({
+      id: 'fld-1',
+      parentId: 'col-1',
+      name: 'Auth',
+      description: 'Folder description',
+      source: 'local',
+      sourceMeta: undefined,
+      integrationId: undefined,
+      authType: 'bearer',
+      authConfig: { token: 'abc' },
+      sslVerification: 'disabled',
+      hidden: false,
+      collapsed: false,
+      sortOrder: 7,
+      createdAt: 123,
+      updatedAt: 456,
+    })
+  })
+
   it('maps parent_id to parentId', () => {
     expect(normalizeFolder(base).parentId).toBe('col-1')
+  })
+
+  it('handles missing optional fields with defaults', () => {
+    expect(normalizeFolder({ id: 'fld-2', name: 'Empty' })).toEqual({
+      id: 'fld-2',
+      parentId: undefined,
+      name: 'Empty',
+      description: '',
+      source: 'local',
+      sourceMeta: undefined,
+      integrationId: undefined,
+      authType: 'none',
+      authConfig: {},
+      sslVerification: 'inherit',
+      hidden: false,
+      collapsed: false,
+      sortOrder: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    })
+  })
+
+  it('handles camelCase parentId as well as snake_case parent_id', () => {
+    const folder = normalizeFolder({ ...base, parentId: 'camel-parent', parent_id: 'snake-parent' })
+    expect(folder.parentId).toBe('camel-parent')
   })
 
   it('defaults collapsed to false', () => {

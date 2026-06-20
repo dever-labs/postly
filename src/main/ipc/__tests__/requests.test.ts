@@ -49,6 +49,37 @@ describe('postly:requests:list', () => {
   })
 })
 
+describe('postly:requests:list-all', () => {
+  it('returns all requests ordered by sort_order with no folder filter', async () => {
+    const requests = [
+      { id: 'r1', folder_id: 'f1', sort_order: 0, name: 'Get Users' },
+      { id: 'r2', folder_id: 'f2', sort_order: 1, name: 'Get Health' },
+    ]
+    mockQueryAll.mockReturnValueOnce(requests)
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { data: unknown }
+    expect(result.data).toEqual(requests)
+
+    const [sql, params] = mockQueryAll.mock.calls[0] as [string, unknown[] | undefined]
+    expect(sql).toBe('SELECT * FROM requests ORDER BY sort_order ASC')
+    expect(params).toBeUndefined()
+  })
+
+  it('returns an empty array when no requests exist', async () => {
+    mockQueryAll.mockReturnValueOnce([])
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { data: unknown[] }
+    expect(result.data).toEqual([])
+  })
+
+  it('wraps database errors', async () => {
+    mockQueryAll.mockImplementationOnce(() => { throw new Error('db error') })
+
+    const result = await handlers['postly:requests:list-all'](null, undefined) as { error: string }
+    expect(result.error).toContain('db error')
+  })
+})
+
 describe('postly:requests:get', () => {
   it('returns a single request by id', async () => {
     const req = { id: 'r1', name: 'Get Users' }
