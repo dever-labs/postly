@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import axios from 'axios'
 import https from 'https'
 import crypto from 'crypto'
-import yaml from 'js-yaml'
+import { load as yamlLoad } from 'js-yaml'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 
@@ -51,7 +51,7 @@ function resolveOpenApiSpec(definition: string | Record<string, unknown>): objec
   if (typeof definition === 'object' && Object(definition) === definition) return definition
   if (typeof definition !== 'string' || !definition.trim()) return null
   try {
-    const parsed = yaml.load(definition)
+    const parsed = yamlLoad(definition)
     if (parsed && typeof parsed === 'object') return parsed as object
   } catch { /* not valid YAML/JSON */ }
   return null

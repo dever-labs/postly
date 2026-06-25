@@ -11,7 +11,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { tmpdir } from 'os'
 import net from 'net'
-import yaml from 'js-yaml'
+import { dump as yamlDump } from 'js-yaml'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -240,7 +240,7 @@ export class MocklyServer {
       }))
     }
 
-    writeFileSync(cfgPath, yaml.dump(config), 'utf-8')
+    writeFileSync(cfgPath, yamlDump(config), 'utf-8')
     return cfgPath
   }
 
