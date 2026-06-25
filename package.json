@@ -174,7 +174,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "happy-dom": "^20.10.6",
     "husky": "^9.1.7",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^5.0.0",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.15",
     "rolldown": "^1.1.2",
