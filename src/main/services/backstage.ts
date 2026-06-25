@@ -70,9 +70,8 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
   const headers: Record<string, string> = {}
   if (settings.token) headers['Authorization'] = `Bearer ${settings.token}`
 
-  // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
   const httpsAgent = settings.sslVerification === false
-    ? new https.Agent({ rejectUnauthorized: false })
+    ? new https.Agent({ rejectUnauthorized: false }) // codeql[js/disabling-certificate-validation] -- intentional: user-controlled setting (Skip SSL verification toggle)
     : undefined
 
   const [apisRes, compsRes] = await Promise.all([
@@ -231,9 +230,8 @@ export async function authenticateWithBackstageGuest(
   options: { sslVerification?: boolean } = {},
 ): Promise<{ token: string; user: { name: string; email?: string; picture?: string } }> {
   const base = baseUrl.replace(/\/$/, '')
-  // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
   const httpsAgent = options.sslVerification === false
-    ? new https.Agent({ rejectUnauthorized: false })
+    ? new https.Agent({ rejectUnauthorized: false }) // codeql[js/disabling-certificate-validation] -- intentional: user-controlled setting (Skip SSL verification toggle)
     : undefined
   const resp = await axios.post<{
     backstageIdentity?: { token?: string }
