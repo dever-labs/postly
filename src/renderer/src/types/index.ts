@@ -112,6 +112,8 @@ export interface OAuthConfig {
   tokenUrl: string
   scopes: string
   redirectUri: string
+  /** Extra parameters appended to every token request body — for providers that require non-standard fields (e.g. `audience`, `resource`). */
+  extraParams?: Record<string, string>
 }
 
 export interface LogEntry {

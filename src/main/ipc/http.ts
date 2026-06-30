@@ -166,6 +166,9 @@ export function registerHttpHandlers(): void {
           tokenUrl: resolvedAuthConfig.tokenUrl ?? '',
           scopes: resolvedAuthConfig.scopes ?? '',
           redirectUri: resolvedAuthConfig.redirectUri ?? '',
+          extraParams: resolvedAuthConfig.extraParams
+            ? (() => { try { return JSON.parse(resolvedAuthConfig.extraParams) as Record<string, string> } catch { return undefined } })()
+            : undefined,
         }
         if (!cfg.clientId || !cfg.tokenUrl) {
           log('error', 'OAuth 2.0: clientId and tokenUrl are required')

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import type { GrantType, Token } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -11,7 +12,28 @@ interface OAuthPanelProps {
   onConfigChange: (c: Record<string, string>) => void
 }
 
+interface ExtraParam { id: string; key: string; value: string }
+
+function parseExtraParams(raw: string | undefined): ExtraParam[] {
+  if (!raw) return []
+  try {
+    const obj = JSON.parse(raw) as Record<string, string>
+    return Object.entries(obj).map(([key, value]) => ({ id: crypto.randomUUID(), key, value }))
+  } catch { return [] }
+}
+
+function serializeExtraParams(params: ExtraParam[]): string | undefined {
+  const active = params.filter((p) => p.key.trim())
+  if (!active.length) return undefined
+  return JSON.stringify(Object.fromEntries(active.map((p) => [p.key.trim(), p.value])))
+}
+
 function buildInlineConfig(authConfig: Record<string, string>) {
+  const extraParamsRaw = authConfig.extraParams
+  const extraParams = extraParamsRaw
+    ? (() => { try { return JSON.parse(extraParamsRaw) as Record<string, string> } catch { return undefined } })()
+    : undefined
+
   return {
     id: '',
     name: 'inline',
@@ -22,6 +44,7 @@ function buildInlineConfig(authConfig: Record<string, string>) {
     tokenUrl: authConfig.tokenUrl ?? '',
     scopes: authConfig.scopes ?? '',
     redirectUri: authConfig.redirectUri ?? '',
+    extraParams,
   }
 }
 
@@ -72,24 +95,52 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
   const [token, setToken] = useState<Token | null>(null)
   const [authorizing, setAuthorizing] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [extraParams, setExtraParams] = useState<ExtraParam[]>(() => parseExtraParams(authConfig.extraParams))
+
+  // Keep extraParams local state in sync when the active request changes.
+  // Use a ref to track the last serialized value so we don't re-parse on every
+  // keystroke that goes through authConfig (other fields don't affect extraParams).
+  const prevExtraParamsRaw = React.useRef(authConfig.extraParams)
+  useEffect(() => {
+    if (authConfig.extraParams !== prevExtraParamsRaw.current) {
+      prevExtraParamsRaw.current = authConfig.extraParams
+      setExtraParams(parseExtraParams(authConfig.extraParams))
+    }
+  }, [authConfig.extraParams])
 
   const set = (field: string, value: string) => onConfigChange({ ...authConfig, [field]: value })
   const hasMinConfig = !!(authConfig.clientId && authConfig.tokenUrl)
   const grantType = (authConfig.grantType ?? 'authorization_code') as GrantType
 
+  const updateExtraParams = (params: ExtraParam[]) => {
+    setExtraParams(params)
+    const serialized = serializeExtraParams(params)
+    onConfigChange({ ...authConfig, extraParams: serialized ?? '' })
+  }
+
+  const addExtraParam = () => updateExtraParams([...extraParams, { id: crypto.randomUUID(), key: '', value: '' }])
+  const updateExtraParam = (id: string, field: 'key' | 'value', value: string) =>
+    updateExtraParams(extraParams.map((p) => (p.id === id ? { ...p, [field]: value } : p)))
+  const deleteExtraParam = (id: string) => updateExtraParams(extraParams.filter((p) => p.id !== id))
+
   useEffect(() => {
+    setAuthError(null)
     if (!hasMinConfig) { setToken(null); return }
     const config = buildInlineConfig(authConfig)
-    window.api.oauth.inline.getToken(config).then(({ data }: { data: Token | null }) => {
+    window.api.oauth.inline.getToken(config).then(({ data, error }: { data: Token | null; error?: string }) => {
       setToken(data ?? null)
+      if (error) setAuthError(error)
     })
-    setAuthError(null)
   }, [authConfig, hasMinConfig])
 
   const handleAuthorize = async () => {
     if (!hasMinConfig) return
     if (!authConfig.scopes?.trim()) {
       setAuthError('Scopes are required. Enter at least one scope, e.g. "openid profile".')
+      return
+    }
+    if (grantType === 'authorization_code' && !authConfig.authUrl?.trim()) {
+      setAuthError('Auth URL is required for Authorization Code flow.')
       return
     }
     if (grantType === 'authorization_code' && !authConfig.redirectUri?.trim()) {
@@ -138,11 +189,15 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       {grantType === 'authorization_code' && (
         <>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Auth URL</label>
+            <label className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
+              Auth URL <span className="text-rose-400">*</span>
+            </label>
             <Input placeholder="https://..." value={authConfig.authUrl ?? ''} onChange={(e) => set('authUrl', e.target.value)} />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Redirect URI</label>
+            <label className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
+              Redirect URI <span className="text-rose-400">*</span>
+            </label>
             <Input placeholder="https://..." value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
           </div>
         </>
@@ -155,6 +210,47 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       <div>
         <label className="mb-1 block text-xs text-th-text-subtle">Scopes</label>
         <Input placeholder="openid profile email (space-separated, required)" value={authConfig.scopes ?? ''} onChange={(e) => set('scopes', e.target.value)} />
+      </div>
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="text-xs text-th-text-subtle">Extra Token Params</label>
+          <button
+            type="button"
+            onClick={addExtraParam}
+            className="flex items-center gap-1 text-xs text-th-text-muted hover:text-th-text-secondary"
+          >
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        </div>
+        {extraParams.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {extraParams.map((p) => (
+              <div key={p.id} className="grid grid-cols-[1fr_1fr_24px] items-center gap-1">
+                <Input
+                  placeholder="Key"
+                  value={p.key}
+                  onChange={(e) => updateExtraParam(p.id, 'key', e.target.value)}
+                />
+                <Input
+                  placeholder="Value"
+                  value={p.value}
+                  onChange={(e) => updateExtraParam(p.id, 'value', e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => deleteExtraParam(p.id)}
+                  className="flex h-8 w-6 items-center justify-center rounded-sm text-th-text-faint hover:text-rose-400"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {extraParams.length === 0 && (
+          <p className="text-xs text-th-text-faint">None — add fields like <code>audience</code> or <code>resource</code> for non-standard providers.</p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 pt-1">

@@ -26,11 +26,15 @@ function rowToConfig(row: Record<string, unknown>): OAuthConfig {
   }
 }
 
+function toMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export function registerOAuthHandlers(): void {
   ipcMain.handle('postly:oauth:configs:list', async () => {
     try {
       return { data: queryAll<Record<string, unknown>>('SELECT * FROM oauth_configs ORDER BY created_at ASC').map(rowToConfig) }
-    } catch (err) { return { error: String(err) } }
+    } catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:configs:create', async (_, args: { name: string; grantType: string; clientId: string; clientSecret?: string; authUrl?: string; tokenUrl: string; scopes?: string; redirectUri: string }) => {
@@ -46,12 +50,12 @@ export function registerOAuthHandlers(): void {
       )
       const row = queryOne<Record<string, unknown>>('SELECT * FROM oauth_configs WHERE id = ?', [id])
       return { data: row ? rowToConfig(row) : null }
-    } catch (err) { return { error: String(err) } }
+    } catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:configs:delete', async (_, args: { id: string }) => {
     try { run('DELETE FROM oauth_configs WHERE id = ?', [args.id]); return { data: true } }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:authorize', async (_, args: { configId: string }) => {
@@ -64,29 +68,29 @@ export function registerOAuthHandlers(): void {
         ? await authorizeAuthCode(config, sslVerification)
         : await clientCredentials(config, sslVerification)
       return { data: token }
-    } catch (err) { return { error: String(err) } }
+    } catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:token:get', async (_, args: { configId: string }) => {
     try { return { data: await getValidToken(args.configId, getGeneralSettings().sslVerification) } }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:token:clear', async (_, args: { configId: string }) => {
     try { run('DELETE FROM tokens WHERE oauth_config_id = ?', [args.configId]); return { data: true } }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 
   // ── Inline config handlers (config stored directly on entity, no oauth_configs row) ──
 
   ipcMain.handle('postly:oauth:inline:authorize', async (_, config: OAuthConfig) => {
     try { return { data: await authorizeInline(config, getGeneralSettings().sslVerification) } }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:inline:token:get', async (_, config: OAuthConfig) => {
     try { return { data: await getValidTokenForConfig(config, getGeneralSettings().sslVerification) } }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:inline:token:clear', async (_, config: OAuthConfig) => {
@@ -95,6 +99,6 @@ export function registerOAuthHandlers(): void {
       run('DELETE FROM tokens WHERE oauth_config_id = ?', [key])
       return { data: true }
     }
-    catch (err) { return { error: String(err) } }
+    catch (err) { return { error: toMessage(err) } }
   })
 }

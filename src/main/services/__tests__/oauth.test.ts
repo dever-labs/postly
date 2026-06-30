@@ -79,8 +79,8 @@ vi.mock('electron', () => {
   }
 })
 
-import { authorizeAuthCode, clientCredentials, authorizeInline, type OAuthConfig } from '../oauth'
-import { runTransaction } from '../../database'
+import { authorizeAuthCode, clientCredentials, authorizeInline, getValidToken, getValidTokenForConfig, configHashKey, type OAuthConfig } from '../oauth'
+import { queryOne, runTransaction } from '../../database'
 import { BrowserWindow } from 'electron'
 
 // ─── Fake IDP ────────────────────────────────────────────────────────────────
@@ -573,5 +573,270 @@ describe('OAuth integration', () => {
         }
       })
     })
+  })
+})
+
+// ─── getValidToken ────────────────────────────────────────────────────────────
+
+describe('getValidToken', () => {
+  const mockQueryOne = vi.mocked(queryOne)
+  const mockRunTransaction = vi.mocked(runTransaction)
+
+  const tokenRow = {
+    id: 'tok-1',
+    oauth_config_id: 'cfg-1',
+    access_token: 'cached-access',
+    refresh_token: 'cached-refresh',
+    token_type: 'Bearer',
+    expires_at: Date.now() + 3_600_000,
+    scope: 'read',
+    created_at: Date.now(),
+  }
+
+  const configRow = {
+    id: 'cfg-1',
+    name: 'Test',
+    grant_type: 'client_credentials',
+    client_id: 'cid',
+    client_secret: null,
+    auth_url: null,
+    token_url: 'http://will-be-overridden',
+    scopes: 'read',
+    redirect_uri: 'http://localhost/cb',
+  }
+
+  beforeEach(() => {
+    mockQueryOne.mockReset()
+    mockRunTransaction.mockReset()
+  })
+
+  it('returns null when no token row exists', async () => {
+    mockQueryOne.mockReturnValueOnce(null)
+    expect(await getValidToken('cfg-1')).toBeNull()
+  })
+
+  it('returns the cached token when it is not expired', async () => {
+    mockQueryOne.mockReturnValueOnce(tokenRow)
+    const token = await getValidToken('cfg-1')
+    expect(token?.accessToken).toBe('cached-access')
+  })
+
+  it('returns null when token is expired and has no refresh token', async () => {
+    mockQueryOne.mockReturnValueOnce({
+      ...tokenRow,
+      refresh_token: null,
+      expires_at: Date.now() - 1000,
+    })
+    expect(await getValidToken('cfg-1')).toBeNull()
+  })
+
+  it('returns null when token is expired and no config row is found', async () => {
+    mockQueryOne
+      .mockReturnValueOnce({ ...tokenRow, expires_at: Date.now() - 1000 })
+      .mockReturnValueOnce(null)
+    expect(await getValidToken('cfg-1')).toBeNull()
+  })
+
+  it('propagates the refresh error instead of silently returning null', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp({ error: 'invalid_grant', error_description: 'Refresh token expired' }, 400)
+      mockQueryOne
+        .mockReturnValueOnce({ ...tokenRow, expires_at: Date.now() - 1000 })
+        .mockReturnValueOnce({ ...configRow, token_url: idp.tokenUrl })
+
+      await expect(getValidToken('cfg-1')).rejects.toThrow('Refresh token expired')
+    } finally {
+      idp?.stop()
+    }
+  })
+
+  it('returns the new token when refresh succeeds', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp()
+      mockQueryOne
+        .mockReturnValueOnce({ ...tokenRow, expires_at: Date.now() - 1000 })
+        .mockReturnValueOnce({ ...configRow, token_url: idp.tokenUrl })
+
+      const token = await getValidToken('cfg-1')
+      expect(token?.accessToken).toBe('test_access_token')
+    } finally {
+      idp?.stop()
+    }
+  })
+})
+
+// ─── getValidTokenForConfig ───────────────────────────────────────────────────
+
+describe('getValidTokenForConfig', () => {
+  const mockQueryOne = vi.mocked(queryOne)
+  const mockRunTransaction = vi.mocked(runTransaction)
+
+  const baseConfig: OAuthConfig = {
+    id: 'inline-cfg',
+    name: 'Inline',
+    grantType: 'client_credentials',
+    clientId: 'cid',
+    tokenUrl: 'http://will-be-overridden',
+    scopes: 'read',
+    redirectUri: 'http://localhost/cb',
+  }
+
+  const tokenRow = {
+    id: 'tok-2',
+    oauth_config_id: 'hash-key',
+    access_token: 'cached-inline',
+    refresh_token: 'inline-refresh',
+    token_type: 'Bearer',
+    expires_at: Date.now() + 3_600_000,
+    scope: 'read',
+    created_at: Date.now(),
+  }
+
+  beforeEach(() => {
+    mockQueryOne.mockReset()
+    mockRunTransaction.mockReset()
+  })
+
+  it('returns null when no token row exists for the config hash', async () => {
+    mockQueryOne.mockReturnValueOnce(null)
+    expect(await getValidTokenForConfig(baseConfig)).toBeNull()
+  })
+
+  it('returns the cached token when it is not expired', async () => {
+    mockQueryOne.mockReturnValueOnce(tokenRow)
+    const token = await getValidTokenForConfig(baseConfig)
+    expect(token?.accessToken).toBe('cached-inline')
+  })
+
+  it('returns null when token is expired and has no refresh token', async () => {
+    mockQueryOne.mockReturnValueOnce({
+      ...tokenRow,
+      refresh_token: null,
+      expires_at: Date.now() - 1000,
+    })
+    expect(await getValidTokenForConfig(baseConfig)).toBeNull()
+  })
+
+  it('propagates the refresh error instead of silently returning null', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp({ error: 'invalid_grant', error_description: 'Token has been revoked' }, 400)
+      mockQueryOne.mockReturnValueOnce({ ...tokenRow, expires_at: Date.now() - 1000 })
+
+      await expect(
+        getValidTokenForConfig({ ...baseConfig, tokenUrl: idp.tokenUrl }),
+      ).rejects.toThrow('Token has been revoked')
+    } finally {
+      idp?.stop()
+    }
+  })
+
+  it('returns the new token when refresh succeeds', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp()
+      mockQueryOne.mockReturnValueOnce({ ...tokenRow, expires_at: Date.now() - 1000 })
+
+      const token = await getValidTokenForConfig({ ...baseConfig, tokenUrl: idp.tokenUrl })
+      expect(token?.accessToken).toBe('test_access_token')
+    } finally {
+      idp?.stop()
+    }
+  })
+})
+
+// ─── saveToken (via clientCredentials) ───────────────────────────────────────
+
+describe('saveToken — validation', () => {
+  it('throws when the token endpoint response is missing access_token', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp({ token_type: 'Bearer' }) // no access_token field
+      const config = makeConfig({ tokenUrl: idp.tokenUrl })
+      await expect(clientCredentials(config)).rejects.toThrow('access_token')
+    } finally {
+      idp?.stop()
+    }
+  })
+})
+
+// ─── postTokenRequest — error handling & features ────────────────────────────
+
+describe('postTokenRequest — error handling', () => {
+  it('throws a friendly error when the token URL is empty', async () => {
+    await expect(clientCredentials(makeConfig({ tokenUrl: '' }))).rejects.toThrow('Invalid token URL')
+  })
+
+  it('throws a friendly error when the token URL is malformed', async () => {
+    await expect(clientCredentials(makeConfig({ tokenUrl: 'not-a-url' }))).rejects.toThrow('Invalid token URL')
+  })
+
+  it('throws a friendly error when the token endpoint is unreachable (ECONNREFUSED)', async () => {
+    // Port 1 is privileged/unusable — guaranteed connection refused
+    await expect(
+      clientCredentials(makeConfig({ tokenUrl: 'http://127.0.0.1:1/token' })),
+    ).rejects.toThrow('Cannot connect to token endpoint')
+  })
+
+  it('appends extraParams to the token request body', async () => {
+    let idp: FakeIdp | undefined
+    try {
+      idp = await startFakeIdp()
+      const config = makeConfig({
+        tokenUrl: idp.tokenUrl,
+        grantType: 'client_credentials',
+        extraParams: { audience: 'https://api.example.com', resource: 'my-resource' },
+      })
+      await clientCredentials(config)
+
+      const body = Object.fromEntries(new URLSearchParams(idp.requests()[0]))
+      expect(body['audience']).toBe('https://api.example.com')
+      expect(body['resource']).toBe('my-resource')
+    } finally {
+      idp?.stop()
+    }
+  })
+})
+
+// ─── authorizeAuthCode — pre-flight validation ────────────────────────────────
+
+describe('authorizeAuthCode — pre-flight validation', () => {
+  it('throws a friendly error when authUrl is blank', async () => {
+    await expect(
+      authorizeAuthCode(makeConfig({ authUrl: '' })),
+    ).rejects.toThrow('Auth URL')
+  })
+
+  it('throws a friendly error when authUrl is undefined', async () => {
+    await expect(
+      authorizeAuthCode(makeConfig({ authUrl: undefined })),
+    ).rejects.toThrow('Auth URL')
+  })
+})
+
+// ─── configHashKey — collision prevention ────────────────────────────────────
+
+describe('configHashKey', () => {
+  const base = { clientId: 'cid', tokenUrl: 'https://token', scopes: 'read', grantType: 'client_credentials', clientSecret: undefined }
+
+  it('returns the same key for identical configs', () => {
+    expect(configHashKey(base)).toBe(configHashKey(base))
+  })
+
+  it('returns different keys for different clientSecrets', () => {
+    expect(configHashKey({ ...base, clientSecret: 'secret-a' }))
+      .not.toBe(configHashKey({ ...base, clientSecret: 'secret-b' }))
+  })
+
+  it('returns different keys for different grantTypes', () => {
+    expect(configHashKey({ ...base, grantType: 'client_credentials' }))
+      .not.toBe(configHashKey({ ...base, grantType: 'authorization_code' }))
+  })
+
+  it('returns different keys when clientSecret is present vs absent', () => {
+    expect(configHashKey({ ...base, clientSecret: 'secret' }))
+      .not.toBe(configHashKey({ ...base, clientSecret: undefined }))
   })
 })

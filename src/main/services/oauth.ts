@@ -28,6 +28,8 @@ export interface OAuthConfig {
   tokenUrl: string
   scopes: string
   redirectUri: string
+  /** Extra parameters appended to every token request body — for providers that require non-standard fields (e.g. `audience`, `resource`). */
+  extraParams?: Record<string, string>
 }
 
 export interface Token {
@@ -108,20 +110,50 @@ export function generateCodeChallenge(verifier: string): string {
  * Re-throws with the provider's error_description included so callers can
  * surface a meaningful message instead of the generic AxiosError string.
  */
-async function postTokenRequest(url: string, params: URLSearchParams, sslVerification = true): Promise<Record<string, unknown>> {
+async function postTokenRequest(
+  url: string,
+  params: URLSearchParams,
+  sslVerification = true,
+  extraParams?: Record<string, string>,
+): Promise<Record<string, unknown>> {
+  try {
+    new URL(url)
+  } catch {
+    throw new Error(`Invalid token URL: "${url}". Enter a valid absolute URL (e.g. https://auth.example.com/token).`)
+  }
+
+  if (extraParams) {
+    for (const [k, v] of Object.entries(extraParams)) {
+      if (k) params.set(k, v)
+    }
+  }
+
   try {
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     const httpsAgent = sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
     const response = await axios.post(url, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       httpsAgent,
+      timeout: 30_000,
     })
     return response.data as Record<string, unknown>
   } catch (err) {
-    if (axios.isAxiosError(err) && err.response) {
-      const body = err.response.data as Record<string, string> | null
-      const detail = body?.error_description ?? body?.error ?? JSON.stringify(body)
-      throw new Error(`Token endpoint returned ${err.response.status}: ${detail}`, { cause: err })
+    if (axios.isAxiosError(err)) {
+      if (err.response) {
+        const body = err.response.data as Record<string, string> | null
+        const detail = body?.error_description ?? body?.error ?? JSON.stringify(body)
+        throw new Error(`Token endpoint returned ${err.response.status}: ${detail}`, { cause: err })
+      }
+      if (err.code === 'ECONNREFUSED') {
+        throw new Error(`Cannot connect to token endpoint — connection refused. Check the URL and ensure the server is running.`, { cause: err })
+      }
+      if (err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN') {
+        throw new Error(`Cannot reach token endpoint — host not found. Check the URL for typos.`, { cause: err })
+      }
+      if (err.code === 'ETIMEDOUT' || err.code === 'ECONNABORTED') {
+        throw new Error(`Token endpoint timed out after 30s. Check network connectivity or increase your timeout.`, { cause: err })
+      }
+      throw new Error(`Token request failed: ${err.message}`, { cause: err })
     }
     throw err
   }
@@ -130,6 +162,9 @@ async function postTokenRequest(url: string, params: URLSearchParams, sslVerific
 export async function authorizeAuthCode(config: OAuthConfig, sslVerification = true): Promise<Token> {
   if (!config.redirectUri) {
     throw new Error('OAuth authorization_code flow requires a redirect URI.')
+  }
+  if (!config.authUrl) {
+    throw new Error('OAuth authorization_code flow requires an Auth URL.')
   }
   const verifier = generateCodeVerifier()
   const challenge = generateCodeChallenge(verifier)
@@ -186,7 +221,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification, config.extraParams))
 }
 
 export async function clientCredentials(config: OAuthConfig, sslVerification = true): Promise<Token> {
@@ -197,7 +232,7 @@ export async function clientCredentials(config: OAuthConfig, sslVerification = t
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification, config.extraParams))
 }
 
 export async function refreshTokenGrant(token: Token, config: OAuthConfig, sslVerification = true): Promise<Token> {
@@ -211,10 +246,13 @@ export async function refreshTokenGrant(token: Token, config: OAuthConfig, sslVe
   })
   if (config.clientSecret) params.set('client_secret', config.clientSecret)
 
-  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification))
+  return saveToken(config.id, await postTokenRequest(config.tokenUrl, params, sslVerification, config.extraParams))
 }
 
 async function saveToken(oauthConfigId: string, data: Record<string, unknown>): Promise<Token> {
+  if (!data['access_token']) {
+    throw new Error('Token endpoint response missing required field: access_token')
+  }
   const id = crypto.randomUUID()
   const now = Date.now()
   const expiresAt = data['expires_in'] ? now + Number(data['expires_in']) * 1000 : undefined
@@ -272,11 +310,7 @@ export async function getValidToken(oauthConfigId: string, sslVerification = tru
     if (token.refreshToken) {
       const configRow = queryOne<OAuthConfigRow>('SELECT * FROM oauth_configs WHERE id = ?', [oauthConfigId])
       if (configRow) {
-        try {
-          return await refreshTokenGrant(token, rowToOAuthConfig(configRow), sslVerification)
-        } catch {
-          return null
-        }
+        return await refreshTokenGrant(token, rowToOAuthConfig(configRow), sslVerification)
       }
     }
     return null
@@ -301,10 +335,15 @@ function rowToOAuthConfig(row: OAuthConfigRow): OAuthConfig {
   }
 }
 
-/** Derives a stable token-cache key from inline OAuth config fields. */
-export function configHashKey(config: Pick<OAuthConfig, 'clientId' | 'tokenUrl' | 'scopes'>): string {
+/** Derives a stable token-cache key from inline OAuth config fields.
+ *
+ * Includes grantType and clientSecret (as well as clientId/tokenUrl/scopes)
+ * so that configs sharing the same endpoint but with different credentials or
+ * grant types get isolated token buckets.
+ */
+export function configHashKey(config: Pick<OAuthConfig, 'clientId' | 'tokenUrl' | 'scopes' | 'grantType' | 'clientSecret'>): string {
   return crypto.createHash('sha256')
-    .update([config.clientId, config.tokenUrl, config.scopes].join('|'))
+    .update([config.clientId, config.tokenUrl, config.scopes, config.grantType, config.clientSecret ?? ''].join('|'))
     .digest('hex')
     .slice(0, 32)
 }
@@ -334,12 +373,7 @@ export async function getValidTokenForConfig(config: OAuthConfig, sslVerificatio
 
   if (token.expiresAt && token.expiresAt < Date.now() + TOKEN_EXPIRY_BUFFER_MS) {
     if (token.refreshToken) {
-      try {
-        // Temporarily assign key as id for saveToken to use correct bucket
-        return await refreshTokenGrant(token, { ...config, id: key }, sslVerification)
-      } catch {
-        return null
-      }
+      return await refreshTokenGrant(token, { ...config, id: key }, sslVerification)
     }
     return null
   }
