@@ -5,7 +5,8 @@
  * axios entirely. Here we exercise the real network path: redirect following,
  * timeout, duration measurement, fault injection, and scenario activation.
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
+ * The Mockly binary is resolved automatically from @dever-labs/mockly-driver's
+ * optionalDependencies — no manual download step is required.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -311,6 +312,23 @@ describe('auth', () => {
     const withoutAuth = await executeRequest(req({ url: `${server.httpBase}/basic` }))
     expect(withoutAuth.status).toBe(401)
   })
+
+  it('completes NTLM 3-step handshake and receives the protected response', async () => {
+    // Mockly drives the full NTLM challenge/response automatically when
+    // auth.type = "ntlm". No credential validation is performed — any
+    // structurally-valid type-3 authenticate token is accepted.
+    await server.addMock({
+      id: 'ntlm-protected',
+      request: { method: 'GET', path: '/ntlm', auth: { type: 'ntlm' } },
+      response: { status: 200, body: 'ntlm-ok' },
+    })
+
+    const res = await executeRequest(
+      req({ url: `${server.httpBase}/ntlm`, authType: 'ntlm', authConfig: { username: 'alice', password: 'secret', domain: 'CORP' } }),
+    )
+    expect(res.status).toBe(200)
+    expect(res.body).toBe('ntlm-ok')
+  })
 })
 
 // ─── Fault injection ─────────────────────────────────────────────────────────
@@ -331,14 +349,14 @@ describe('fault injection', () => {
     expect(result.duration).toBeGreaterThanOrEqual(80)
   })
 
-  it('status_override returns configured status for all endpoints', async () => {
+  it('status override returns configured status for all endpoints', async () => {
     await server.addMock({
       id: 'ok-endpoint',
       request: { method: 'GET', path: '/ok' },
       response: { status: 200, body: 'ok' },
     })
 
-    await server.setFault({ enabled: true, status_override: 503 })
+    await server.setFault({ enabled: true, status: 503 })
     const result = await executeRequest(req({ url: `${server.httpBase}/ok` }))
     await server.clearFault()
 

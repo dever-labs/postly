@@ -5,10 +5,10 @@
   "main": "out/main/index.js",
   "scripts": {
     "test": "vitest run",
-    "test:integration": "node scripts/download-mockly.mjs && vitest run --config vitest.integration.config.ts",
-    "test:e2e": "node scripts/download-mockly.mjs && playwright test",
-    "test:e2e:headed": "node scripts/download-mockly.mjs && playwright test --headed",
-    "test:e2e:ui": "node scripts/download-mockly.mjs && playwright test --ui",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -148,6 +148,7 @@
     "underscore": "^1.13.8"
   },
   "devDependencies": {
+    "@dever-labs/mockly-driver": "^0.12.3",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^4.0.4",

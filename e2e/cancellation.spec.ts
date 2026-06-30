@@ -6,20 +6,10 @@
  *  - A slow endpoint delays 10s, letting us click Cancel before it completes.
  *
  * Requires a built app (`npm run build` before `npm run test:e2e`).
- * The Mockly binary is downloaded automatically by `npm run test:e2e`
- * via `node scripts/download-mockly.mjs`. If the binary is missing, all
- * tests in this file are skipped.
+ * The Mockly binary is resolved automatically via @dever-labs/mockly-driver.
  */
 import { test, expect } from './fixtures'
-import { existsSync } from 'fs'
-import { resolve } from 'path'
 import { MocklyServer } from '../src/main/services/__tests__/helpers/mockly'
-
-// ─── Binary guard ─────────────────────────────────────────────────────────────
-
-const binName = process.platform === 'win32' ? 'mockly.exe' : 'mockly'
-const mocklyBinPath = resolve(__dirname, '..', 'bin', binName)
-const mocklyAvailable = existsSync(mocklyBinPath)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,9 +36,7 @@ const MOCK_SLOW_ID = 'get-slow'
 
 test.describe('Send & cancel request', () => {
   test.beforeAll(async ({ window }) => {
-    test.skip(!mocklyAvailable, `Mockly binary not found at bin/${binName} — run: node scripts/download-mockly.mjs`)
-
-    mockly = await MocklyServer.create()
+    mockly = await MocklyServer.ensure()
 
     await mockly.addMock({
       id: MOCK_FAST_ID,
@@ -124,7 +112,7 @@ test.describe('Send & cancel request', () => {
 
     // Mockly should have received exactly one call
     const calls = await mockly.waitForCalls(MOCK_FAST_ID, 1)
-    expect(calls).toHaveLength(1)
+    expect(calls.calls).toHaveLength(1)
   })
 
   test('response body contains the JSON returned by mockly', async ({ window }) => {
