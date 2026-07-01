@@ -30,5 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download Mockly binary
-        run: node scripts/download-mockly.mjs
+      - name: Install Mockly binary
+        run: |
+          node --input-type=module --eval "
+            import { MocklyServer } from '@dever-labs/mockly-driver';
+            const s = await MocklyServer.ensure();
+            await s.stop();
+            console.log('Mockly binary ready');
+          "
