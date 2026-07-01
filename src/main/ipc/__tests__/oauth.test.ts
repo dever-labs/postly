@@ -151,4 +151,30 @@ describe('OAuth IPC handlers', () => {
       expect(mockGetValidTokenForConfig).toHaveBeenCalledWith(fakeOAuthConfig, false)
     })
   })
+
+  // ── error message formatting (toMessage helper) ───────────────────────────
+
+  describe('error message formatting', () => {
+    it('returns err.message (not "Error: msg") when authorize throws an Error', async () => {
+      mockQ1.mockReturnValue(fakeConfigRow)
+      mockAuthorizeAuthCode.mockRejectedValue(new Error('Token endpoint returned 401: invalid_client'))
+      const { error } = await invoke('postly:oauth:authorize', { configId: 'cfg1' })
+      expect(error).toBe('Token endpoint returned 401: invalid_client')
+      expect(error).not.toMatch(/^Error:/)
+    })
+
+    it('returns String(value) when a non-Error is thrown', async () => {
+      mockQ1.mockReturnValue(fakeConfigRow)
+      mockAuthorizeAuthCode.mockRejectedValue('plain string error')
+      const { error } = await invoke('postly:oauth:authorize', { configId: 'cfg1' })
+      expect(error).toBe('plain string error')
+    })
+
+    it('returns err.message for inline authorize errors', async () => {
+      mockAuthorizeInline.mockRejectedValue(new Error('Cannot connect to token endpoint — connection refused'))
+      const { error } = await invoke('postly:oauth:inline:authorize', fakeOAuthConfig)
+      expect(error).toBe('Cannot connect to token endpoint — connection refused')
+      expect(error).not.toMatch(/^Error:/)
+    })
+  })
 })

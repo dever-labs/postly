@@ -780,6 +780,12 @@ describe('postTokenRequest — error handling', () => {
     ).rejects.toThrow('Cannot connect to token endpoint')
   })
 
+  it('throws a friendly error when the token hostname cannot be resolved (ENOTFOUND)', async () => {
+    await expect(
+      clientCredentials(makeConfig({ tokenUrl: 'http://this-host-does-not-exist.invalid/token' })),
+    ).rejects.toThrow(/host not found|Cannot connect|Token request failed/)
+  })
+
   it('appends extraParams to the token request body', async () => {
     let idp: FakeIdp | undefined
     try {

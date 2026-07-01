@@ -488,6 +488,46 @@ describe('http IPC handler', () => {
       await invoke(baseReq({ authType: 'oauth2', authConfig: oauthCfg }))
       expect(mockAuthorize).toHaveBeenCalledWith(expect.anything(), false)
     })
+
+    it('passes parsed extraParams to getValidTokenForConfig', async () => {
+      const extraParams = { audience: 'https://api.example.com', resource: 'my-api' }
+      mockGetToken.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      await invoke(baseReq({
+        authType: 'oauth2',
+        authConfig: { ...oauthCfg, extraParams: JSON.stringify(extraParams) }
+      }))
+      expect(mockGetToken).toHaveBeenCalledWith(
+        expect.objectContaining({ extraParams }),
+        expect.anything()
+      )
+    })
+
+    it('passes parsed extraParams to authorizeInline when no cached token', async () => {
+      const extraParams = { audience: 'https://api.example.com' }
+      mockGetToken.mockResolvedValue(null)
+      mockAuthorize.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      await invoke(baseReq({
+        authType: 'oauth2',
+        authConfig: { ...oauthCfg, extraParams: JSON.stringify(extraParams) }
+      }))
+      expect(mockAuthorize).toHaveBeenCalledWith(
+        expect.objectContaining({ extraParams }),
+        expect.anything()
+      )
+    })
+
+    it('handles malformed extraParams JSON without crashing', async () => {
+      mockGetToken.mockResolvedValue({ id: 't1', oauthConfigId: '', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() })
+      const data = await invokeOk(baseReq({
+        authType: 'oauth2',
+        authConfig: { ...oauthCfg, extraParams: 'not-json' }
+      }))
+      expect(data).toBeDefined()
+      expect(mockGetToken).toHaveBeenCalledWith(
+        expect.objectContaining({ extraParams: undefined }),
+        expect.anything()
+      )
+    })
   })
 
   // ── SSL resolution ─────────────────────────────────────────────────────────
