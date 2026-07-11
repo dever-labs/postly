@@ -208,7 +208,7 @@
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",
     "httpntlm": "^1.8.13",
-    "lucide-react": "^1.22.0",
+    "lucide-react": "^1.23.0",
     "monaco-editor": "^0.55.1",
     "mqtt": "^5.15.1",
     "openapi-types": "^12.1.3",
