@@ -235,6 +235,8 @@ const api = {
     },
   },
   platform: process.platform,
+  /** Resolves once the main-process database is initialised and ready to serve IPC requests. */
+  waitForReady: (): Promise<void> => ipcRenderer.invoke('postly:ready').then(() => undefined),
 }
 
 contextBridge.exposeInMainWorld('api', api)

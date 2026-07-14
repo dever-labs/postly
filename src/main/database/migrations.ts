@@ -75,7 +75,7 @@ export const migrations: string[] = [
 
   `CREATE TABLE IF NOT EXISTS tokens (
     id TEXT PRIMARY KEY,
-    oauth_config_id TEXT NOT NULL REFERENCES oauth_configs(id) ON DELETE CASCADE,
+    oauth_config_id TEXT NOT NULL,
     access_token TEXT NOT NULL,
     refresh_token TEXT,
     token_type TEXT NOT NULL DEFAULT 'Bearer',

@@ -254,6 +254,32 @@ function runMigrations(): void {
     }
   }
 
+  // Remove FK constraint from tokens so inline OAuth tokens (keyed by config hash,
+  // not by an oauth_configs row) can be persisted across restarts.
+  const tokensFkList = db.exec('PRAGMA foreign_key_list(tokens)')
+  const tokensFkToOauthConfigs = tokensFkList.length > 0 &&
+    tokensFkList[0].values.some((row) => row[2] === 'oauth_configs')
+  if (tokensFkToOauthConfigs) {
+    db.run('PRAGMA foreign_keys = OFF')
+    try {
+      db.run(`CREATE TABLE tokens_v2 (
+        id TEXT PRIMARY KEY,
+        oauth_config_id TEXT NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        token_type TEXT NOT NULL DEFAULT 'Bearer',
+        expires_at INTEGER,
+        scope TEXT,
+        created_at INTEGER NOT NULL
+      )`)
+      db.run('INSERT OR IGNORE INTO tokens_v2 SELECT * FROM tokens')
+      db.run('DROP TABLE tokens')
+      db.run('ALTER TABLE tokens_v2 RENAME TO tokens')
+    } finally {
+      db.run('PRAGMA foreign_keys = ON')
+    }
+  }
+
   // Draft cache tables (Issue #14) — changes are auto-saved here until explicit save
   db.run(`CREATE TABLE IF NOT EXISTS request_drafts (
     request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,

@@ -218,6 +218,8 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
     if (result.state !== state) throw new Error('OAuth state mismatch')
     code = result.code
   } finally {
+    // Flush cookies to disk before closing so the IDP session survives app restarts.
+    await s.cookies.flushStore().catch(() => {})
     if (!win.isDestroyed()) win.close()
   }
 

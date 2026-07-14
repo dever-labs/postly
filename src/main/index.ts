@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, shell, Menu, nativeImage, ipcMain } from 'electron'
 import { join } from 'path'
 import { platform } from 'process'
 import { initDatabase } from './database'
@@ -47,13 +47,25 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
-  await initDatabase()
+
+  // Register a readiness gate BEFORE window creation so the renderer can call
+  // waitForReady() as soon as it boots. The promise resolves once initDatabase()
+  // completes, allowing data-loading IPC calls to proceed safely.
+  let dbResolve!: () => void
+  const dbReadyPromise = new Promise<void>((resolve) => { dbResolve = resolve })
+  ipcMain.handle('postly:ready', () => dbReadyPromise.then(() => ({ data: true })))
+
   registerAllIpcHandlers()
   const win = createWindow()
   attachWindowEvents(win)
 
   // Always init so dev-mode "check now" button can emit events back to renderer
   initUpdater(win)
+
+  // Initialise the database — the window is already open while this runs.
+  await initDatabase()
+  dbResolve()
+
   if (app.isPackaged) {
     const generalSettings = getGeneralSettings()
     if (generalSettings.autoUpdate) {

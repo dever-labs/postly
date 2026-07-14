@@ -70,13 +70,14 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   hiddenSources: new Set<CollectionSource>(),
 
   load: async () => {
-    const { data, error } = await window.api.folders.list()
+    const [{ data, error }, { data: reqData, error: reqError }] = await Promise.all([
+      window.api.folders.list(),
+      window.api.requests.listAll(),
+    ])
     if (error || !data) {
       console.error('Failed to load folders:', error)
       return
     }
-
-    const { data: reqData, error: reqError } = await window.api.requests.listAll()
     if (reqError) {
       console.error('Failed to load requests:', reqError)
       return

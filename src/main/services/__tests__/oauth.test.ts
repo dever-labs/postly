@@ -14,7 +14,11 @@ vi.mock('../../database', () => ({
 
 // Expose session mock references so SSL tests can assert on them.
 const mockSetCertVerifyProc = vi.hoisted(() => vi.fn())
-const mockFromPartition = vi.hoisted(() => vi.fn().mockReturnValue({ setCertificateVerifyProc: mockSetCertVerifyProc }))
+const mockFlushStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockFromPartition = vi.hoisted(() => vi.fn().mockReturnValue({
+  setCertificateVerifyProc: mockSetCertVerifyProc,
+  cookies: { flushStore: mockFlushStore },
+}))
 
 /**
  * Fake BrowserWindow: when loadURL is called, parse the redirect_uri and state

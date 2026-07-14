@@ -14,8 +14,10 @@ export default function App(): React.ReactElement {
   const loadEnvironments = useEnvironmentsStore((s) => s.load)
 
   useEffect(() => {
-    loadCollections()
-    loadEnvironments()
+    window.api.waitForReady().then(() => {
+      loadCollections()
+      loadEnvironments()
+    })
   }, [loadCollections, loadEnvironments])
 
   return (

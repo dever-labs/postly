@@ -54,7 +54,11 @@ export function registerOAuthHandlers(): void {
   })
 
   ipcMain.handle('postly:oauth:configs:delete', async (_, args: { id: string }) => {
-    try { run('DELETE FROM oauth_configs WHERE id = ?', [args.id]); return { data: true } }
+    try {
+      run('DELETE FROM tokens WHERE oauth_config_id = ?', [args.id])
+      run('DELETE FROM oauth_configs WHERE id = ?', [args.id])
+      return { data: true }
+    }
     catch (err) { return { error: toMessage(err) } }
   })
 
