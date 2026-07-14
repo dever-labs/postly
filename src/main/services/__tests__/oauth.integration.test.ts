@@ -448,11 +448,14 @@ describe('authorizeAuthCode — state validation', () => {
     decoyUrls,
     decoyEventName = 'will-redirect',
     callbackEventName = 'will-redirect',
+    onDecoyEvent,
   }: {
     /** URLs to fire as decoy events before the real callback. */
     decoyUrls: (redirectOrigin: string) => string[]
     decoyEventName?: 'will-redirect' | 'will-navigate'
     callbackEventName?: 'will-redirect' | 'will-navigate'
+    /** Called with each decoy's event object so callers can assert on it. */
+    onDecoyEvent?: (event: { preventDefault: ReturnType<typeof vi.fn> }) => void
   }) {
     return function (this: unknown) {
       const wcListeners: Record<
@@ -481,9 +484,9 @@ describe('authorizeAuthCode — state validation', () => {
           // Fire decoy events first, each 20 ms apart.
           decoys.forEach((decoyUrl, i) => {
             setTimeout(() => {
-              wcListeners[decoyEventName]?.forEach((fn) =>
-                fn({ preventDefault: vi.fn() }, decoyUrl),
-              )
+              const event = { preventDefault: vi.fn() }
+              onDecoyEvent?.(event)
+              wcListeners[decoyEventName]?.forEach((fn) => fn(event, decoyUrl))
             }, 20 * (i + 1))
           })
 
@@ -638,5 +641,83 @@ describe('authorizeAuthCode — state validation', () => {
     const [statements] = vi.mocked(runTransaction).mock.calls[0]
     const insert = statements.find((s) => s.sql.includes('INSERT INTO tokens'))
     expect(insert?.params).toEqual(expect.arrayContaining(['integration-access-token']))
+  })
+
+  it('ignores will-navigate decoys but resolves when the real callback comes via will-redirect', async () => {
+    // Symmetric counterpart of the "will-redirect decoys → will-navigate real" test.
+    // Ensures the state check applies to will-navigate events too.
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=nav_decoy&state=stale-nav-state`],
+        decoyEventName: 'will-navigate',
+        callbackEventName: 'will-redirect',
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+  })
+
+  it('does not call event.preventDefault() on decoy events — IDP intermediate navigations are not blocked', async () => {
+    // If preventDefault were called on a decoy the IDP's own login-form POST or
+    // consent-page navigation would be blocked and the user could never complete auth.
+    const decoyEvents: Array<{ preventDefault: ReturnType<typeof vi.fn> }> = []
+
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [
+          `${origin}/callback?code=decoy1&state=wrong-state`,
+          `${origin}/callback?code=decoy2`,
+        ],
+        onDecoyEvent: (evt) => decoyEvents.push(evt),
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(decoyEvents).toHaveLength(2)
+    for (const evt of decoyEvents) {
+      expect(evt.preventDefault).not.toHaveBeenCalled()
+    }
+  })
+
+  it('authorizeInline skips decoys and completes the full flow end-to-end', async () => {
+    // The bug was reported on the inline OAuth path ("root folder" collection auth),
+    // which calls authorizeAuthCode with a config whose id is a hash of the config
+    // fields. This test exercises the full authorizeInline → authorizeAuthCode →
+    // waitForRedirect chain with a decoy to confirm state validation fires there too.
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=inline_decoy&state=stale-inline-state`],
+      }),
+    )
+    const { authorizeInline } = await import('../oauth')
+
+    const inlineConfig: OAuthConfig = {
+      id: '',
+      name: 'inline',
+      grantType: 'authorization_code',
+      clientId: 'inline-client',
+      clientSecret: 'inline-secret',
+      authUrl: 'http://127.0.0.1:1/authorize',
+      tokenUrl: `${server.httpBase}/oauth2/token`,
+      scopes: 'openid profile',
+      redirectUri: 'http://localhost:19999/callback',
+    }
+
+    const token = await authorizeInline(inlineConfig)
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    expect(calls).toHaveLength(1)
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    // The token's oauthConfigId must be the config hash, not the empty id.
+    expect(token.oauthConfigId).toHaveLength(32)
+    expect(token.oauthConfigId).not.toBe('')
   })
 })
