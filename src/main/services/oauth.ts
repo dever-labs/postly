@@ -48,9 +48,15 @@ export interface Token {
  * registered redirect URI, intercepting the navigation event before Electron
  * tries to load the URL. This works for any URI scheme (http, https, custom)
  * without requiring a local HTTP server.
+ *
+ * Only resolves when both the `code` and the `state` in the redirect URL match
+ * the expected values. This prevents a class of state-mismatch errors on
+ * Windows where intermediate navigations from the same origin (e.g. IDP form
+ * submissions) fire `will-navigate` with a `code` param but no matching state.
  */
 async function waitForRedirect(
   redirectUri: string,
+  expectedState: string,
   win: BrowserWindow,
 ): Promise<{ code: string; state: string }> {
   const { origin: expectedOrigin } = new URL(redirectUri)
@@ -80,8 +86,11 @@ async function waitForRedirect(
         if (origin !== expectedOrigin) return
         const code = searchParams.get('code')
         if (!code) return
+        // Ignore redirects that don't carry the expected state — they are
+        // intermediate navigations within the IDP flow, not the final callback.
+        if (searchParams.get('state') !== expectedState) return
         event.preventDefault()
-        settle(() => resolve({ code, state: searchParams.get('state') ?? '' }))
+        settle(() => resolve({ code, state: expectedState }))
       } catch { /* ignore unparseable URLs */ }
     }
 
@@ -200,7 +209,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
   })
   // Register listener BEFORE loadURL so the redirect is caught even if
   // Keycloak completes it instantly (e.g. an existing session).
-  const redirectPromise = waitForRedirect(redirectUri, win)
+  const redirectPromise = waitForRedirect(redirectUri, state, win)
   win.loadURL(authUrl.toString())
 
   let code: string

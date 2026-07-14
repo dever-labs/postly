@@ -11,6 +11,9 @@
  *   • The authorizeAuthCode flow reuses the same persistent session partition
  *     (`persist:oauth-<id>`) across calls so the IDP session cookie is
  *     preserved between auth attempts (no re-login).
+ *   • waitForRedirect validates the state on every captured navigation event so
+ *     that intermediate same-origin redirects with a wrong or absent state are
+ *     ignored — fixing the "OAuth state mismatch" error observed on Windows 11.
  *
  * The database layer is mocked — these tests focus purely on HTTP behaviour.
  *
@@ -18,6 +21,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import { BrowserWindow } from 'electron'
 import { MocklyServer } from './helpers/mockly'
 import type { OAuthConfig, Token } from '../oauth'
 
@@ -415,5 +419,305 @@ describe('authorizeAuthCode — session partition persistence', () => {
     expect(params['code_verifier']).toBeDefined()
 
     expect(token.accessToken).toBe('integration-access-token')
+  })
+})
+
+// ─── authorizeAuthCode — state validation (OAuth state mismatch fix) ──────────
+//
+// Root cause of issue #134: waitForRedirect captured the first navigation event
+// from the same origin that carried a `code` param, regardless of whether its
+// `state` matched the one generated for the current flow. On Windows 11, the IDP
+// or Chromium can fire extra will-navigate/will-redirect events during the login
+// sequence (intermediate form POSTs, consent pages, cached redirects). If any of
+// those URLs happened to contain a `code` query parameter but a different — or
+// absent — `state`, the flow resolved with the wrong state and threw "OAuth state
+// mismatch" before the real callback arrived.
+//
+// The fix validates the state inside tryCapture and skips any URL whose state
+// does not match the generated value, continuing to wait for the real callback.
+//
+// These tests simulate the exact pattern that triggered the bug: one or more
+// "decoy" navigation events that match the redirect-URI origin and carry a code
+// but the wrong (or absent) state, followed by the legitimate IDP callback with
+// the correct state. The real token exchange is completed against a live Mockly
+// server so the full code→token round-trip is exercised.
+
+describe('authorizeAuthCode — state validation', () => {
+  /** Builds a BrowserWindow constructor that fires `decoys` before the real callback. */
+  function makeWindowWithDecoys({
+    decoyUrls,
+    decoyEventName = 'will-redirect',
+    callbackEventName = 'will-redirect',
+    onDecoyEvent,
+  }: {
+    /** URLs to fire as decoy events before the real callback. */
+    decoyUrls: (redirectOrigin: string) => string[]
+    decoyEventName?: 'will-redirect' | 'will-navigate'
+    callbackEventName?: 'will-redirect' | 'will-navigate'
+    /** Called with each decoy's event object so callers can assert on it. */
+    onDecoyEvent?: (event: { preventDefault: ReturnType<typeof vi.fn> }) => void
+  }) {
+    return function (this: unknown) {
+      const wcListeners: Record<
+        string,
+        Array<(e: { preventDefault: () => void }, url: string) => void>
+      > = {}
+      const winListeners: Record<string, Array<() => void>> = {}
+
+      const removeListener = <T>(listeners: Record<string, Array<T>>, event: string, handler: T) => {
+        const list = listeners[event]
+        if (!list) return
+        const idx = list.indexOf(handler)
+        if (idx !== -1) list.splice(idx, 1)
+      }
+
+      return {
+        loadURL: vi.fn().mockImplementation((url: string) => {
+          const authUrl = new URL(url)
+          const redirectUri = authUrl.searchParams.get('redirect_uri')
+          const correctState = authUrl.searchParams.get('state')
+          if (!redirectUri) return
+
+          const redirectOrigin = new URL(redirectUri).origin
+          const decoys = decoyUrls(redirectOrigin)
+
+          // Fire decoy events first, each 20 ms apart.
+          decoys.forEach((decoyUrl, i) => {
+            setTimeout(() => {
+              const event = { preventDefault: vi.fn() }
+              onDecoyEvent?.(event)
+              wcListeners[decoyEventName]?.forEach((fn) => fn(event, decoyUrl))
+            }, 20 * (i + 1))
+          })
+
+          // Fire the real callback with the correct code and state after all decoys.
+          setTimeout(() => {
+            const cb = new URL(redirectUri)
+            cb.searchParams.set('code', 'integration-auth-code')
+            if (correctState) cb.searchParams.set('state', correctState)
+            wcListeners[callbackEventName]?.forEach((fn) =>
+              fn({ preventDefault: vi.fn() }, cb.toString()),
+            )
+          }, 20 * (decoys.length + 1) + 30)
+        }),
+        webContents: {
+          on: vi.fn().mockImplementation(
+            (event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
+              ;(wcListeners[event] ??= []).push(handler)
+            },
+          ),
+          off: vi.fn().mockImplementation(
+            (event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
+              removeListener(wcListeners, event, handler)
+            },
+          ),
+        },
+        on: vi.fn().mockImplementation((event: string, handler: () => void) => {
+          ;(winListeners[event] ??= []).push(handler)
+        }),
+        off: vi.fn().mockImplementation((event: string, handler: () => void) => {
+          removeListener(winListeners, event, handler)
+        }),
+        isDestroyed: vi.fn().mockReturnValue(false),
+        close: vi.fn(),
+      }
+    }
+  }
+
+  const AUTH_CONFIG: OAuthConfig = {
+    id: 'state-validation-config',
+    name: 'State Validation Test',
+    grantType: 'authorization_code',
+    clientId: 'state-client',
+    scopes: 'openid',
+    authUrl: 'http://127.0.0.1:1/authorize',
+    tokenUrl: '',
+    redirectUri: 'http://localhost:19999/callback',
+  }
+
+  beforeEach(() => {
+    AUTH_CONFIG.tokenUrl = `${server.httpBase}/oauth2/token`
+  })
+
+  it('ignores a will-redirect with a wrong state and resolves on the real callback', async () => {
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=decoy_code&state=completely-wrong-state`],
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    // Only the real code (not the decoy) must reach the token endpoint.
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+  })
+
+  it('ignores a will-redirect with no state param and resolves on the real callback', async () => {
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        // No `state` param at all — simulates an IDP that omits state on intermediate redirects.
+        decoyUrls: (origin) => [`${origin}/callback?code=stateless_code`],
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+  })
+
+  it('ignores a will-navigate with a wrong state and resolves on the real callback', async () => {
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=nav_decoy&state=bad-state`],
+        decoyEventName: 'will-navigate',
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+  })
+
+  it('ignores multiple decoy events in a row before the correct callback arrives', async () => {
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [
+          `${origin}/callback?code=decoy1&state=wrong-1`,
+          `${origin}/other-path?code=decoy2&state=wrong-2`,
+          `${origin}/callback?code=decoy3`,
+        ],
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    expect(calls).toHaveLength(1)
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+  })
+
+  it('ignores will-redirect decoys but resolves when the real callback comes via will-navigate', async () => {
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=redirect_decoy&state=stale-state`],
+        decoyEventName: 'will-redirect',
+        callbackEventName: 'will-navigate',
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+  })
+
+  it('completes the full code exchange and persists the token after skipping decoys', async () => {
+    const { runTransaction } = await import('../../database')
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [
+          `${origin}/callback?code=ignored_code&state=stale`,
+        ],
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    // Token fields from Mockly response.
+    expect(token.accessToken).toBe('integration-access-token')
+    expect(token.tokenType).toBe('Bearer')
+    expect(token.refreshToken).toBe('integration-refresh-token')
+
+    // Database transaction must have been called to persist the token.
+    expect(vi.mocked(runTransaction)).toHaveBeenCalled()
+    const [statements] = vi.mocked(runTransaction).mock.calls[0]
+    const insert = statements.find((s) => s.sql.includes('INSERT INTO tokens'))
+    expect(insert?.params).toEqual(expect.arrayContaining(['integration-access-token']))
+  })
+
+  it('ignores will-navigate decoys but resolves when the real callback comes via will-redirect', async () => {
+    // Symmetric counterpart of the "will-redirect decoys → will-navigate real" test.
+    // Ensures the state check applies to will-navigate events too.
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=nav_decoy&state=stale-nav-state`],
+        decoyEventName: 'will-navigate',
+        callbackEventName: 'will-redirect',
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    const token = await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+  })
+
+  it('does not call event.preventDefault() on decoy events — IDP intermediate navigations are not blocked', async () => {
+    // If preventDefault were called on a decoy the IDP's own login-form POST or
+    // consent-page navigation would be blocked and the user could never complete auth.
+    const decoyEvents: Array<{ preventDefault: ReturnType<typeof vi.fn> }> = []
+
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [
+          `${origin}/callback?code=decoy1&state=wrong-state`,
+          `${origin}/callback?code=decoy2`,
+        ],
+        onDecoyEvent: (evt) => decoyEvents.push(evt),
+      }),
+    )
+    const { authorizeAuthCode } = await import('../oauth')
+
+    await authorizeAuthCode({ ...AUTH_CONFIG })
+
+    expect(decoyEvents).toHaveLength(2)
+    for (const evt of decoyEvents) {
+      expect(evt.preventDefault).not.toHaveBeenCalled()
+    }
+  })
+
+  it('authorizeInline skips decoys and completes the full flow end-to-end', async () => {
+    // The bug was reported on the inline OAuth path ("root folder" collection auth),
+    // which calls authorizeAuthCode with a config whose id is a hash of the config
+    // fields. This test exercises the full authorizeInline → authorizeAuthCode →
+    // waitForRedirect chain with a decoy to confirm state validation fires there too.
+    vi.mocked(BrowserWindow).mockImplementationOnce(
+      makeWindowWithDecoys({
+        decoyUrls: (origin) => [`${origin}/callback?code=inline_decoy&state=stale-inline-state`],
+      }),
+    )
+    const { authorizeInline } = await import('../oauth')
+
+    const inlineConfig: OAuthConfig = {
+      id: '',
+      name: 'inline',
+      grantType: 'authorization_code',
+      clientId: 'inline-client',
+      clientSecret: 'inline-secret',
+      authUrl: 'http://127.0.0.1:1/authorize',
+      tokenUrl: `${server.httpBase}/oauth2/token`,
+      scopes: 'openid profile',
+      redirectUri: 'http://localhost:19999/callback',
+    }
+
+    const token = await authorizeInline(inlineConfig)
+
+    expect(token.accessToken).toBe('integration-access-token')
+    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    expect(calls).toHaveLength(1)
+    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    // The token's oauthConfigId must be the config hash, not the empty id.
+    expect(token.oauthConfigId).toHaveLength(32)
+    expect(token.oauthConfigId).not.toBe('')
   })
 })

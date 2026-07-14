@@ -459,6 +459,147 @@ describe('OAuth integration', () => {
 
       await expect(authorizeAuthCode(cfg())).rejects.toThrow('Authorization window closed')
     })
+
+    // ── state validation (issue #134 — OAuth state mismatch on Windows 11) ──
+    //
+    // waitForRedirect must skip any navigation event that carries a `code` from
+    // the expected origin but a wrong or absent `state`. Only the event whose
+    // `state` matches the generated value should resolve the promise.
+
+    it('ignores a will-redirect from the same origin that has a code but wrong state', async () => {
+      vi.mocked(BrowserWindow).mockImplementationOnce(function () {
+        const wcListeners: Record<string, Array<(e: { preventDefault: () => void }, url: string) => void>> = {}
+        const winListeners: Record<string, Array<() => void>> = {}
+        return {
+          loadURL: vi.fn().mockImplementation((url: string) => {
+            const authUrl = new URL(url)
+            const redirectUri = authUrl.searchParams.get('redirect_uri')
+            const correctState = authUrl.searchParams.get('state')
+            if (!redirectUri) return
+            const origin = new URL(redirectUri).origin
+
+            // Decoy: same origin, has code, but wrong state
+            setTimeout(() => {
+              const decoy = `${origin}/callback?code=decoy_code&state=totally-wrong-state`
+              wcListeners['will-redirect']?.forEach((fn) => fn({ preventDefault: vi.fn() }, decoy))
+            }, 20)
+
+            // Real callback: correct code and state
+            setTimeout(() => {
+              const cb = new URL(redirectUri)
+              cb.searchParams.set('code', 'fake_auth_code')
+              if (correctState) cb.searchParams.set('state', correctState)
+              wcListeners['will-redirect']?.forEach((fn) => fn({ preventDefault: vi.fn() }, cb.toString()))
+            }, 60)
+          }),
+          webContents: {
+            on: vi.fn().mockImplementation((event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
+              ;(wcListeners[event] ??= []).push(handler)
+            }),
+            off: vi.fn(),
+          },
+          on: vi.fn().mockImplementation((event: string, handler: () => void) => {
+            ;(winListeners[event] ??= []).push(handler)
+          }),
+          off: vi.fn(),
+          isDestroyed: vi.fn().mockReturnValue(false),
+          close: vi.fn(),
+        }
+      })
+
+      const token = await authorizeAuthCode(cfg())
+      expect(token.accessToken).toBe('test_access_token')
+    })
+
+    it('ignores a will-redirect with no state param and resolves on the correct callback', async () => {
+      vi.mocked(BrowserWindow).mockImplementationOnce(function () {
+        const wcListeners: Record<string, Array<(e: { preventDefault: () => void }, url: string) => void>> = {}
+        const winListeners: Record<string, Array<() => void>> = {}
+        return {
+          loadURL: vi.fn().mockImplementation((url: string) => {
+            const authUrl = new URL(url)
+            const redirectUri = authUrl.searchParams.get('redirect_uri')
+            const correctState = authUrl.searchParams.get('state')
+            if (!redirectUri) return
+            const origin = new URL(redirectUri).origin
+
+            // Decoy: same origin, has code, NO state param at all
+            setTimeout(() => {
+              const decoy = `${origin}/callback?code=stateless_code`
+              wcListeners['will-redirect']?.forEach((fn) => fn({ preventDefault: vi.fn() }, decoy))
+            }, 20)
+
+            // Real callback
+            setTimeout(() => {
+              const cb = new URL(redirectUri)
+              cb.searchParams.set('code', 'fake_auth_code')
+              if (correctState) cb.searchParams.set('state', correctState)
+              wcListeners['will-redirect']?.forEach((fn) => fn({ preventDefault: vi.fn() }, cb.toString()))
+            }, 60)
+          }),
+          webContents: {
+            on: vi.fn().mockImplementation((event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
+              ;(wcListeners[event] ??= []).push(handler)
+            }),
+            off: vi.fn(),
+          },
+          on: vi.fn().mockImplementation((event: string, handler: () => void) => {
+            ;(winListeners[event] ??= []).push(handler)
+          }),
+          off: vi.fn(),
+          isDestroyed: vi.fn().mockReturnValue(false),
+          close: vi.fn(),
+        }
+      })
+
+      const token = await authorizeAuthCode(cfg())
+      expect(token.accessToken).toBe('test_access_token')
+    })
+
+    it('ignores a will-navigate with wrong state and resolves when correct will-navigate fires', async () => {
+      vi.mocked(BrowserWindow).mockImplementationOnce(function () {
+        const wcListeners: Record<string, Array<(e: { preventDefault: () => void }, url: string) => void>> = {}
+        const winListeners: Record<string, Array<() => void>> = {}
+        return {
+          loadURL: vi.fn().mockImplementation((url: string) => {
+            const authUrl = new URL(url)
+            const redirectUri = authUrl.searchParams.get('redirect_uri')
+            const correctState = authUrl.searchParams.get('state')
+            if (!redirectUri) return
+            const origin = new URL(redirectUri).origin
+
+            // Decoy via will-navigate: same origin, code present, bad state
+            setTimeout(() => {
+              const decoy = `${origin}/callback?code=nav_decoy&state=stale-state-from-old-session`
+              wcListeners['will-navigate']?.forEach((fn) => fn({ preventDefault: vi.fn() }, decoy))
+            }, 20)
+
+            // Real callback via will-navigate
+            setTimeout(() => {
+              const cb = new URL(redirectUri)
+              cb.searchParams.set('code', 'fake_auth_code')
+              if (correctState) cb.searchParams.set('state', correctState)
+              wcListeners['will-navigate']?.forEach((fn) => fn({ preventDefault: vi.fn() }, cb.toString()))
+            }, 60)
+          }),
+          webContents: {
+            on: vi.fn().mockImplementation((event: string, handler: (e: { preventDefault: () => void }, url: string) => void) => {
+              ;(wcListeners[event] ??= []).push(handler)
+            }),
+            off: vi.fn(),
+          },
+          on: vi.fn().mockImplementation((event: string, handler: () => void) => {
+            ;(winListeners[event] ??= []).push(handler)
+          }),
+          off: vi.fn(),
+          isDestroyed: vi.fn().mockReturnValue(false),
+          close: vi.fn(),
+        }
+      })
+
+      const token = await authorizeAuthCode(cfg())
+      expect(token.accessToken).toBe('test_access_token')
+    })
   })
 
   // ── authorizeInline ────────────────────────────────────────────────────────
