@@ -41,10 +41,11 @@ vi.mock('../../database', () => ({
 const mockSetCertVerifyProc = vi.hoisted(() => vi.fn())
 const partitionHistory: string[] = []
 
+const mockFlushStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockFromPartition = vi.hoisted(() =>
   vi.fn().mockImplementation((name: string) => {
     partitionHistory.push(name)
-    return { setCertificateVerifyProc: mockSetCertVerifyProc }
+    return { setCertificateVerifyProc: mockSetCertVerifyProc, cookies: { flushStore: mockFlushStore } }
   }),
 )
 
