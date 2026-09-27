@@ -47,8 +47,11 @@ export function BackstageSettings() {
     if (error) {
       addToast(`Sign-in failed: ${error}`, 'error')
     } else {
-      const updated = { ...settings, connectedUser: data.user, token: '' }
-      setSettings(updated)
+      // Re-fetch from the DB rather than guessing local state — the real token
+      // is only known server-side, and blanking it locally would wipe it out
+      // on the next Save (see postly#backstage-auth-loss).
+      const { data: fresh } = await window.api.settings.get({ key: 'backstage' })
+      if (fresh) setSettings({ ...DEFAULTS, ...fresh })
       addToast(`Signed in as ${data.user.name}`, 'success')
       loadSettings()
     }
