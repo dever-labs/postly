@@ -218,7 +218,7 @@
     "sql.js": "^1.14.2",
     "tailwind-merge": "^3.6.0",
     "ws": "^8.21.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "optionalDependencies": {
     "rolldown": "^1.2.6"
