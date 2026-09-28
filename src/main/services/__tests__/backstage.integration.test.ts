@@ -71,7 +71,13 @@ vi.mock('electron', () => {
     private destroyed = false
     private closedListeners: Array<() => void> = []
     constructor(_opts: unknown) { createdWindows.push(this as unknown as FakeBrowserWindow) }
-    loadURL(url: string) { this.webContents.url = url }
+    loadURL(url: string) {
+      this.webContents.url = url
+      // Real navigation, like real Electron: hit the URL over HTTP against
+      // Mockly so a wrong/typo'd start URL fails the test instead of only
+      // being checked as a string.
+      void fetch(url).catch(() => { /* network errors are surfaced via waitForCalls timing out */ })
+    }
     on(event: string, cb: () => void) {
       if (event === 'closed') this.closedListeners.push(cb)
       return this
@@ -682,9 +688,19 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   }
 
   it('opens a window at the provider start URL', async () => {
+    // Mock the real Backstage "/start" route so navigation isn't just
+    // asserted as a string — Mockly must actually receive the request,
+    // catching a wrong/typo'd URL that a string-only assertion would miss.
+    await server.addMock({
+      id: `${provider}-start`,
+      request: { method: 'GET', path: `/api/auth/${provider}/start`, query: { env: 'production' } },
+      response: { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<html>signing in…</html>' },
+    })
+
     const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
+    await server.waitForCalls(`${provider}-start`, 1, '2s')
 
     // Finish the flow so the test doesn't leave a dangling promise.
     win.webContents.executeJavaScriptImpl = async () => null
