@@ -15,10 +15,81 @@ vi.mock('../../database', () => ({
   run: vi.fn(),
 }))
 
-vi.mock('electron', () => ({ BrowserWindow: vi.fn() }))
+// ─── Fake BrowserWindow ───────────────────────────────────────────────────────
+//
+// authenticateWithBackstage() drives the github/gitlab/google OAuth flow by
+// opening a real Electron BrowserWindow, navigating it to Backstage's
+// "/api/auth/<provider>/start" endpoint, and — once the window finishes
+// navigating away from the auth pages — running executeJavaScript() inside
+// the page to fetch "/api/auth/<provider>/refresh" (a same-origin request
+// carrying the session cookie set during the interactive login).
+//
+// We can't spin up real Chromium here, so BrowserWindow itself is faked.
+// But executeJavaScript is wired to perform a *real* fetch against the
+// Mockly server below, so the HTTP contract (endpoint shape, response
+// parsing) is still exercised end-to-end — only the windowing/navigation
+// chrome is stubbed out.
+const { createdWindows } = vi.hoisted(() => {
+  return { createdWindows: [] as FakeBrowserWindow[] }
+})
+
+function lastWindow(): FakeBrowserWindow {
+  const win = createdWindows.at(-1)
+  if (!win) throw new Error('Expected authenticateWithBackstage to have opened a BrowserWindow')
+  return win
+}
+
+interface FakeBrowserWindow {
+  webContents: {
+    url: string
+    executeJavaScriptImpl: (() => Promise<unknown>) | null
+    emit: (event: 'did-finish-load') => void
+  }
+  close: () => void
+  isDestroyed: () => boolean
+}
+
+vi.mock('electron', () => {
+  class FakeWebContents {
+    url = ''
+    executeJavaScriptImpl: (() => Promise<unknown>) | null = null
+    private listeners: Record<string, Array<() => void>> = {}
+    on(event: string, cb: () => void) { (this.listeners[event] ??= []).push(cb); return this }
+    off(event: string, cb: () => void) {
+      this.listeners[event] = (this.listeners[event] ?? []).filter((l) => l !== cb)
+      return this
+    }
+    emit(event: string) { for (const cb of [...(this.listeners[event] ?? [])]) cb() }
+    getURL() { return this.url }
+    async executeJavaScript(): Promise<unknown> {
+      return this.executeJavaScriptImpl ? this.executeJavaScriptImpl() : null
+    }
+  }
+
+  class BrowserWindow {
+    webContents = new FakeWebContents()
+    private destroyed = false
+    private closedListeners: Array<() => void> = []
+    constructor(_opts: unknown) { createdWindows.push(this as unknown as FakeBrowserWindow) }
+    loadURL(url: string) { this.webContents.url = url }
+    on(event: string, cb: () => void) {
+      if (event === 'closed') this.closedListeners.push(cb)
+      return this
+    }
+    off() { return this }
+    isDestroyed() { return this.destroyed }
+    close() {
+      if (this.destroyed) return
+      this.destroyed = true
+      for (const cb of [...this.closedListeners]) cb()
+    }
+  }
+
+  return { BrowserWindow }
+})
 
 import { queryOne, run } from '../../database'
-import { syncCatalog, authenticateWithBackstageGuest } from '../backstage'
+import { syncCatalog, authenticateWithBackstageGuest, authenticateWithBackstage } from '../backstage'
 import { MocklyServer } from './helpers/mockly'
 
 // ─── Minimal OpenAPI spec for testing ────────────────────────────────────────
@@ -58,6 +129,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   await server.reset()
   vi.mocked(queryOne).mockReturnValue(null)
+  createdWindows.length = 0
 })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -592,5 +664,150 @@ describe('authenticateWithBackstageGuest', () => {
     })
 
     await expect(authenticateWithBackstageGuest(server.httpBase)).rejects.toThrow()
+  })
+})
+
+// ─── authenticateWithBackstage — OAuth window flow (github/gitlab/google) ───
+//
+// This exercises the other three Backstage "integration forms": the
+// interactive OAuth providers. Each opens a BrowserWindow pointed at
+// "/api/auth/<provider>/start" and, once navigation settles away from the
+// auth pages, fetches "/api/auth/<provider>/refresh" from inside the page.
+// The fetch is real (against Mockly); only the BrowserWindow chrome is faked.
+
+describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstage — %s', (provider) => {
+  const OAUTH_RESPONSE = {
+    backstageIdentity: { token: `${provider}-oauth-token` },
+    profile: { displayName: `${provider} User`, email: `${provider}@example.com`, picture: 'https://example.com/pic.png' },
+  }
+
+  it('opens a window at the provider start URL', async () => {
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+    expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
+
+    // Finish the flow so the test doesn't leave a dangling promise.
+    win.webContents.executeJavaScriptImpl = async () => null
+    win.webContents.emit('did-finish-load')
+    win.close()
+    await expect(promise).rejects.toThrow()
+  })
+
+  it('resolves with the token and profile once the in-page refresh succeeds', async () => {
+    await server.addMock({
+      id: `${provider}-refresh`,
+      request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
+      response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(OAUTH_RESPONSE) },
+    })
+
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+
+    // Still on the provider's own login/auth pages — must not attempt extraction yet.
+    win.webContents.url = `${server.httpBase}/api/auth/${provider}/start?env=production`
+    win.webContents.executeJavaScriptImpl = async () => {
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      return resp.ok ? await resp.json() : null
+    }
+    win.webContents.emit('did-finish-load')
+
+    // Real navigation away from the auth pages back to the Backstage app.
+    win.webContents.url = `${server.httpBase}/`
+    win.webContents.emit('did-finish-load')
+
+    const result = await promise
+    expect(result.token).toBe(`${provider}-oauth-token`)
+    expect(result.user.name).toBe(`${provider} User`)
+    expect(result.user.email).toBe(`${provider}@example.com`)
+    expect(result.user.picture).toBe('https://example.com/pic.png')
+  })
+
+  it('defaults user name to the provider id when profile has no displayName', async () => {
+    await server.addMock({
+      id: `${provider}-refresh`,
+      request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backstageIdentity: { token: 'tok' }, profile: {} }),
+      },
+    })
+
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+    win.webContents.executeJavaScriptImpl = async () => {
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      return resp.ok ? await resp.json() : null
+    }
+    win.webContents.url = `${server.httpBase}/`
+    win.webContents.emit('did-finish-load')
+
+    const result = await promise
+    expect(result.user.name).toBe(provider)
+  })
+
+  it('keeps waiting (does not resolve or reject) while executeJavaScript returns no token', async () => {
+    await server.addMock({
+      id: `${provider}-refresh`,
+      request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
+      response: { status: 401, body: 'not logged in yet' },
+    })
+
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+    win.webContents.executeJavaScriptImpl = async () => {
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      return resp.ok ? await resp.json() : null
+    }
+    win.webContents.url = `${server.httpBase}/`
+    win.webContents.emit('did-finish-load')
+
+    // Give the microtask queue a chance to run tryExtract; the promise
+    // should still be pending since no token was returned.
+    const raced = await Promise.race([promise.then(() => 'resolved').catch(() => 'rejected'), new Promise((r) => setTimeout(() => r('pending'), 50))])
+    expect(raced).toBe('pending')
+
+    // Close the window to clean up and settle the promise for this test.
+    win.close()
+    await expect(promise).rejects.toThrow('Authentication window closed')
+  })
+
+  it('rejects when the user closes the auth window before completing sign-in', async () => {
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+    win.close()
+    await expect(promise).rejects.toThrow('Authentication window closed')
+  })
+
+  it('closes the window once the flow settles', async () => {
+    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const win = lastWindow()
+    win.close()
+    await promise.catch(() => { /* expected rejection */ })
+    expect(win.isDestroyed()).toBe(true)
+  })
+})
+
+describe('authenticateWithBackstage — provider validation', () => {
+  it('rejects unsupported providers without opening a window', async () => {
+    const before = createdWindows.length
+    await expect(authenticateWithBackstage(server.httpBase, 'facebook')).rejects.toThrow(
+      'Unsupported Backstage OAuth provider',
+    )
+    expect(createdWindows.length).toBe(before)
+  })
+})
+
+describe('authenticateWithBackstage — timeout', () => {
+  it('rejects if sign-in is not completed within the timeout window', async () => {
+    vi.useFakeTimers()
+    try {
+      const promise = authenticateWithBackstage(server.httpBase, 'github')
+      const assertion = expect(promise).rejects.toThrow('Backstage authentication timed out')
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
