@@ -1,4 +1,5 @@
 import { BrowserWindow, session } from 'electron'
+import { SECURE_WEB_PREFERENCES } from '../security'
 import crypto from 'crypto'
 import https from 'https'
 import axios from 'axios'
@@ -205,7 +206,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
     width: 800,
     height: 600,
     autoHideMenuBar: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partitionName }
+    webPreferences: { ...SECURE_WEB_PREFERENCES, partition: partitionName }
   })
   // Register listener BEFORE loadURL so the redirect is caught even if
   // Keycloak completes it instantly (e.g. an existing session).
