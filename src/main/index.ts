@@ -1,10 +1,12 @@
-import { app, BrowserWindow, shell, Menu, nativeImage, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { platform } from 'process'
 import { initDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
+import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
 
 function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
@@ -21,13 +23,17 @@ function createWindow(): BrowserWindow {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false
+      ...SECURE_WEB_PREFERENCES
     }
   })
 
+  const appUrl = app.isPackaged
+    ? pathToFileURL(join(__dirname, '../renderer/index.html')).href
+    : (process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173')
+  lockDownWindow(win, appUrl)
+
   if (!app.isPackaged) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173')
+    win.loadURL(appUrl)
     // Skip DevTools when running E2E tests — they create a second BrowserWindow
     // that interferes with Playwright's firstWindow() detection.
     if (!process.env['PLAYWRIGHT']) {
@@ -36,11 +42,6 @@ function createWindow(): BrowserWindow {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
 
   return win
 }
