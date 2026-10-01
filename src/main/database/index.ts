@@ -3,6 +3,7 @@ import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { migrations } from './migrations'
+import { encryptDb, decryptDb } from './db-crypto'
 
 let db: Database
 let SQL: SqlJsStatic
@@ -16,8 +17,8 @@ export async function initDatabase(): Promise<void> {
   SQL = await initSqlJs({ locateFile: (f) => path.join(sqlJsDir, f) })
 
   if (fs.existsSync(dbPath)) {
-    const fileBuffer = fs.readFileSync(dbPath)
-    db = new SQL.Database(fileBuffer)
+    const raw = fs.readFileSync(dbPath)
+    db = new SQL.Database(decryptDb(raw))
   } else {
     db = new SQL.Database()
   }
@@ -300,8 +301,10 @@ function runMigrations(): void {
 /** Flush the in-memory DB to disk. Call after every write. */
 export function persistDb(): void {
   if (!db || !dbPath) return
-  const data = db.export()
-  fs.writeFileSync(dbPath, Buffer.from(data))
+  const data = encryptDb(db.export())
+  const tmp = `${dbPath}.tmp`
+  fs.writeFileSync(tmp, data, { mode: 0o600 })
+  fs.renameSync(tmp, dbPath)
 }
 
 let deferredPersistTimer: ReturnType<typeof setTimeout> | null = null
