@@ -17,10 +17,12 @@ import { registerExportImportHandlers } from './export-import'
 import { registerDraftHandlers } from './drafts'
 import { registerWindowHandlers } from './window'
 import { registerUpdaterHandlers } from './updater'
+import { installIpcSenderGuard } from './sender-guard'
 
 export { attachWindowEvents } from './window'
 
 export function registerAllIpcHandlers(): void {
+  installIpcSenderGuard()
   registerCollectionHandlers()
   registerRequestHandlers()
   registerHttpHandlers()
