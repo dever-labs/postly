@@ -9,9 +9,12 @@ import type { Plugin } from 'vite'
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'", // Monaco and Tailwind inject inline styles
+  // Monaco and Tailwind inject inline styles; http(s) is for the response Preview iframe
+  // (srcdoc inherits this policy), which must be able to load a page's own CSS and fonts.
+  // Scripts stay locked to 'self' and the iframe is sandboxed without allow-scripts.
+  "style-src 'self' 'unsafe-inline' http: https:",
   "img-src 'self' data: blob: http: https:", // avatars from GitHub/GitLab/Backstage
-  "font-src 'self' data:",
+  "font-src 'self' data: http: https:",
   "worker-src 'self' blob:",
   "connect-src 'self'", // all network access goes through the main process via IPC
   "object-src 'none'",
