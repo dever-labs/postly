@@ -28,7 +28,7 @@ test.describe('Request editor', () => {
 
     const grpId = await window.evaluate(
       async (colId: string) => {
-        const res = await window.api.groups.create({ collectionId: colId, name: 'Default' })
+        const res = await window.api.folders.create({ parentId: colId, name: 'Default' })
         return (res as { data: { id: string } }).data.id
       },
       colId
@@ -36,7 +36,7 @@ test.describe('Request editor', () => {
 
     await window.evaluate(
       async (grpId: string) => {
-        await window.api.requests.create({ groupId: grpId, name: 'Test Request', method: 'GET' })
+        await window.api.requests.create({ folderId: grpId, name: 'Test Request', method: 'GET' })
       },
       grpId
     )

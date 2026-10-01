@@ -3,6 +3,8 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
+  // These need a Mockly server, and mockly-driver cannot be loaded by Playwright's CJS loader
+  testIgnore: process.env.E2E_MOCKLY ? [] : ['**/cancellation.spec.ts', '**/oauth-session.spec.ts'],
   timeout: 30_000,
   expect: { timeout: 8_000 },
   // Electron tests are not browser-based — no projects needed

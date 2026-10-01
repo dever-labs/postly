@@ -204,7 +204,7 @@ function FolderTreeRow({
             </button>
 
             <Collapsible.Trigger asChild>
-              <button className="shrink-0 rounded-sm p-0.5 focus:outline-hidden" onClick={(e) => e.stopPropagation()}>
+              <button data-testid={`${isRoot ? 'collection' : 'group'}-toggle-${folder.id}`} className="shrink-0 rounded-sm p-0.5 focus:outline-hidden" onClick={(e) => e.stopPropagation()}>
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             </Collapsible.Trigger>
@@ -220,7 +220,7 @@ function FolderTreeRow({
               {isRoot ? <FolderOpen className="h-3.5 w-3.5 shrink-0" /> : <FolderPlus className="h-3.5 w-3.5 shrink-0" />}
               <span className="truncate">{folder.name}</span>
               {isRoot && <Badge variant="grey" className="ml-1">{folder.source}</Badge>}
-              {isDirty && <span data-testid="group-dirty-dot" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
+              {isDirty && <span data-testid={isRoot ? 'collection-dirty-dot' : 'group-dirty-dot'} className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
               {folder.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
             </button>
 
@@ -253,7 +253,7 @@ function FolderTreeRow({
             )}
           </div>
 
-          <Collapsible.Content>
+          <Collapsible.Content data-testid={`${isRoot ? 'collection' : 'group'}-content-${folder.id}`}>
             <div>
               {folderRequests.length === 0 && children.length === 0 && !addingFolderTo && !addingRequestTo && !searchQuery && (
                 <div className="mx-2 my-1.5 rounded-sm border border-dashed border-th-border px-2 py-2 text-center" style={{ marginLeft: rowPadding + 28 }}>

@@ -131,7 +131,7 @@ test.describe('Folder tree — add request to sub-folder via UI', () => {
 
     reqSubFolderId = await window.evaluate(
       async ({ parentId, name }: { parentId: string; name: string }) => {
-        const res = await window.api.groups.create({ parentId, name })
+        const res = await window.api.folders.create({ parentId, name })
         return (res as { data: { id: string } }).data.id
       },
       { parentId: reqCollectionId, name: reqSubFolderName }
