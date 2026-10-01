@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { SECURE_WEB_PREFERENCES } from '../security'
 import axios from 'axios'
 import https from 'https'
 import crypto from 'crypto'
@@ -268,7 +269,7 @@ export async function authenticateWithBackstage(
     height: 700,
     title: `Sign in to Backstage via ${safeProvider}`,
     autoHideMenuBar: true,
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: { ...SECURE_WEB_PREFERENCES },
   })
 
   win.loadURL(`${base}/api/auth/${safeProvider}/start?env=production`)

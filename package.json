@@ -39,6 +39,15 @@
     ],
     "extraResources": [],
     "afterSign": "build/notarize.js",
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableCookieEncryption": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": true
+    },
     "win": {
       "target": [
         {

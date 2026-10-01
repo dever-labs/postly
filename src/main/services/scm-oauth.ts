@@ -1,4 +1,5 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow } from 'electron'
+import { SECURE_WEB_PREFERENCES, openExternalSafe } from '../security'
 import http from 'http'
 import crypto from 'crypto'
 import axios from 'axios'
@@ -68,7 +69,7 @@ export async function requestGitHubDeviceCode(args: { baseUrl: string; clientId:
     { headers: { Accept: 'application/json' } }
   )
   if (res.data.error) throw new Error(res.data.error_description ?? res.data.error)
-  shell.openExternal(res.data.verification_uri)
+  openExternalSafe(res.data.verification_uri)
   return {
     deviceCode: res.data.device_code,
     userCode: res.data.user_code,
@@ -117,7 +118,7 @@ export async function requestGitLabDeviceCode(args: { baseUrl: string; clientId:
   )
   if (res.data.error) throw new Error(res.data.error_description ?? res.data.error)
   const verificationUri = res.data.verification_uri_complete ?? res.data.verification_uri
-  shell.openExternal(verificationUri)
+  openExternalSafe(verificationUri)
   return {
     deviceCode: res.data.device_code,
     userCode: res.data.user_code,
@@ -163,7 +164,7 @@ export async function startGitHubOAuth(args: {
   const state = crypto.randomBytes(16).toString('hex')
   const redirectUri = `http://localhost:${port}/callback`
   const authorizeUrl = `${args.baseUrl}/login/oauth/authorize?client_id=${encodeURIComponent(args.clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,read:org&state=${state}`
-  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitHub', autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true } })
+  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitHub', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition: `scm-oauth-${crypto.randomBytes(8).toString('hex')}` } })
   win.loadURL(authorizeUrl)
   let code: string
   try {
@@ -188,7 +189,7 @@ export async function startGitLabOAuth(args: {
   const codeVerifier = crypto.randomBytes(64).toString('base64url')
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
   const authorizeUrl = `${args.baseUrl}/oauth/authorize?client_id=${encodeURIComponent(args.clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=api&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`
-  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitLab', autoHideMenuBar: true, webPreferences: { nodeIntegration: false, contextIsolation: true } })
+  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitLab', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition: `scm-oauth-${crypto.randomBytes(8).toString('hex')}` } })
   win.loadURL(authorizeUrl)
   let code: string
   try {

@@ -3,6 +3,7 @@ import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 import { getGeneralSettings } from './settings-utils'
+import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
 type LogLevel = 'info' | 'warn' | 'error'
 
@@ -73,7 +74,7 @@ export function registerHttpHandlers(): void {
     currentAbortController = null
   })
 
-  ipcMain.handle('postly:http:execute', async (_: IpcMainInvokeEvent, req: HttpRequest) => {
+  ipcMain.handle('postly:http:execute', async (event: IpcMainInvokeEvent, req: HttpRequest) => {
     const logs: LogEntry[] = []
     const log = (level: LogLevel, message: string, detail?: string) => logs.push({ level, message, detail })
 
@@ -213,6 +214,12 @@ export function registerHttpHandlers(): void {
         headers: Object.fromEntries(
           Object.entries(req.headers).map(([key, value]) => [key, interpolateEnvVars(value, envVars)])
         )
+      }
+
+      const localFiles = collectLocalFilePaths(interpolatedReq)
+      if (localFiles.length > 0 && !(await confirmLocalFileReads(localFiles, interpolatedReq.url, event.sender))) {
+        log('warn', 'Request not sent: local file upload was not approved')
+        return { error: 'Request cancelled: uploading local files was not approved.', logs }
       }
 
       const controller = new AbortController()

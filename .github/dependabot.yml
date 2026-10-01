@@ -28,6 +28,10 @@ updates:
       # Pin Electron major version intentionally
       - dependency-name: "electron"
         update-types: ["version-update:semver-major"]
+      # typescript-eslint cannot load TypeScript 7 yet, which breaks `npm run lint`.
+      # Remove once https://github.com/typescript-eslint/typescript-eslint/issues/10940 lands.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

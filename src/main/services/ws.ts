@@ -17,11 +17,18 @@ export function connectWebSocket(
   return new Promise((resolve, reject) => {
     const existing = connections.get(connectionId)
     if (existing) {
+      // Drop the old socket's listeners so its late 'close' can neither emit a stale
+      // event to the renderer nor evict the replacement connection from the map.
+      existing.ws.removeAllListeners()
+      existing.ws.on('error', () => {})
       existing.ws.close()
       connections.delete(connectionId)
     }
 
     const ws = new WebSocket(url, { headers })
+    const forget = () => {
+      if (connections.get(connectionId)?.ws === ws) connections.delete(connectionId)
+    }
 
     ws.on('open', () => {
       connections.set(connectionId, { ws, sender })
@@ -40,7 +47,7 @@ export function connectWebSocket(
     })
 
     ws.on('close', (code: number, reason: Buffer) => {
-      connections.delete(connectionId)
+      forget()
       sender.send('postly:ws:event', {
         connectionId,
         type: 'close',
@@ -50,7 +57,7 @@ export function connectWebSocket(
     })
 
     ws.on('error', (err: Error) => {
-      connections.delete(connectionId)
+      forget()
       sender.send('postly:ws:event', { connectionId, type: 'error', message: err.message })
       reject(err)
     })

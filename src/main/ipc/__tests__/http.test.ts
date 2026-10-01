@@ -23,6 +23,11 @@ vi.mock('../../services/http-executor', () => ({
   executeRequest: vi.fn()
 }))
 
+vi.mock('../../services/file-access', () => ({
+  collectLocalFilePaths: vi.fn(() => []),
+  confirmLocalFileReads: vi.fn(async () => true)
+}))
+
 vi.mock('../../services/oauth', () => ({
   getValidTokenForConfig: vi.fn(),
   authorizeInline: vi.fn()
@@ -31,6 +36,7 @@ vi.mock('../../services/oauth', () => ({
 import { registerHttpHandlers } from '../http'
 import { queryOne, queryAll } from '../../database'
 import { executeRequest } from '../../services/http-executor'
+import { collectLocalFilePaths, confirmLocalFileReads } from '../../services/file-access'
 import { getValidTokenForConfig, authorizeInline } from '../../services/oauth'
 
 const mockQ1 = vi.mocked(queryOne)
@@ -120,7 +126,7 @@ function baseResp() {
 async function invoke(req: unknown): Promise<Result> {
   const handler = state.handlers['postly:http:execute']
   if (!handler) throw new Error('postly:http:execute handler not registered')
-  return handler(null, req) as Promise<Result>
+  return handler({ sender: {} }, req) as Promise<Result>
 }
 
 async function invokeCancel(): Promise<void> {
@@ -145,6 +151,16 @@ describe('http IPC handler', () => {
     setupDb()
     mockExec.mockResolvedValue(baseResp())
     registerHttpHandlers()
+  })
+
+  describe('local file uploads', () => {
+    it('does not execute the request when the user declines the file upload', async () => {
+      vi.mocked(collectLocalFilePaths).mockReturnValueOnce(['/tmp/secret.txt'])
+      vi.mocked(confirmLocalFileReads).mockResolvedValueOnce(false)
+      const result = await invoke(baseReq())
+      expect(result.error).toMatch(/not approved/)
+      expect(mockExec).not.toHaveBeenCalled()
+    })
   })
 
   // ── Environment ────────────────────────────────────────────────────────────
