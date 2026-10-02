@@ -27,13 +27,13 @@ test.describe('Draft cache & dirty indicator', () => {
     }, collectionName)
 
     const grpId = await window.evaluate(async (colId: string) => {
-      const res = await window.api.groups.create({ collectionId: colId, name: 'Default' })
+      const res = await window.api.folders.create({ parentId: colId, name: 'Default' })
       return (res as { data: { id: string } }).data.id
     }, colId)
 
     await window.evaluate(
       async ({ grpId, name, url }: { grpId: string; name: string; url: string }) => {
-        const res = await window.api.requests.create({ groupId: grpId, name, method: 'GET' })
+        const res = await window.api.requests.create({ folderId: grpId, name, method: 'GET' })
         const id = (res as { data: { id: string } }).data.id
         await window.api.requests.update({ id, url })
       },

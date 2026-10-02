@@ -69,11 +69,11 @@ test.describe('Send & cancel request', () => {
       return (res as { data: { id: string } }).data.id
     })
     const grpId = await window.evaluate(async (colId: string) => {
-      const res = await window.api.groups.create({ collectionId: colId, name: 'Default' })
+      const res = await window.api.folders.create({ parentId: colId, name: 'Default' })
       return (res as { data: { id: string } }).data.id
     }, colId)
     await window.evaluate(async (grpId: string) => {
-      await window.api.requests.create({ groupId: grpId, name: 'Mockly Request', method: 'GET' })
+      await window.api.requests.create({ folderId: grpId, name: 'Mockly Request', method: 'GET' })
     }, grpId)
 
     await window.reload()

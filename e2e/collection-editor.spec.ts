@@ -29,7 +29,7 @@ test.describe('Collection editor', () => {
 
     groupId = await window.evaluate(
       async ({ colId, name }: { colId: string; name: string }) => {
-        const res = await window.api.groups.create({ collectionId: colId, name })
+        const res = await window.api.folders.create({ parentId: colId, name })
         return (res as { data: { id: string } }).data.id
       },
       { colId: collectionId, name: groupName }

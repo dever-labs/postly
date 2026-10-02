@@ -68,8 +68,8 @@ test.describe('Sidebar — source collapse persistence', () => {
     // Ensure there is at least one local collection so the local source section is rendered
     const existing = await window.evaluate(async () => {
       const res = await window.api.collections.list()
-      const data = res as { data: { collections: { id: string; source: string }[] } }
-      return data.data.collections.filter((c) => c.source === 'local').length
+      const data = res as { data: { id: string; source: string; parentId: string | null }[] }
+      return data.data.filter((c) => c.source === 'local' && !c.parentId).length
     })
     if (existing === 0) {
       await createCollection(window, `Source Test ${Date.now()}`)

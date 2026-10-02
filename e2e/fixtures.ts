@@ -20,7 +20,8 @@ export const test = base.extend<Record<string, never>, Fixtures>({
   electronApp: [
     async ({}, use) => {
       const app = await electron.launch({
-        args: [MAIN],
+        // CI runners lack a SUID chrome-sandbox / allow no unprivileged user namespaces
+        args: process.env.CI ? ['--no-sandbox', MAIN] : [MAIN],
         // app.isPackaged is false when launched directly, so the main process
         // reads this env var to locate the renderer instead of hitting localhost.
         // PLAYWRIGHT suppresses DevTools so firstWindow() reliably returns the app window.
