@@ -44,7 +44,7 @@ const mockGitInstance = {
 mockGitInstance.env.mockReturnValue(mockGitInstance)
 
 vi.mock('simple-git', () => ({
-  default: vi.fn(() => mockGitInstance),
+  simpleGit: vi.fn(() => mockGitInstance),
 }))
 
 vi.mock('@apidevtools/swagger-parser', () => ({
@@ -62,7 +62,7 @@ vi.mock('../../database', () => ({
 import { buildSshCommand, isSshUrl, buildGitEnv, testConnectivity, cloneOrPull } from '../git-local'
 import os from 'os'
 import fs from 'fs'
-import simpleGit from 'simple-git'
+import { simpleGit } from 'simple-git'
 
 const mockHomedir = vi.mocked(os.homedir)
 const mockExistsSync = vi.mocked(fs.existsSync)
