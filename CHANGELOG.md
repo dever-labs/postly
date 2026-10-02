@@ -4,6 +4,28 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Infinite-depth folder tree** — collections and groups are replaced by a single folder tree with unlimited nesting, drag-and-drop reordering, and per-folder add/rename/delete actions.
+
+### Fixed
+
+- **Backstage sign-in** — the OAuth token obtained during sign-in is now preserved when saving the integration (#211).
+- **OAuth redirect** — the `state` parameter is validated when waiting for the redirect, preventing state-mismatch acceptance (#140); improved error handling, validation and extra-params support.
+- **macOS cask** — postflight removes the quarantine attribute so the unsigned app launches.
+
+### Security
+
+- Resolved high-severity dependency vulnerabilities via `npm audit fix`.
+
+### Tests
+
+- Unit tests for Backstage OAuth integration forms (GitHub/GitLab/Google) and an integration test backed by a real Mockly mock.
+- Folder-tree unit coverage and Playwright e2e for the folder tree and import/export.
+- Migrated integration tests to `@dever-labs/mockly-driver`; added an NTLM integration test.
+
 ## [0.7.0] — 2026-05-31
 
 ### Added
