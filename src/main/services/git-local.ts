@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git'
+import { simpleGit } from 'simple-git'
 import { app } from 'electron'
 import path from 'path'
 import os from 'os'
