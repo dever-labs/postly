@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { platform } from 'process'
-import { initDatabase, flushPersist, quarantineUnreadableDatabase } from './database'
+import { initDatabase, preloadSqlJs, flushPersist, quarantineUnreadableDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
@@ -45,6 +45,8 @@ function createWindow(): BrowserWindow {
 
   return win
 }
+
+void preloadSqlJs().catch(() => {})
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)

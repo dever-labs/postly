@@ -3,25 +3,40 @@ import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { migrations } from './migrations'
-import { encryptDb, decryptDb } from './db-crypto'
+import { encryptDb, decryptDb, isEncrypted } from './db-crypto'
 
 let db: Database
 let SQL: SqlJsStatic
 let dbPath: string
 
+let sqlJsPromise: Promise<SqlJsStatic> | null = null
+
+/** Start compiling the sql.js WASM early so it overlaps with app/window startup. */
+export function preloadSqlJs(): Promise<SqlJsStatic> {
+  if (!sqlJsPromise) {
+    // Locate the WASM file next to the sql.js JS module
+    const sqlJsDir = path.dirname(require.resolve('sql.js'))
+    sqlJsPromise = initSqlJs({ locateFile: (f) => path.join(sqlJsDir, f) })
+    sqlJsPromise.catch(() => { sqlJsPromise = null })
+  }
+  return sqlJsPromise
+}
+
 export async function initDatabase(): Promise<void> {
   dbPath = path.join(app.getPath('userData'), 'postly.db')
+  SQL = await preloadSqlJs()
 
-  // Locate the WASM file next to the sql.js JS module
-  const sqlJsDir = path.dirname(require.resolve('sql.js'))
-  SQL = await initSqlJs({ locateFile: (f) => path.join(sqlJsDir, f) })
-
+  // Plaintext or brand-new files are always rewritten so they get encrypted/created.
+  let needsPersist = true
   if (fs.existsSync(dbPath)) {
     const raw = fs.readFileSync(dbPath)
+    needsPersist = !isEncrypted(raw)
     db = new SQL.Database(decryptDb(raw))
   } else {
     db = new SQL.Database()
   }
+  const changesBefore = totalChanges()
+  const schemaBefore = schemaVersion()
 
   db.run('PRAGMA foreign_keys = ON')
   runMigrations()
@@ -37,7 +52,7 @@ export async function initDatabase(): Promise<void> {
     )
     UPDATE requests
     SET is_dirty = 0
-    WHERE folder_id IN (
+    WHERE is_dirty != 0 AND folder_id IN (
       SELECT DISTINCT fr.id
       FROM folder_root fr
       JOIN folders root ON root.id = fr.root_id
@@ -45,7 +60,16 @@ export async function initDatabase(): Promise<void> {
         AND root.source NOT IN ('git', 'github', 'gitlab')
     )
   `)
-  persistDb()
+  // A full export + encrypt + write scales with DB size; skip it when startup changed nothing.
+  if (needsPersist || totalChanges() !== changesBefore || schemaVersion() !== schemaBefore) persistDb()
+}
+
+function schemaVersion(): number {
+  return Number(db.exec('PRAGMA schema_version')[0].values[0][0])
+}
+
+function totalChanges(): number {
+  return Number(db.exec('SELECT total_changes()')[0].values[0][0])
 }
 
 function tableExists(table: string): boolean {
@@ -65,10 +89,15 @@ function addColumnIfMissing(table: string, col: string, definition: string): voi
   db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${definition}`)
 }
 
+function referencesFolders(table: string): boolean {
+  const r = db.exec(`SELECT 1 FROM pragma_foreign_key_list('${table}') WHERE "table" = 'folders'`)
+  return (r[0]?.values.length ?? 0) > 0
+}
+
 function recreateDraftTables(): void {
   db.run('PRAGMA foreign_keys = OFF')
   try {
-    if (tableExists('collection_drafts')) {
+    if (tableExists('collection_drafts') && !referencesFolders('collection_drafts')) {
       db.run(`CREATE TABLE collection_drafts_v2 (
         collection_id TEXT PRIMARY KEY REFERENCES folders(id) ON DELETE CASCADE,
         name TEXT, description TEXT,
@@ -92,7 +121,7 @@ function recreateDraftTables(): void {
       )`)
     }
 
-    if (tableExists('group_drafts')) {
+    if (tableExists('group_drafts') && !referencesFolders('group_drafts')) {
       db.run(`CREATE TABLE group_drafts_v2 (
         group_id TEXT PRIMARY KEY REFERENCES folders(id) ON DELETE CASCADE,
         name TEXT, description TEXT,
