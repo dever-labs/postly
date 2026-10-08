@@ -34,9 +34,16 @@ import {
 const sender = { send: vi.fn() }
 const asSender = sender as never
 
-async function connect(id = 'c1', options = {}) {
+// The mqtt module is loaded lazily, so the client only exists after the dynamic import resolves.
+async function startConnect(id: string, options = {}) {
+  const before = state.clients.length
   const p = connectMqtt(id, 'mqtt://broker', options, asSender)
-  const client = state.clients[state.clients.length - 1]
+  await vi.waitFor(() => expect(state.clients.length).toBe(before + 1))
+  return { p, client: state.clients[state.clients.length - 1] }
+}
+
+async function connect(id = 'c1', options = {}) {
+  const { p, client } = await startConnect(id, options)
   client.connected = true
   client.emit('connect')
   await p
@@ -76,8 +83,8 @@ describe('mqtt service', () => {
   })
 
   it('rejects and drops the connection on error', async () => {
-    const p = connectMqtt('c2', 'mqtt://broker', {}, asSender)
-    state.clients[state.clients.length - 1].emit('error', new Error('refused'))
+    const { p, client } = await startConnect('c2')
+    client.emit('error', new Error('refused'))
     await expect(p).rejects.toThrow('refused')
     expect(sender.send).toHaveBeenCalledWith('postly:mqtt:event', { connectionId: 'c2', type: 'error', message: 'refused' })
     expect(() => subscribeMqtt('c2', 't', 0)).toThrow(/No active/)

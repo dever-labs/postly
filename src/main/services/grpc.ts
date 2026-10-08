@@ -1,5 +1,4 @@
-import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
+import type * as GrpcTypes from '@grpc/grpc-js'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -21,6 +20,7 @@ export async function loadProtoContent(protoContent: string): Promise<GrpcServic
   fs.writeFileSync(tmpFile, protoContent, 'utf8')
 
   try {
+    const protoLoader = await import('@grpc/proto-loader')
     const packageDef = await protoLoader.load(tmpFile, {
       keepCase: true,
       longs: String,
@@ -75,6 +75,7 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
   const start = Date.now()
 
   try {
+    const [grpc, protoLoader] = await Promise.all([import('@grpc/grpc-js'), import('@grpc/proto-loader')])
     const packageDef = await protoLoader.load(tmpFile, {
       keepCase: true,
       longs: String,
@@ -99,7 +100,7 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
       ? grpc.credentials.createSsl()
       : grpc.credentials.createInsecure()
 
-    type GrpcClientCtor = new (url: string, creds: grpc.ChannelCredentials) => grpc.Client
+    type GrpcClientCtor = new (url: string, creds: GrpcTypes.ChannelCredentials) => GrpcTypes.Client
     const client = new (svcCtor as GrpcClientCtor)(params.serverUrl, creds)
 
     const meta = new grpc.Metadata()
@@ -122,7 +123,7 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
       }
 
       // Check if it's server-streaming
-      const call = method.call(client, requestData, meta, (err: grpc.ServiceError | null, response: unknown) => {
+      const call = method.call(client, requestData, meta, (err: GrpcTypes.ServiceError | null, response: unknown) => {
         if (err) {
           resolve({ error: `${err.code}: ${err.message}`, duration: Date.now() - start })
         } else {

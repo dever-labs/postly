@@ -4,7 +4,7 @@ import { pathToFileURL } from 'url'
 import { platform } from 'process'
 import { initDatabase, flushPersist, quarantineUnreadableDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
-import { initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
+import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
 import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
 
@@ -60,8 +60,9 @@ app.whenReady().then(async () => {
   const win = createWindow()
   attachWindowEvents(win)
 
-  // Always init so dev-mode "check now" button can emit events back to renderer
-  initUpdater(win)
+  // Cheap: lets dev-mode "check now" emit events. electron-updater itself is
+  // loaded after startup (see below) so it stays off the critical path.
+  setUpdaterWindow(win)
 
   // Initialise the database — the window is already open while this runs.
   try {
@@ -95,15 +96,24 @@ app.whenReady().then(async () => {
   dbResolve()
 
   if (app.isPackaged) {
-    const generalSettings = getGeneralSettings()
-    if (generalSettings.autoUpdate) {
-      // Enterprise bundled config takes precedence over user setting.
-      // Neither affects the default GitHub Releases channel used by normal builds.
-      const enterprise = getEnterpriseConfig()
-      const effectiveUrl = enterprise.updateUrl ?? generalSettings.updateFeedUrl
-      applyFeedUrl(effectiveUrl)
-      checkForUpdates()
+    // Update checks are a background concern: wait until the UI has rendered,
+    // then yield a few seconds so they never compete with startup work.
+    const startUpdateCheck = (): void => {
+      setTimeout(() => {
+        initUpdater(win)
+        const generalSettings = getGeneralSettings()
+        if (generalSettings.autoUpdate) {
+          // Enterprise bundled config takes precedence over user setting.
+          // Neither affects the default GitHub Releases channel used by normal builds.
+          const enterprise = getEnterpriseConfig()
+          const effectiveUrl = enterprise.updateUrl ?? generalSettings.updateFeedUrl
+          applyFeedUrl(effectiveUrl)
+          checkForUpdates()
+        }
+      }, 3000)
     }
+    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', startUpdateCheck)
+    else startUpdateCheck()
   }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

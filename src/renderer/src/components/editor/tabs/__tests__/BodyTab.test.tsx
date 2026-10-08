@@ -7,6 +7,8 @@ import type { BodyType } from '@/types'
 // ── Monaco mock ───────────────────────────────────────────────────────────────
 // @monaco-editor/react is a heavy runtime dependency not available in jsdom.
 
+vi.mock('@/lib/monaco-setup', () => ({}))
+
 vi.mock('@monaco-editor/react', async () => {
   const Editor = ({ value, onChange, 'data-testid': testId }: {
     value?: string

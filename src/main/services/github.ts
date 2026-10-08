@@ -1,6 +1,5 @@
 import axios from 'axios'
 import crypto from 'crypto'
-import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 
@@ -37,7 +36,7 @@ export async function discoverApis(settings: GitHubSettings): Promise<void> {
       let spec: object
       try {
         const rawResponse = await axios.get(rawUrl, { headers })
-        spec = await SwaggerParser.dereference(rawResponse.data)
+        spec = await (await import('@apidevtools/swagger-parser')).default.dereference(rawResponse.data)
       } catch {
         continue
       }
