@@ -1,13 +1,9 @@
 # Release
 #
-# Triggered when a GitHub release is published (manually via the GitHub UI or
-# API).  The release tag (e.g. v0.3.0) is used as the app version — package.json
-# does NOT need to be updated before releasing.
-#
-# Steps to release:
-#   1. Go to GitHub → Releases → Draft a new release
-#   2. Create a tag (e.g. v0.3.0) and publish the release
-#   3. This workflow runs CI, then builds and uploads binaries for all platforms
+# Triggered when a GitHub release is published. Normally that is done by
+# release-please (see release-please.yml) when its release PR is merged; a
+# release can also still be drafted manually. The release tag (e.g. v0.3.0)
+# is used as the app version.
 
 name: Release
 

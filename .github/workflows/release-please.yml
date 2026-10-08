@@ -1,0 +1,24 @@
+name: Release Please
+
+# Maintains a release PR from Conventional Commits. Merging it bumps
+# package.json, updates CHANGELOG.md, tags vX.Y.Z and publishes the GitHub
+# release, which triggers release.yml to build and upload the binaries.
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # A PAT is required: releases created with GITHUB_TOKEN do not trigger release.yml
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
