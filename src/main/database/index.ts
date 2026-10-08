@@ -59,6 +59,12 @@ function hasColumn(table: string, col: string): boolean {
   return (result[0]?.values.length ?? 0) > 0
 }
 
+/** Adds a column only when the table exists and lacks it, so real failures (e.g. disk full) are not swallowed. */
+function addColumnIfMissing(table: string, col: string, definition: string): void {
+  if (!tableExists(table) || hasColumn(table, col)) return
+  db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${definition}`)
+}
+
 function recreateDraftTables(): void {
   db.run('PRAGMA foreign_keys = OFF')
   try {
@@ -119,30 +125,26 @@ function runMigrations(): void {
     db.run(sql)
   }
   // Add integration_id to collections if not already present (ignore if column already exists)
-  try {
-    db.run('ALTER TABLE collections ADD COLUMN integration_id TEXT REFERENCES integrations(id)')
-  } catch {
-    // column already exists, ignore
-  }
+  addColumnIfMissing('collections', 'integration_id', 'TEXT REFERENCES integrations(id)')
   // Collections: add description, auth_type, auth_config
-  try { db.run("ALTER TABLE collections ADD COLUMN description TEXT DEFAULT ''") } catch {}
-  try { db.run("ALTER TABLE collections ADD COLUMN auth_type TEXT DEFAULT 'none'") } catch {}
-  try { db.run("ALTER TABLE collections ADD COLUMN auth_config TEXT DEFAULT '{}'" ) } catch {}
+  addColumnIfMissing('collections', 'description', `TEXT DEFAULT ''`)
+  addColumnIfMissing('collections', 'auth_type', `TEXT DEFAULT 'none'`)
+  addColumnIfMissing('collections', 'auth_config', `TEXT DEFAULT '{}'`)
   // Groups: add auth columns (description already exists)
-  try { db.run("ALTER TABLE groups ADD COLUMN auth_type TEXT DEFAULT 'none'") } catch {}
-  try { db.run("ALTER TABLE groups ADD COLUMN auth_config TEXT DEFAULT '{}'" ) } catch {}
-  try { db.run("ALTER TABLE groups ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
+  addColumnIfMissing('groups', 'auth_type', `TEXT DEFAULT 'none'`)
+  addColumnIfMissing('groups', 'auth_config', `TEXT DEFAULT '{}'`)
+  addColumnIfMissing('groups', 'ssl_verification', `TEXT DEFAULT 'inherit'`)
   // Collections ssl
-  try { db.run("ALTER TABLE collections ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
+  addColumnIfMissing('collections', 'ssl_verification', `TEXT DEFAULT 'inherit'`)
   // Requests ssl
-  try { db.run("ALTER TABLE requests ADD COLUMN ssl_verification TEXT DEFAULT 'inherit'") } catch {}
+  addColumnIfMissing('requests', 'ssl_verification', `TEXT DEFAULT 'inherit'`)
   // Requests protocol support
-  try { db.run("ALTER TABLE requests ADD COLUMN protocol TEXT NOT NULL DEFAULT 'http'") } catch {}
-  try { db.run("ALTER TABLE requests ADD COLUMN protocol_config TEXT NOT NULL DEFAULT '{}'" ) } catch {}
+  addColumnIfMissing('requests', 'protocol', `TEXT NOT NULL DEFAULT 'http'`)
+  addColumnIfMissing('requests', 'protocol_config', `TEXT NOT NULL DEFAULT '{}'`)
   // Collections collapsed state
-  try { db.run('ALTER TABLE collections ADD COLUMN collapsed INTEGER NOT NULL DEFAULT 0') } catch {}
+  addColumnIfMissing('collections', 'collapsed', "INTEGER NOT NULL DEFAULT 0")
   // Integrations ssl verification
-  try { db.run("ALTER TABLE integrations ADD COLUMN ssl_verification TEXT NOT NULL DEFAULT 'enabled'") } catch {}
+  addColumnIfMissing('integrations', 'ssl_verification', `TEXT NOT NULL DEFAULT 'enabled'`)
 
   db.run(`CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
@@ -320,6 +322,32 @@ export function schedulePersist(delayMs = 2000): void {
     deferredPersistTimer = null
     persistDb()
   }, delayMs)
+}
+
+/** Persist immediately if a debounced write is pending. Call on app quit. */
+export function flushPersist(): void {
+  if (!deferredPersistTimer) return
+  clearTimeout(deferredPersistTimer)
+  deferredPersistTimer = null
+  persistDb()
+}
+
+/**
+ * Moves an unreadable database (and its key) aside so the app can start fresh
+ * without destroying the old data. Returns the backup path of the database.
+ */
+export function quarantineUnreadableDatabase(): string | null {
+  const userData = app.getPath('userData')
+  const file = path.join(userData, 'postly.db')
+  const stamp = Date.now()
+  let moved: string | null = null
+  if (fs.existsSync(file)) {
+    moved = `${file}.unreadable-${stamp}`
+    fs.renameSync(file, moved)
+  }
+  const key = path.join(userData, 'postly.key')
+  if (fs.existsSync(key)) fs.renameSync(key, `${key}.unreadable-${stamp}`)
+  return moved
 }
 
 export function getDb(): Database {
