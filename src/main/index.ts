@@ -83,8 +83,14 @@ app.whenReady().then(async () => {
       app.exit(1)
       return
     }
-    quarantineUnreadableDatabase()
-    await initDatabase()
+    try {
+      quarantineUnreadableDatabase()
+      await initDatabase()
+    } catch (retryErr) {
+      dialog.showErrorBox('Postly cannot start', `Could not create a new database: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`)
+      app.exit(1)
+      return
+    }
   }
   dbResolve()
 
