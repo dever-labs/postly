@@ -4,6 +4,19 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3](https://github.com/dever-labs/postly/compare/v0.8.2...v0.8.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **backstage:** preserve OAuth token across Save after sign-in ([#211](https://github.com/dever-labs/postly/issues/211)) ([60f6648](https://github.com/dever-labs/postly/commit/60f664894788868bcadd675dc529f0a197d361ec))
+* **csp:** allow remote styles and fonts so the HTML response preview renders ([bcb640e](https://github.com/dever-labs/postly/commit/bcb640ed5a6894f70ca5212d47627caa8843aa3c))
+* **db:** flush on quit, recover from unreadable DB, stop swallowing migration errors ([77c1876](https://github.com/dever-labs/postly/commit/77c1876b72184ab52bbb9977fd1c70f9f036bcaf))
+* **db:** flush on quit, recover from unreadable DB, stop swallowing migration errors ([38a8ec1](https://github.com/dever-labs/postly/commit/38a8ec12e235ee523f57333418effa736dfcb666))
+* **db:** handle failure while starting fresh after an unreadable database ([9980a4d](https://github.com/dever-labs/postly/commit/9980a4d1fa4fb3e2a561353d2b720c1df7d15475))
+* **git:** use simple-git v4 named export ([94fd13a](https://github.com/dever-labs/postly/commit/94fd13a07c9391eb0179bcb6ac98f99c76feb431))
+* **ws:** reconnecting with an existing connectionId let the replaced socket's late ([4d44593](https://github.com/dever-labs/postly/commit/4d4459301bafc64975690423f93b64d14f8b1d2b))
+
 ## [Unreleased]
 
 ### Added
