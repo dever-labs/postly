@@ -1,8 +1,8 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { platform } from 'process'
-import { initDatabase } from './database'
+import { initDatabase, flushPersist, quarantineUnreadableDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
@@ -64,7 +64,28 @@ app.whenReady().then(async () => {
   initUpdater(win)
 
   // Initialise the database — the window is already open while this runs.
-  await initDatabase()
+  try {
+    await initDatabase()
+  } catch (err) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'Postly cannot open its database',
+      message: 'The Postly database could not be read.',
+      detail:
+        `${err instanceof Error ? err.message : String(err)}\n\n` +
+        'This usually means the OS keychain entry that protects it is unavailable or the file is damaged. ' +
+        'Quit and retry once the keychain is unlocked, or start fresh — the old files are kept next to the new ones (postly.db.unreadable-*).',
+      buttons: ['Quit', 'Start fresh'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response === 0) {
+      app.exit(1)
+      return
+    }
+    quarantineUnreadableDatabase()
+    await initDatabase()
+  }
   dbResolve()
 
   if (app.isPackaged) {
@@ -85,6 +106,8 @@ app.whenReady().then(async () => {
     }
   })
 })
+
+app.on('before-quit', flushPersist)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
