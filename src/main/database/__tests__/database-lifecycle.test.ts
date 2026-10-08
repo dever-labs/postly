@@ -64,4 +64,21 @@ describe('database lifecycle', () => {
   it('migrates legacy columns without error on a fresh database', async () => {
     await expect(initDatabase()).resolves.toBeUndefined()
   })
+
+  it('skips the startup rewrite for an up-to-date encrypted database', async () => {
+    state.available = true
+    await initDatabase()
+    const file = path.join(state.dir, 'postly.db')
+    const old = new Date(Date.now() - 60_000)
+    fs.utimesSync(file, old, old)
+    await initDatabase()
+    expect(fs.statSync(file).mtimeMs).toBeLessThan(Date.now() - 30_000)
+  })
+
+  it('rewrites a legacy plaintext database on startup so it gets encrypted', async () => {
+    await initDatabase()
+    state.available = true
+    await initDatabase()
+    expect(fs.readFileSync(path.join(state.dir, 'postly.db')).subarray(0, 6).toString()).not.toBe('SQLite')
+  })
 })

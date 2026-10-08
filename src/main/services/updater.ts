@@ -33,11 +33,18 @@ const GITHUB_FEED = { provider: 'github', owner: 'dever-labs', repo: 'postly' }
 
 let win: BrowserWindow | null = null
 let _autoUpdater: AutoUpdater | null = null
+let listenersAttached = false
 
 function getAutoUpdater(): AutoUpdater {
   if (_autoUpdater) return _autoUpdater
   // Lazy import — only in packaged builds to avoid cross-platform binary issues
   return (require('electron-updater') as { autoUpdater: AutoUpdater }).autoUpdater
+}
+
+/** Returns the updater with its event listeners attached, loading electron-updater on first use. */
+function readyUpdater(): AutoUpdater {
+  if (win) initUpdater(win)
+  return getAutoUpdater()
 }
 
 function emit(event: UpdaterEvent) {
@@ -77,7 +84,7 @@ export function getEnterpriseConfig(): EnterpriseConfig {
  */
 export function applyFeedUrl(feedUrl: string | undefined): void {
   if (!app.isPackaged) return
-  const au = getAutoUpdater()
+  const au = readyUpdater()
   if (feedUrl) {
     au.setFeedURL({ provider: 'generic', url: feedUrl })
   } else {
@@ -85,11 +92,19 @@ export function applyFeedUrl(feedUrl: string | undefined): void {
   }
 }
 
+/** Cheap: remember the window so events can be emitted. Does not load electron-updater. */
+export function setUpdaterWindow(mainWindow: BrowserWindow): void {
+  win = mainWindow
+}
+
+/** Loads electron-updater and wires its events. Safe to call repeatedly. */
 export function initUpdater(mainWindow: BrowserWindow): void {
   win = mainWindow
   if (!app.isPackaged) return
 
   const au = getAutoUpdater()
+  if (listenersAttached) return
+  listenersAttached = true
   au.autoDownload = false
   au.autoInstallOnAppQuit = true
   au.logger = null
@@ -108,17 +123,17 @@ export function checkForUpdates(): void {
     setTimeout(() => emit({ type: 'not-available' }), 800)
     return
   }
-  getAutoUpdater().checkForUpdates().catch(() => { /* handled via error event */ })
+  readyUpdater().checkForUpdates().catch(() => { /* handled via error event */ })
 }
 
 export function downloadUpdate(): void {
   if (!app.isPackaged) return
-  getAutoUpdater().downloadUpdate().catch(() => { /* handled via error event */ })
+  readyUpdater().downloadUpdate().catch(() => { /* handled via error event */ })
 }
 
 export function installUpdate(): void {
   if (!app.isPackaged) return
-  getAutoUpdater().quitAndInstall(false, true)
+  readyUpdater().quitAndInstall(false, true)
 }
 
 /** @deprecated Use applyFeedUrl() directly. Kept for IPC back-compat. */
@@ -130,4 +145,5 @@ export function setUpdateFeedUrl(feedUrl: string): void {
 /** Inject a mock autoUpdater — for unit tests only. */
 export function __setAutoUpdaterForTesting(au: AutoUpdater | null): void {
   _autoUpdater = au
+  listenersAttached = false
 }

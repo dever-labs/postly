@@ -1,3 +1,4 @@
+import '@/lib/monaco-setup'
 import Editor, { useMonaco } from '@monaco-editor/react'
 import { Plus, Trash2, Upload } from 'lucide-react'
 import React, { useCallback, useEffect, useRef } from 'react'

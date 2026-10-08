@@ -2,7 +2,6 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
-import './lib/monaco-setup'
 
 // Apply stored theme class before React renders to prevent flash
 const stored = localStorage.getItem('postly-theme')

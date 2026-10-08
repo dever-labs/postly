@@ -1,13 +1,15 @@
 import { Copy, SendHorizonal } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import { ResponseStatus } from '@/components/response/ResponseStatus'
-import { PrettyTab } from '@/components/response/tabs/PrettyTab'
 import { RawTab } from '@/components/response/tabs/RawTab'
 import { PreviewTab } from '@/components/response/tabs/PreviewTab'
 import { ConsoleTab } from '@/components/response/tabs/ConsoleTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
 import { cn } from '@/lib/utils'
+
+// Monaco-backed tab is loaded on demand so the editor bundle stays out of startup.
+const PrettyTab = lazy(() => import('@/components/response/tabs/PrettyTab').then((m) => ({ default: m.PrettyTab })))
 
 export function ResponseViewer() {
   const { response, isLoading } = useRequestsStore()
@@ -85,7 +87,9 @@ export function ResponseViewer() {
           </TabsList>
 
           <TabsContent value="pretty" className="flex-1 overflow-hidden">
-            <PrettyTab body={response.body} contentType={contentType} />
+            <Suspense fallback={null}>
+              <PrettyTab body={response.body} contentType={contentType} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="raw" className="flex-1 overflow-hidden">

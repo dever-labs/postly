@@ -4,7 +4,6 @@ import path from 'path'
 import os from 'os'
 import fs from 'fs'
 import crypto from 'crypto'
-import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 import type { PostlyExportFile, ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
@@ -293,7 +292,7 @@ async function importOpenApi(integrationId: string, localPath: string, collectio
     const fullPath = path.join(localPath, filePath)
     if (!fs.existsSync(fullPath)) continue
     let spec: object
-    try { spec = await SwaggerParser.dereference(fullPath) } catch { continue }
+    try { spec = await (await import('@apidevtools/swagger-parser')).default.dereference(fullPath) } catch { continue }
     run('UPDATE folders SET source_meta = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify({ integrationId, filePath }), now, collectionId])
     try {

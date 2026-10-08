@@ -1,3 +1,4 @@
+import '@/lib/monaco-setup'
 import Editor, { useMonaco } from '@monaco-editor/react'
 import React, { useEffect, useRef, useState } from 'react'
 import { useUIStore } from '@/store/ui'

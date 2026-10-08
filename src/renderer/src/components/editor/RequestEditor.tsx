@@ -1,5 +1,5 @@
 import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
@@ -10,15 +10,17 @@ import { GrpcView } from '@/components/editor/GrpcView'
 import { MqttView } from '@/components/editor/MqttView'
 import { ParamsTab } from '@/components/editor/tabs/ParamsTab'
 import { HeadersTab } from '@/components/editor/tabs/HeadersTab'
-import { BodyTab } from '@/components/editor/tabs/BodyTab'
 import { AuthTab } from '@/components/editor/tabs/AuthTab'
-import { GraphQLTab } from '@/components/editor/tabs/GraphQLTab'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
+
+// Monaco-backed tabs are loaded on demand so the editor bundle stays out of startup.
+const BodyTab = lazy(() => import('@/components/editor/tabs/BodyTab').then((m) => ({ default: m.BodyTab })))
+const GraphQLTab = lazy(() => import('@/components/editor/tabs/GraphQLTab').then((m) => ({ default: m.GraphQLTab })))
 
 function BreadcrumbItem({
   icon,
@@ -322,15 +324,17 @@ export function RequestEditor() {
 
             {protocol === 'graphql' && (
               <TabsContent value="query" className="flex-1 overflow-hidden">
-                <GraphQLTab
-                  query={editingRequest.bodyContent}
-                  variables={pcGet(pc, 'variables')}
-                  operationName={pcGet(pc, 'operationName')}
-                  schema={pcGet(pc, 'schema') || undefined}
-                  onQueryChange={(v) => updateField('bodyContent', v)}
-                  onVariablesChange={(v) => updatePc('variables', v)}
-                  onOperationNameChange={(v) => updatePc('operationName', v)}
-                />
+                <Suspense fallback={null}>
+                  <GraphQLTab
+                    query={editingRequest.bodyContent}
+                    variables={pcGet(pc, 'variables')}
+                    operationName={pcGet(pc, 'operationName')}
+                    schema={pcGet(pc, 'schema') || undefined}
+                    onQueryChange={(v) => updateField('bodyContent', v)}
+                    onVariablesChange={(v) => updatePc('variables', v)}
+                    onOperationNameChange={(v) => updatePc('operationName', v)}
+                  />
+                </Suspense>
               </TabsContent>
             )}
 
@@ -340,12 +344,14 @@ export function RequestEditor() {
                   <ParamsTab params={editingRequest.params} onChange={onParamsChange} />
                 </TabsContent>
                 <TabsContent value="body" className="flex-1 overflow-hidden">
-                  <BodyTab
-                    bodyType={editingRequest.bodyType as BodyType}
-                    bodyContent={editingRequest.bodyContent}
-                    onTypeChange={onBodyTypeChange}
-                    onContentChange={onBodyContentChange}
-                  />
+                  <Suspense fallback={null}>
+                    <BodyTab
+                      bodyType={editingRequest.bodyType as BodyType}
+                      bodyContent={editingRequest.bodyContent}
+                      onTypeChange={onBodyTypeChange}
+                      onContentChange={onBodyContentChange}
+                    />
+                  </Suspense>
                 </TabsContent>
               </>
             )}

@@ -1,6 +1,5 @@
 import axios from 'axios'
 import crypto from 'crypto'
-import SwaggerParser from '@apidevtools/swagger-parser'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 
@@ -43,7 +42,7 @@ export async function discoverApis(settings: GitLabSettings): Promise<void> {
             `${base}/api/v4/projects/${project.id}/repository/files/${encodedPath}/raw?ref=${branch}`,
             { headers }
           )
-          spec = await SwaggerParser.dereference(rawResponse.data)
+          spec = await (await import('@apidevtools/swagger-parser')).default.dereference(rawResponse.data)
         } catch {
           continue
         }

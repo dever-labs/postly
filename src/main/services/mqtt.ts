@@ -1,4 +1,4 @@
-import mqtt, { MqttClient } from 'mqtt'
+import type { MqttClient } from 'mqtt'
 import type { WebContents } from 'electron'
 
 export interface MqttConnectOptions {
@@ -16,12 +16,13 @@ interface MqttConnection {
 
 const connections = new Map<string, MqttConnection>()
 
-export function connectMqtt(
+export async function connectMqtt(
   connectionId: string,
   brokerUrl: string,
   options: MqttConnectOptions,
   sender: WebContents
 ): Promise<void> {
+  const { default: mqtt } = await import('mqtt')
   return new Promise((resolve, reject) => {
     const existing = connections.get(connectionId)
     if (existing) {

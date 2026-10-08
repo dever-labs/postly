@@ -1,4 +1,4 @@
-import WebSocket from 'ws'
+import type WebSocket from 'ws'
 import type { WebContents } from 'electron'
 
 interface WsConnection {
@@ -8,12 +8,13 @@ interface WsConnection {
 
 const connections = new Map<string, WsConnection>()
 
-export function connectWebSocket(
+export async function connectWebSocket(
   connectionId: string,
   url: string,
   headers: Record<string, string>,
   sender: WebContents
 ): Promise<void> {
+  const { default: WebSocketCtor } = await import('ws')
   return new Promise((resolve, reject) => {
     const existing = connections.get(connectionId)
     if (existing) {
@@ -25,7 +26,7 @@ export function connectWebSocket(
       connections.delete(connectionId)
     }
 
-    const ws = new WebSocket(url, { headers })
+    const ws = new WebSocketCtor(url, { headers })
     const forget = () => {
       if (connections.get(connectionId)?.ws === ws) connections.delete(connectionId)
     }
@@ -80,5 +81,5 @@ export function disconnectWebSocket(connectionId: string): void {
 
 export function isWebSocketConnected(connectionId: string): boolean {
   const conn = connections.get(connectionId)
-  return conn?.ws.readyState === WebSocket.OPEN
+  return conn?.ws.readyState === 1 /* WebSocket.OPEN */
 }

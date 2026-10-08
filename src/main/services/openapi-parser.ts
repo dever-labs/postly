@@ -1,4 +1,3 @@
-import SwaggerParser from '@apidevtools/swagger-parser'
 import crypto from 'crypto'
 
 export interface ParsedFolder {
@@ -57,7 +56,7 @@ export async function parseOpenApiToRequests(
   spec: object,
   parentId: string
 ): Promise<{ folders: ParsedFolder[]; requests: ParsedRequest[] }> {
-  const dereferenced = (await SwaggerParser.dereference(spec as never)) as Record<string, unknown>
+  const dereferenced = (await (await import('@apidevtools/swagger-parser')).default.dereference(spec as never)) as Record<string, unknown>
 
   const now = Date.now()
   const folders: ParsedFolder[] = []
