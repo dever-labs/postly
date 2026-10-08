@@ -4,6 +4,15 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4](https://github.com/dever-labs/postly/compare/v0.8.3...v0.8.4) (2026-10-08)
+
+
+### Performance Improvements
+
+* **startup:** lazy-load Monaco and heavy services, defer update check ([0c93cf7](https://github.com/dever-labs/postly/commit/0c93cf735e15907c9e49ca057131a52eb3a7fa84))
+* **startup:** lazy-load Monaco and heavy services, defer update check ([bde3061](https://github.com/dever-labs/postly/commit/bde3061a87c515225aae7a2b51b9d6c32ec51c6e))
+* **startup:** trim Monaco, overlap sql.js init, skip no-op DB rewrite ([f417932](https://github.com/dever-labs/postly/commit/f417932a8993dc0b50ea658eca5e6bc1eb41c534))
+
 ## [0.8.3](https://github.com/dever-labs/postly/compare/v0.8.2...v0.8.3) (2026-10-08)
 
 
