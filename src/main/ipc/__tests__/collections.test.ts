@@ -17,6 +17,7 @@ vi.mock('../../database', () => ({
 }))
 
 vi.mock('../../services/git-local', () => ({}))
+vi.mock('../../services/variable-store', () => ({ deleteCollectionVariables: vi.fn() }))
 
 import { registerCollectionHandlers } from '../collections'
 import { queryAll, queryOne, run } from '../../database'

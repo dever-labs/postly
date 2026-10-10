@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import crypto from 'crypto'
 import fs from 'fs'
 import { queryAll, run } from '../database'
+import { exportCollectionVariables, importCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
 
@@ -37,6 +38,8 @@ export interface ExportCollection {
   source: string
   auth: { type: string; config: Record<string, unknown> }
   ssl: string
+  /** Collection-scoped variables. Secret values are exported blank. */
+  variables?: VariableRow[]
   requests: ExportRequest[]
   folders: ExportFolder[]
   /** @deprecated use folders — present in pre-v2 exports for backward compat */
@@ -169,6 +172,7 @@ export function buildExport(collectionIds?: string[]): PostlyExportFile {
     source: String(folder.source ?? 'local'),
     auth: { type: String(folder.auth_type ?? 'none'), config: tryParse(folder.auth_config, {}) },
     ssl: String(folder.ssl_verification ?? 'inherit'),
+    variables: exportCollectionVariables(folder.id),
     requests: (folderRequests.get(folder.id) ?? []).map(mapRequest),
     folders: (childFolders.get(folder.id) ?? []).map((child) => mapFolderTree(child, childFolders, folderRequests)),
   }))
@@ -259,6 +263,7 @@ export function importData(data: PostlyExportFile): number {
         now,
       ]
     )
+    importCollectionVariables(collectionId, collection.variables)
     importRequests(collection.requests ?? [], collectionId, now)
     // fall back to `groups` for exports created before the folder-tree refactor
     const topFolders = collection.folders ?? collection.groups ?? []

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
 import type { AuthType, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
+import { CollectionVariables } from '@/components/editor/CollectionVariables'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
@@ -328,6 +329,11 @@ export function CollectionEditor({ collectionId }: Props) {
             onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }, 'ssl') }}
             canInherit={false}
           />
+        </Section>
+
+        {/* Variables */}
+        <Section title="Variables">
+          <CollectionVariables collectionId={collectionId} collectionName={collection.name} isGit={isGit} />
         </Section>
 
         {/* Source info */}

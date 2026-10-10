@@ -337,6 +337,16 @@ function runMigrations(): void {
     body_truncated INTEGER NOT NULL DEFAULT 0
   )`)
   db.run('CREATE INDEX IF NOT EXISTS idx_request_history_created ON request_history(created_at DESC)')
+  db.run(`CREATE TABLE IF NOT EXISTS variables (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    owner_id TEXT NOT NULL DEFAULT '',
+    key TEXT NOT NULL,
+    value TEXT NOT NULL DEFAULT '',
+    is_secret INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (scope, owner_id, key)
+  )`)
   db.run(`CREATE TABLE IF NOT EXISTS cookie_jars (
     env_key TEXT PRIMARY KEY,
     cookies_json TEXT NOT NULL,
