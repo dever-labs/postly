@@ -1,4 +1,5 @@
 import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
+import { useVariablesStore } from '@/store/variables'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -43,7 +44,8 @@ function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v
     </div>
   )
 }
-function repoNameFromUrl(raw: string): string {
+
+function repoNameFromUrl(raw: string): string {
   try {
     const clean = raw.trim().replace(/\.git$/, '')
     const parts = clean.replace(/^git@[^:]+:/, 'https://fake/').split('/').filter(Boolean)
@@ -178,6 +180,7 @@ export function IntegrationSetupPage() {
       if (col) setDoneCollectionId(col.id)
       await loadIntegrations()
       await loadCollections()
+      void useVariablesStore.getState().load()
       setPhase('done')
     } catch (e) {
       setError(String(e))

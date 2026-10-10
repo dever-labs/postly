@@ -17,16 +17,27 @@ export function VariablesSettings() {
     if (!loaded.current && globals.length > 0) { loaded.current = true; setRows(globals) }
   }, [globals])
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+  const pending = useRef<VariableRow[] | null>(null)
+
+  const flush = async () => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    const next = pending.current
+    if (!next) return
+    pending.current = null
+    const error = await save('global', '', next)
+    if (error) addToast(`Could not save variables: ${error}`, 'error')
+  }
+
+  // Closing Settings or switching tab saves any edit still waiting on the debounce
+  useEffect(() => () => { void flush() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const change = (next: VariableRow[]) => {
     loaded.current = true
     setRows(next)
+    pending.current = next
     if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      const error = await save('global', '', next)
-      if (error) addToast(`Could not save variables: ${error}`, 'error')
-    }, 500)
+    timer.current = setTimeout(() => void flush(), 500)
   }
 
   return (
