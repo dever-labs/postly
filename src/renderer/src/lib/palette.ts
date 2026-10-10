@@ -19,6 +19,7 @@ export const ACTIONS: PaletteItem[] = [
   { key: 'action:new-request', kind: 'action', id: 'new-request', title: 'New request', path: [] },
   { key: 'action:open-settings', kind: 'action', id: 'open-settings', title: 'Open settings', path: [] },
   { key: 'action:show-shortcuts', kind: 'action', id: 'show-shortcuts', title: 'Keyboard shortcuts', path: [] },
+  { key: 'action:import-curl', kind: 'action', id: 'import-curl', title: 'Import from cURL', path: [] },
   { key: 'action:check-updates', kind: 'action', id: 'check-updates', title: 'Check for updates', path: [] },
 ]
 
