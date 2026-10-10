@@ -92,6 +92,12 @@ const api = {
     set: (data: { key: string; value: unknown }) => ipcRenderer.invoke('postly:settings:set', data),
     getAll: () => ipcRenderer.invoke('postly:settings:get-all'),
   },
+  proxy: {
+    get: () => ipcRenderer.invoke('postly:proxy:get'),
+    set: (data: { mode: string; url: string; username: string; password?: string; bypass: string }) =>
+      ipcRenderer.invoke('postly:proxy:set', data),
+    test: (data: { url: string }) => ipcRenderer.invoke('postly:proxy:test', data),
+  },
   ws: {
     connect: (data: { connectionId: string; url: string; headers?: Record<string, string> }) =>
       ipcRenderer.invoke('postly:ws:connect', data),
