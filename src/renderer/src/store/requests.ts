@@ -2,6 +2,17 @@ import { create } from 'zustand'
 import type { HistoryEntryDetail, HttpRequest, HttpResponse, Request, KeyValuePair } from '../types'
 import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { useCollectionsStore } from './collections'
+import { useEnvironmentsStore } from './environments'
+import { useVariablesStore } from './variables'
+import { EXTRACT_RULES_KEY, parseRules } from '../../../shared/extract'
+
+/** Extract rules write variables in the main process; bring the renderer's copies up to date. */
+async function refreshExtractedVariables(extracted: NonNullable<HttpResponse['extracted']>): Promise<void> {
+  const jobs: Promise<void>[] = []
+  if (extracted.some((e) => e.scope === 'environment')) jobs.push(useEnvironmentsStore.getState().load())
+  if (extracted.some((e) => e.scope === 'collection')) jobs.push(useVariablesStore.getState().load())
+  await Promise.all(jobs)
+}
 
 interface RequestsState {
   activeRequestId: string | null
@@ -294,6 +305,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       folderId: editingRequest.folderId,
     }
     httpRequest.params = kvpToRecord(editingRequest.params)
+    const extractRules = parseRules(pc[EXTRACT_RULES_KEY])
+    if (extractRules.length > 0) httpRequest.extractRules = extractRules
 
     try {
       const { data, error, logs } = await window.api.http.execute(httpRequest) as { data?: HttpResponse; error?: string; logs?: HttpResponse['logs'] }
@@ -311,6 +324,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
         return
       }
       set({ response: data as HttpResponse, isLoading: false })
+      if (data?.extracted?.length) void refreshExtractedVariables(data.extracted)
     } catch (err) {
       const errorResponse: HttpResponse = {
         status: 0,

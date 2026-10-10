@@ -1,4 +1,5 @@
 import axios, { AxiosRequestConfig } from 'axios'
+import type { ExtractRule } from '../../shared/extract'
 import https from 'https'
 import { resolveProxy, describeProxyError } from './proxy'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
@@ -22,6 +23,8 @@ export interface HttpRequest {
   authConfig: Record<string, string>
   folderId?: string
   sslVerification?: string
+  /** Post-response rules; run by the IPC layer after the request completes. */
+  extractRules?: ExtractRule[]
 }
 
 export interface HttpResponse {
