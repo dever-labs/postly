@@ -1,6 +1,8 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { queryAll, queryOne } from '../database'
-import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
+import { executeRequest, HttpRequest, LogEntry, type CookieJarHook } from '../services/http-executor'
+import { activeEnvKey, loadCookies, saveCookies } from '../services/cookie-store'
+import { applySetCookies, cookieHeaderFor, parseResponseCookies } from '../services/cookie-jar'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 import { getGeneralSettings } from './settings-utils'
 import { recordHistory } from '../services/history'
@@ -71,6 +73,22 @@ function getFolderLineage(folderId?: string): FolderLineageRow[] {
      ORDER BY depth ASC`,
     [folderId]
   )
+}
+
+function buildCookieHook(enabled: boolean): CookieJarHook {
+  if (!enabled) {
+    return { enabled, attach: () => ({ header: '', names: [] }), store: (url, setCookie) => parseResponseCookies(url, setCookie) }
+  }
+  const envKey = activeEnvKey()
+  return {
+    enabled,
+    attach: (url) => cookieHeaderFor(loadCookies(envKey), url),
+    store: (url, setCookie) => {
+      const result = applySetCookies(loadCookies(envKey), url, setCookie)
+      if (result.changed) saveCookies(envKey, result.rows)
+      return result.stored
+    },
+  }
 }
 
 export function registerHttpHandlers(): void {
@@ -227,10 +245,13 @@ export function registerHttpHandlers(): void {
         return { error: 'Request cancelled: uploading local files was not approved.', logs }
       }
 
+      const cookieJar = buildCookieHook(generalSettings.cookiesEnabled !== false)
+      if (!cookieJar.enabled) log('info', 'Cookie jar: disabled')
+
       const controller = new AbortController()
       currentAbortController = controller
       const response = await executeRequest(interpolatedReq, {
-        sslVerification, followRedirects, timeout,
+        sslVerification, followRedirects, timeout, cookieJar,
         signal: controller.signal,
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })

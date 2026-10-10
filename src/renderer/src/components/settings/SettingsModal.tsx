@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
+import { CookieSettings } from '@/components/settings/tabs/CookieSettings'
 import { AiSettings } from '@/components/settings/tabs/AiSettings'
 import { NetworkSettings } from '@/components/settings/tabs/NetworkSettings'
 import { UpdateSettings } from '@/components/settings/tabs/UpdateSettings'
@@ -12,6 +13,7 @@ const TABS = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'network', label: 'Network' },
+  { id: 'cookies', label: 'Cookies' },
   { id: 'ai', label: 'AI' },
   { id: 'updates', label: 'Updates' },
 ]
@@ -21,6 +23,7 @@ function TabContent({ tab }: { tab: string }) {
     case 'general': return <GeneralSettings />
     case 'appearance': return <AppearanceSettings />
     case 'network': return <NetworkSettings />
+    case 'cookies': return <CookieSettings />
     case 'ai': return <AiSettings />
     case 'updates': return <UpdateSettings />
     default: return null

@@ -246,10 +246,19 @@ describe('executeRequest — response handling', () => {
 
   it('joins array header values with ", "', async () => {
     mockAxios.mockResolvedValue(makeAxiosResponse({
-      headers: { 'set-cookie': ['a=1', 'b=2'] as unknown as string }
+      headers: { 'x-multi': ['a=1', 'b=2'] as unknown as string }
     }))
     const res = await executeRequest(makeReq())
-    expect(res.headers['set-cookie']).toBe('a=1, b=2')
+    expect(res.headers['x-multi']).toBe('a=1, b=2')
+  })
+
+  it('keeps each Set-Cookie on its own line, because cookie dates contain commas', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse({
+      headers: { 'set-cookie': ['a=1; Expires=Wed, 01 Jan 2100 00:00:00 GMT', 'b=2'] as unknown as string }
+    }))
+    const res = await executeRequest(makeReq())
+    expect(res.headers['set-cookie']).toBe('a=1; Expires=Wed, 01 Jan 2100 00:00:00 GMT\nb=2')
+    expect(res.cookies?.map((c) => c.name)).toEqual(['a', 'b'])
   })
 
   it('returns status 0 and error message when axios throws', async () => {

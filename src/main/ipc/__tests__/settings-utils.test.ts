@@ -13,6 +13,7 @@ const DEFAULTS = {
   updateFeedUrl: undefined,
   historyEnabled: true,
   historyLimit: 500,
+  cookiesEnabled: true,
 }
 
 describe('parseGeneralSettings', () => {
@@ -32,6 +33,11 @@ describe('parseGeneralSettings', () => {
     expect(out).toEqual({
       ...DEFAULTS, sslVerification: false, followRedirects: false, defaultTimeout: 5000, autoUpdate: false, updateFeedUrl: 'https://feed.example',
     })
+  })
+
+  it('reads the cookie jar switch', () => {
+    expect(parseGeneralSettings(JSON.stringify({ cookiesEnabled: false })).cookiesEnabled).toBe(false)
+    expect(parseGeneralSettings(JSON.stringify({ cookiesEnabled: 'no' })).cookiesEnabled).toBe(true)
   })
 
   it('ignores values of the wrong type', () => {

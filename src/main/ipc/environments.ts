@@ -1,3 +1,4 @@
+import { deleteCookiesForEnv } from '../services/cookie-store'
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
@@ -31,6 +32,7 @@ export function registerEnvironmentHandlers(): void {
   ipcMain.handle('postly:environments:delete', async (_, args: { id: string }) => {
     try {
       run('DELETE FROM environments WHERE id = ?', [args.id])
+      deleteCookiesForEnv(args.id)
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })
