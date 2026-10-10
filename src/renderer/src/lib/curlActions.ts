@@ -1,4 +1,6 @@
 import { buildCurl, parseCurl, type CurlExport, type ParsedCurl } from '@/lib/curl'
+import { generateSnippet, type SnippetLanguage } from '@/lib/snippets'
+import type { GeneratedSnippet } from '@/lib/snippets/model'
 import { createRequestInContext } from '@/lib/requestActions'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useRequestsStore } from '@/store/requests'
@@ -55,10 +57,7 @@ export async function importCurlAsNewRequest(text: string): Promise<boolean> {
   return true
 }
 
-/** Builds the cURL command for the open request. Secret environment variables stay as {{NAME}} unless secrets are included. */
-export function exportActiveAsCurl(options: CurlCopyOptions): CurlExport | null {
-  const request = useRequestsStore.getState().editingRequest
-  if (!request) return null
+function exportOptions(options: CurlCopyOptions) {
   let variables: Record<string, string> | undefined
   if (options.resolveVariables) {
     variables = {}
@@ -67,5 +66,19 @@ export function exportActiveAsCurl(options: CurlCopyOptions): CurlExport | null 
       variables[v.key] = v.value
     }
   }
-  return buildCurl(request, { variables, includeSecrets: options.includeSecrets })
+  return { variables, includeSecrets: options.includeSecrets }
+}
+
+/** Builds a snippet for the open request. Secret environment variables stay as {{NAME}} unless secrets are included. */
+export function exportActiveAsSnippet(language: SnippetLanguage, options: CurlCopyOptions): GeneratedSnippet | null {
+  const request = useRequestsStore.getState().editingRequest
+  if (!request) return null
+  return generateSnippet(language, request, exportOptions(options))
+}
+
+/** Builds the cURL command for the open request. */
+export function exportActiveAsCurl(options: CurlCopyOptions): CurlExport | null {
+  const request = useRequestsStore.getState().editingRequest
+  if (!request) return null
+  return buildCurl(request, exportOptions(options))
 }
