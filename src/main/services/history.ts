@@ -143,7 +143,7 @@ export function recordHistory(
   response: Pick<HttpResponse, 'status' | 'statusText' | 'headers' | 'body' | 'duration' | 'size'>,
   settings: HistorySettings
 ): string | null {
-  if (!settings.enabled || settings.limit <= 0) return null
+  if (!settings.enabled || settings.limit <= 0 || !req.url?.trim()) return null
   const id = crypto.randomUUID()
   const body = truncateUtf8(maskBodyText(response.body) ?? '', MAX_STORED_BODY_BYTES)
   const stored = {

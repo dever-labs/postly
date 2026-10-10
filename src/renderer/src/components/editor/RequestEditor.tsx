@@ -1,4 +1,4 @@
-import { Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
@@ -14,6 +14,7 @@ import { AuthTab } from '@/components/editor/tabs/AuthTab'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore, isScratchId } from '@/store/requests'
+import { useNavigationStore } from '@/store/navigation'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
@@ -58,6 +59,14 @@ export function RequestEditor() {
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { selectItem } = useUIStore()
   const openGitAction = useUIStore((s) => s.openGitAction)
+  const { go } = useNavigationStore.getState()
+  const requestIds = useCollectionsStore((s) => s.requests)
+  const stack = useNavigationStore((s) => s.stack)
+  const navIndex = useNavigationStore((s) => s.index)
+  const alive = (id: string) => requestIds.some((r) => r.id === id)
+  const activeId = useRequestsStore((s) => s.activeRequestId)
+  const canGoBack = stack.slice(0, activeId !== stack[navIndex] ? navIndex + 1 : navIndex).some(alive)
+  const canGoForward = stack.slice(navIndex + 1).some(alive)
 
   // no per-request title state needed — input is always rendered
 
@@ -120,6 +129,13 @@ export function RequestEditor() {
         saveRequestRef.current().then(() => triggerGitSaveRef.current())
         return
       }
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey) {
+        const el = e.target
+        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
+        e.preventDefault()
+        useNavigationStore.getState().go(e.key === 'ArrowLeft' ? -1 : 1)
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         const el = e.target
         if (
@@ -174,6 +190,28 @@ export function RequestEditor() {
       {/* Breadcrumb + request name — drag-region; pt-8 gives 32px drag
           target above content. Only interactive buttons are no-drag. */}
       <div className="drag-region flex flex-col gap-2 border-b border-th-border px-4 pt-8 pb-3">
+        <div className="no-drag flex items-center gap-1">
+          <button
+            data-testid="nav-back"
+            onClick={() => go(-1)}
+            disabled={!canGoBack}
+            title="Back (Alt+←)"
+            aria-label="Back"
+            className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            data-testid="nav-forward"
+            onClick={() => go(1)}
+            disabled={!canGoForward}
+            title="Forward (Alt+→)"
+            aria-label="Forward"
+            className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {breadcrumb && (
           <div className="inline-flex items-center gap-1.5 text-xs flex-wrap">
             <BreadcrumbItem icon={sourceIcon(breadcrumb.sourceType)} label={breadcrumb.sourceLabel} />

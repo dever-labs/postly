@@ -122,6 +122,10 @@ describe('recordHistory', () => {
     expect(entry.responseBody).not.toContain('\uFFFD')
   })
 
+  it('skips requests without a URL', () => {
+    expect(recordHistory(req({ url: '  ' }), res({ status: 0 }), on)).toBeNull()
+  })
+
   it('records failed requests (status 0)', () => {
     const id = recordHistory(req(), res({ status: 0, statusText: 'connect ECONNREFUSED', body: 'connect ECONNREFUSED' }), on) as string
     expect(getHistoryEntry(id)?.status).toBe(0)

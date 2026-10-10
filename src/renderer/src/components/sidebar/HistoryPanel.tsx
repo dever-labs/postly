@@ -101,11 +101,11 @@ export function HistoryPanel() {
                 <button
                   onClick={() => void handleOpen(e)}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left focus:outline-hidden"
-                  title={e.url}
+                  title={`${e.url}\n${new Date(e.createdAt).toLocaleTimeString()} · ${e.status ? `${e.status} ${e.statusText}` : 'failed'} · ${e.duration} ms`}
                 >
                   <Badge variant={METHOD_COLORS[e.method] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{e.method}</Badge>
                   <span className="min-w-0 flex-1 truncate text-xs text-th-text-secondary">{e.url}</span>
-                  <span className={cn('shrink-0 font-mono text-[10px]', statusClass(e.status))}>{e.status || '—'}</span>
+                  <span className={cn('shrink-0 font-mono text-[10px]', e.status ? statusClass(e.status) : 'text-red-400')}>{e.status || 'ERR'}</span>
                 </button>
                 <button
                   onClick={() => void remove(e.id)}
