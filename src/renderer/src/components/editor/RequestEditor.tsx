@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
+import { withShortcut } from '@/lib/shortcutHint'
 import React, { Suspense, lazy, useCallback, useMemo } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
@@ -157,7 +158,7 @@ export function RequestEditor() {
             data-testid="nav-back"
             onClick={() => go(-1)}
             disabled={!canGoBack}
-            title="Back (Alt+←)"
+            title={withShortcut('Back', 'back')}
             aria-label="Back"
             className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
           >
@@ -167,7 +168,7 @@ export function RequestEditor() {
             data-testid="nav-forward"
             onClick={() => go(1)}
             disabled={!canGoForward}
-            title="Forward (Alt+→)"
+            title={withShortcut('Forward', 'forward')}
             aria-label="Forward"
             className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
           >
@@ -245,7 +246,7 @@ export function RequestEditor() {
               }}
               data-testid="request-save-button"
               className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
-              title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
+              title={withShortcut(editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save', 'save')}
             >
               <Save className="h-4 w-4" />
             </button>

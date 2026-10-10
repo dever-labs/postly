@@ -29,7 +29,7 @@ export interface ShortcutDef {
 
 export type ShortcutId =
   | 'send' | 'cancel' | 'new-request' | 'save' | 'undo' | 'focus-url'
-  | 'palette' | 'back' | 'forward' | 'help'
+  | 'palette' | 'back' | 'forward' | 'help' | 'settings' | 'focus-search'
 
 export const SHORTCUTS: ShortcutDef[] = [
   { id: 'send', label: 'Send request', group: 'Requests', scope: 'app', combos: [{ key: 'Enter', mod: true }] },
@@ -38,9 +38,11 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'save', label: 'Save request', group: 'Requests', scope: 'global', combos: [{ key: 's', mod: true }] },
   { id: 'undo', label: 'Undo unsaved edit', group: 'Requests', scope: 'idle', combos: [{ key: 'z', mod: true }] },
   { id: 'focus-url', label: 'Focus URL bar', group: 'Requests', scope: 'app', combos: [{ key: 'l', mod: true }] },
+  { id: 'focus-search', label: 'Search the sidebar', group: 'Navigation', scope: 'app', combos: [{ key: 'f', mod: true, shift: true }] },
   { id: 'palette', label: 'Command palette', group: 'Navigation', scope: 'global', combos: [{ key: 'k', mod: true }] },
   { id: 'back', label: 'Back', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowLeft', alt: true }] },
   { id: 'forward', label: 'Forward', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowRight', alt: true }] },
+  { id: 'settings', label: 'Open settings', group: 'General', scope: 'app', combos: [{ key: ',', mod: true }] },
   { id: 'help', label: 'Keyboard shortcuts', group: 'General', scope: 'app', combos: [{ key: '/', mod: true }] },
   // `?` is a typed character, so it only works when nothing is focused for typing
   { id: 'help', label: 'Keyboard shortcuts', group: 'General', scope: 'idle', combos: [{ key: '?', shift: true }] },
@@ -84,9 +86,11 @@ export function scopeAllows(scope: ShortcutScope, kind: FocusKind): boolean {
 const KEY_LABELS: Record<string, string> = { Escape: 'Esc', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' }
 
 export function formatCombo(combo: Combo, isMac: boolean): string {
+  // Shift is implied by typed symbols like "?", so only name it for letters, digits and named keys
+  const showShift = !!combo.shift && (combo.key.length > 1 || /^[a-z0-9]$/i.test(combo.key))
   const key = KEY_LABELS[combo.key] ?? (combo.key.length === 1 ? combo.key.toUpperCase() : combo.key)
-  if (isMac) return `${combo.alt ? '⌥' : ''}${combo.shift && combo.key.length > 1 ? '⇧' : ''}${combo.mod ? '⌘' : ''}${key}`
-  return [combo.mod && 'Ctrl', combo.alt && 'Alt', combo.shift && combo.key.length > 1 && 'Shift', key].filter(Boolean).join('+')
+  if (isMac) return `${combo.alt ? '⌥' : ''}${showShift ? '⇧' : ''}${combo.mod ? '⌘' : ''}${key}`
+  return [combo.mod && 'Ctrl', combo.alt && 'Alt', showShift && 'Shift', key].filter(Boolean).join('+')
 }
 
 /** Display strings for a shortcut, one per combo. */

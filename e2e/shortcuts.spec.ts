@@ -70,7 +70,7 @@ test.describe('Keyboard shortcuts', () => {
     await window.keyboard.press('Control+/')
     const sheet = window.getByTestId('shortcut-sheet')
     await expect(sheet).toBeVisible()
-    await expect(sheet.getByTestId('shortcut-row')).toHaveCount(10)
+    await expect(sheet.getByTestId('shortcut-row')).toHaveCount(12)
     await expect(sheet).toContainText('Send request')
     await window.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
@@ -84,4 +84,17 @@ test.describe('Keyboard shortcuts', () => {
     expect(await window.getByTestId('working-set-item').count()).toBe(before)
     await window.keyboard.press('Escape')
   })
+
+  test('settings and sidebar search shortcuts, and tooltips show the keys', async ({ window }) => {
+    await window.keyboard.press('Control+,')
+    await expect(window.getByTestId('settings-modal')).toBeVisible()
+    await window.keyboard.press('Escape')
+    await expect(window.getByTestId('settings-modal')).toHaveCount(0)
+
+    await window.keyboard.press('Control+Shift+F')
+    await expect(window.getByTestId('sidebar-search')).toBeFocused()
+
+    await expect(window.getByTestId('nav-back')).toHaveAttribute('title', /Alt\+←/)
+  })
 })
+

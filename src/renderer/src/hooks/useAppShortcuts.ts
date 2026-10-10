@@ -2,9 +2,14 @@ import { useShortcut } from '@/hooks/useShortcuts'
 import { createRequestInContext } from '@/lib/requestActions'
 import { useNavigationStore } from '@/store/navigation'
 import { useRequestsStore } from '@/store/requests'
+import { useUIStore } from '@/store/ui'
 import { useShortcutHelpStore } from '@/store/shortcutHelp'
 
-const editorVisible = (): boolean => document.querySelector('[data-testid="url-input"]') !== null
+/** True while the request editor (not an environment, collection or other page) is the visible view. */
+const editorVisible = (): boolean => {
+  const { sidebarTab, selectedItem } = useUIStore.getState()
+  return sidebarTab !== 'environments' && selectedItem === null
+}
 
 /** Behaviour for the shortcuts that only touch stores. Save and the palette are attached by their own components. */
 export function useAppShortcuts(): void {
@@ -46,6 +51,20 @@ export function useAppShortcuts(): void {
 
   useShortcut('back', () => { useNavigationStore.getState().go(-1); return true })
   useShortcut('forward', () => { useNavigationStore.getState().go(1); return true })
+
+  useShortcut('settings', () => { useUIStore.getState().openSettings(); return true })
+
+  useShortcut('focus-search', () => {
+    const ui = useUIStore.getState()
+    if (ui.sidebarTab !== 'apis') ui.setSidebarTab('apis')
+    // The search box may mount after the tab switch
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLInputElement>('[data-testid="sidebar-search"]')
+      input?.focus()
+      input?.select()
+    })
+    return true
+  })
 
   useShortcut('help', () => { useShortcutHelpStore.getState().toggle(); return true })
 }

@@ -90,3 +90,17 @@ describe('formatting and cheat-sheet', () => {
     expect(ids).toHaveLength(new Set(ids).size)
   })
 })
+
+describe('settings and sidebar search', () => {
+  it('match with the platform modifier', () => {
+    expect(findShortcut(ev(',', { ctrlKey: true }), false)?.id).toBe('settings')
+    expect(findShortcut(ev('F', { ctrlKey: true, shiftKey: true }), false)?.id).toBe('focus-search')
+    expect(findShortcut(ev('f', { ctrlKey: true }), false)).toBeUndefined()
+  })
+
+  it('name Shift for letters but not for typed symbols', () => {
+    expect(shortcutLabels('focus-search', false)).toEqual(['Ctrl+Shift+F'])
+    expect(shortcutLabels('focus-search', true)).toEqual(['⇧⌘F'])
+    expect(shortcutLabels('help', false)).toEqual(['Ctrl+/', '?'])
+  })
+})
