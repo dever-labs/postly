@@ -6,6 +6,8 @@ export type GeneralSettings = {
   defaultTimeout: number
   autoUpdate: boolean
   updateFeedUrl?: string
+  historyEnabled?: boolean
+  historyLimit?: number
 }
 
 const GENERAL_DEFAULTS: GeneralSettings = {
@@ -14,6 +16,8 @@ const GENERAL_DEFAULTS: GeneralSettings = {
   defaultTimeout: 30000,
   autoUpdate: true,
   updateFeedUrl: undefined,
+  historyEnabled: true,
+  historyLimit: 500,
 }
 
 export function parseGeneralSettings(value: string | undefined): GeneralSettings {
@@ -25,6 +29,8 @@ export function parseGeneralSettings(value: string | undefined): GeneralSettings
     if (typeof parsed['followRedirects'] === 'boolean') result.followRedirects = parsed['followRedirects']
     if (typeof parsed['defaultTimeout'] === 'number') result.defaultTimeout = parsed['defaultTimeout']
     if (typeof parsed['autoUpdate'] === 'boolean') result.autoUpdate = parsed['autoUpdate']
+    if (typeof parsed['historyEnabled'] === 'boolean') result.historyEnabled = parsed['historyEnabled']
+    if (typeof parsed['historyLimit'] === 'number' && parsed['historyLimit'] >= 0) result.historyLimit = Math.min(Math.floor(parsed['historyLimit']), 5000)
     if (typeof parsed['updateFeedUrl'] === 'string') result.updateFeedUrl = parsed['updateFeedUrl'] || undefined
   } catch { /* use defaults */ }
   return result

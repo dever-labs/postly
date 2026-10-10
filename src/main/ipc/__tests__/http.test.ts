@@ -28,12 +28,17 @@ vi.mock('../../services/file-access', () => ({
   confirmLocalFileReads: vi.fn(async () => true)
 }))
 
+vi.mock('../../services/history', () => ({
+  recordHistory: vi.fn()
+}))
+
 vi.mock('../../services/oauth', () => ({
   getValidTokenForConfig: vi.fn(),
   authorizeInline: vi.fn()
 }))
 
 import { registerHttpHandlers } from '../http'
+import { recordHistory } from '../../services/history'
 import { queryOne, queryAll } from '../../database'
 import { executeRequest } from '../../services/http-executor'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../../services/file-access'
@@ -574,6 +579,31 @@ describe('http IPC handler', () => {
       const data = await invokeOk(baseReq())
       const warnLogs = (data.logs as LogEntry[]).filter((l) => l.level === 'warn')
       expect(warnLogs).toHaveLength(0)
+    })
+  })
+
+  describe('history recording', () => {
+    it('records the un-interpolated request with the configured limit', async () => {
+      setupDb({ settings: '{"historyLimit":50}' })
+      await invokeOk(baseReq())
+      expect(recordHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ url: baseReq().url, protocol: 'http' }),
+        expect.objectContaining({ status: 200 }),
+        { enabled: true, limit: 50 }
+      )
+    })
+
+    it('passes enabled=false when history is turned off', async () => {
+      setupDb({ settings: '{"historyEnabled":false}' })
+      await invokeOk(baseReq())
+      expect(recordHistory).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ enabled: false }))
+    })
+
+    it('does not fail the send when recording throws', async () => {
+      vi.mocked(recordHistory).mockImplementationOnce(() => { throw new Error('disk full') })
+      const data = await invokeOk(baseReq())
+      expect(data.status).toBe(200)
+      expect((data.logs as LogEntry[]).some((l) => l.message.includes('Could not record history'))).toBe(true)
     })
   })
 

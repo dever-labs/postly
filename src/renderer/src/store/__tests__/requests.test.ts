@@ -142,3 +142,38 @@ describe('useRequestsStore — cancelRequest', () => {
     expect(mockHttpCancel).toHaveBeenCalledOnce()
   })
 })
+
+describe('useRequestsStore — history (scratch) requests', () => {
+  const entry = {
+    id: 'h1', createdAt: 1, protocol: 'http', method: 'POST', url: 'https://api.test/x', status: 201,
+    statusText: 'Created', duration: 12, size: 4,
+    request: { method: 'POST', url: 'https://api.test/x', headers: { 'X-A': '1' }, params: { q: 'z' }, body: '{}', bodyType: 'json' },
+    responseHeaders: { 'content-type': 'application/json' }, responseBody: '{"ok":1}', bodyTruncated: false,
+  } as unknown as Parameters<ReturnType<typeof useRequestsStore.getState>['openHistoryEntry']>[0]
+
+  beforeEach(() => {
+    mockDraftsUpsert.mockClear()
+    mockRequestsUpdate.mockClear()
+  })
+
+  it('opens an entry with its request and stored response', () => {
+    useRequestsStore.getState().openHistoryEntry(entry)
+    const s = useRequestsStore.getState()
+    expect(s.activeRequestId).toBe('scratch:h1')
+    expect(s.editingRequest?.url).toBe('https://api.test/x')
+    expect(s.editingRequest?.headers).toMatchObject([{ key: 'X-A', value: '1', enabled: true }])
+    expect(s.response?.status).toBe(201)
+  })
+
+  it('never persists drafts or saves, and does not become dirty', async () => {
+    useRequestsStore.getState().openHistoryEntry(entry)
+    useRequestsStore.getState().updateField('url', 'https://api.test/y')
+    await useRequestsStore.getState().saveRequest()
+    await new Promise((r) => setTimeout(r, 2100))
+    const s = useRequestsStore.getState()
+    expect(s.editingRequest?.url).toBe('https://api.test/y')
+    expect(s.editingRequest?.isDirty).toBe(false)
+    expect(mockDraftsUpsert).not.toHaveBeenCalled()
+    expect(mockRequestsUpdate).not.toHaveBeenCalled()
+  })
+})

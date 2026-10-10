@@ -1,0 +1,132 @@
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+const state = { dir: '' }
+vi.mock('electron', () => ({
+  app: { getPath: () => state.dir },
+  safeStorage: { isEncryptionAvailable: () => false },
+}))
+
+import { initDatabase } from '../../database'
+import {
+  recordHistory, listHistory, getHistoryEntry, deleteHistoryEntry, clearHistory, pruneHistory,
+  maskHeaders, maskAuthConfig, maskUrl, MAX_STORED_BODY_BYTES,
+} from '../history'
+
+const dirs: string[] = []
+beforeEach(async () => {
+  state.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postly-hist-'))
+  dirs.push(state.dir)
+  await initDatabase()
+})
+afterAll(() => dirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })))
+
+const on = { enabled: true, limit: 500 }
+const req = (over: Record<string, unknown> = {}) => ({
+  method: 'GET', url: 'https://api.test/items', headers: {}, bodyType: 'none', authType: 'none', authConfig: {}, ...over,
+})
+const res = (over: Record<string, unknown> = {}) => ({
+  status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' }, body: '{"ok":true}', duration: 12, size: 11, ...over,
+})
+
+describe('masking', () => {
+  it('masks secret headers but keeps variable references and ordinary headers', () => {
+    expect(maskHeaders({
+      Authorization: 'Bearer abc.def', Cookie: 'sid=1', 'X-Api-Key': 'k', Accept: 'application/json',
+      'X-Custom-Token': 'zzz', Authorization2: 'x',
+    })).toEqual({
+      Authorization: '••••••••', Cookie: '••••••••', 'X-Api-Key': '••••••••', Accept: 'application/json',
+      'X-Custom-Token': '••••••••', Authorization2: 'x',
+    })
+    expect(maskHeaders({ Authorization: 'Bearer {{TOKEN}}', 'X-Api-Key': '{{KEY}}' })).toEqual({ Authorization: 'Bearer {{TOKEN}}', 'X-Api-Key': '{{KEY}}' })
+    expect(maskHeaders({ Authorization: 'Bearer real-{{TOKEN}}' }).Authorization).toBe('••••••••')
+  })
+
+  it('masks literal auth secrets but keeps usernames and variable references', () => {
+    expect(maskAuthConfig({ username: 'bob', password: 'pw', token: 't', clientId: 'cid', clientSecret: 's' }))
+      .toEqual({ username: 'bob', password: '••••••••', token: '••••••••', clientId: 'cid', clientSecret: '••••••••' })
+    expect(maskAuthConfig({ token: '{{TOKEN}}' })).toEqual({ token: '{{TOKEN}}' })
+  })
+
+  it('masks secret query parameters in URLs', () => {
+    expect(maskUrl('https://a.test/x?api_key=SECRET&page=2&access_token=abc')).toBe('https://a.test/x?api_key=••••••••&page=2&access_token=••••••••')
+    expect(maskUrl('https://a.test/x?token={{T}}')).toBe('https://a.test/x?token={{T}}')
+    expect(maskUrl('https://a.test/x?q=1')).toBe('https://a.test/x?q=1')
+  })
+})
+
+describe('recordHistory', () => {
+  it('stores a masked request and the response summary', () => {
+    const id = recordHistory(
+      req({ method: 'POST', url: 'https://api.test/x?api_key=SECRET', headers: { Authorization: 'Bearer live-token' }, body: '{"a":1}', bodyType: 'raw-json', authType: 'bearer', authConfig: { token: 'live-token' } }),
+      res({ status: 201, headers: { 'set-cookie': 'sid=abc', 'content-type': 'text/plain' } }), on
+    )
+    expect(id).toBeTruthy()
+    const entry = getHistoryEntry(id as string)
+    expect(entry).toMatchObject({ method: 'POST', status: 201, statusText: 'OK', duration: 12, size: 11, responseBody: '{"ok":true}', bodyTruncated: false })
+    expect(JSON.stringify(entry)).not.toMatch(/live-token|SECRET|sid=abc/)
+    expect(entry?.request).toMatchObject({ body: '{"a":1}', bodyType: 'raw-json', authType: 'bearer' })
+  })
+
+  it('does nothing when history is disabled or the limit is 0', () => {
+    expect(recordHistory(req(), res(), { enabled: false, limit: 500 })).toBeNull()
+    expect(recordHistory(req(), res(), { enabled: true, limit: 0 })).toBeNull()
+    expect(listHistory()).toEqual([])
+  })
+
+  it('truncates large bodies on a character boundary and flags it', () => {
+    const id = recordHistory(req(), res({ body: 'é'.repeat(MAX_STORED_BODY_BYTES) }), on) as string
+    const entry = getHistoryEntry(id) as NonNullable<ReturnType<typeof getHistoryEntry>>
+    expect(entry.bodyTruncated).toBe(true)
+    expect(Buffer.byteLength(entry.responseBody)).toBeLessThanOrEqual(MAX_STORED_BODY_BYTES)
+    expect(entry.responseBody).not.toContain('\uFFFD')
+  })
+
+  it('records failed requests (status 0)', () => {
+    const id = recordHistory(req(), res({ status: 0, statusText: 'connect ECONNREFUSED', body: 'connect ECONNREFUSED' }), on) as string
+    expect(getHistoryEntry(id)?.status).toBe(0)
+  })
+
+  it('prunes the oldest entries beyond the limit', () => {
+    for (let i = 0; i < 5; i++) recordHistory(req({ url: `https://a.test/${i}` }), res(), { enabled: true, limit: 3 })
+    expect(listHistory().map((e) => e.url)).toEqual(['https://a.test/4', 'https://a.test/3', 'https://a.test/2'])
+    pruneHistory(1)
+    expect(listHistory()).toHaveLength(1)
+  })
+})
+
+describe('listHistory / delete / clear', () => {
+  beforeEach(() => {
+    recordHistory(req({ method: 'GET', url: 'https://a.test/users' }), res({ status: 200 }), on)
+    recordHistory(req({ method: 'POST', url: 'https://a.test/orders' }), res({ status: 500 }), on)
+    recordHistory(req({ method: 'GET', url: 'https://b.test/100%_done' }), res({ status: 404 }), on)
+  })
+
+  it('lists newest first and filters by url, method and status', () => {
+    expect(listHistory().map((e) => e.status)).toEqual([404, 500, 200])
+    expect(listHistory({ search: 'orders' })).toHaveLength(1)
+    expect(listHistory({ search: 'post' })).toHaveLength(1)
+    expect(listHistory({ search: '404' })[0].url).toContain('b.test')
+  })
+
+  it('treats LIKE wildcards in the search term literally', () => {
+    expect(listHistory({ search: '100%_' })).toHaveLength(1)
+    expect(listHistory({ search: '%' })).toHaveLength(1)
+  })
+
+  it('supports paging', () => {
+    expect(listHistory({ limit: 2 })).toHaveLength(2)
+    expect(listHistory({ limit: 2, offset: 2 })).toHaveLength(1)
+  })
+
+  it('deletes one entry and clears all', () => {
+    const [first] = listHistory()
+    deleteHistoryEntry(first.id)
+    expect(listHistory()).toHaveLength(2)
+    expect(getHistoryEntry(first.id)).toBeNull()
+    clearHistory()
+    expect(listHistory()).toEqual([])
+  })
+})

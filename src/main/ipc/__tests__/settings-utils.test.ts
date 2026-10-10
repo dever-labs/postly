@@ -11,6 +11,8 @@ const DEFAULTS = {
   defaultTimeout: 30000,
   autoUpdate: true,
   updateFeedUrl: undefined,
+  historyEnabled: true,
+  historyLimit: 500,
 }
 
 describe('parseGeneralSettings', () => {
@@ -28,7 +30,7 @@ describe('parseGeneralSettings', () => {
       sslVerification: false, followRedirects: false, defaultTimeout: 5000, autoUpdate: false, updateFeedUrl: 'https://feed.example',
     }))
     expect(out).toEqual({
-      sslVerification: false, followRedirects: false, defaultTimeout: 5000, autoUpdate: false, updateFeedUrl: 'https://feed.example',
+      ...DEFAULTS, sslVerification: false, followRedirects: false, defaultTimeout: 5000, autoUpdate: false, updateFeedUrl: 'https://feed.example',
     })
   })
 

@@ -1,6 +1,11 @@
 import { test, expect } from './fixtures'
 
 test.describe('Network settings', () => {
+  // The profile is shared across specs; don't leave a dead proxy behind.
+  test.afterEach(async ({ window }) => {
+    await window.evaluate(() => window.api.proxy.set({ mode: 'system', url: '', username: '', password: '', bypass: '' }))
+  })
+
   test('proxy can be configured, saved and reports the route', async ({ window }) => {
     await window.locator('[data-testid="btn-settings"]').click()
     await window.getByRole('button', { name: 'Network' }).click()

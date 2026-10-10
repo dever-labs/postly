@@ -184,6 +184,36 @@ export interface GitLabSettings {
   groups: string[]
 }
 
+export interface HistoryEntrySummary {
+  id: string
+  createdAt: number
+  protocol: string
+  method: string
+  url: string
+  status: number
+  statusText: string
+  duration: number
+  size: number
+}
+
+export interface HistoryEntryDetail extends HistoryEntrySummary {
+  request: {
+    method: string
+    url: string
+    headers?: Record<string, string>
+    params?: Record<string, string>
+    body?: string
+    bodyType?: BodyType
+    authType?: AuthType
+    authConfig?: Record<string, string>
+    sslVerification?: SslVerification
+    protocol?: string
+  }
+  responseHeaders: Record<string, string>
+  responseBody: string
+  bodyTruncated: boolean
+}
+
 export interface GeneralSettings {
   theme: 'dark' | 'light' | 'system'
   defaultTimeout: number
@@ -191,6 +221,8 @@ export interface GeneralSettings {
   sslVerification: boolean
   autoUpdate: boolean
   updateFeedUrl?: string
+  historyEnabled?: boolean
+  historyLimit?: number
 }
 
 export interface AiSettings {

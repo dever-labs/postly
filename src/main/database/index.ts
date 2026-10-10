@@ -321,6 +321,22 @@ function runMigrations(): void {
     ssl_verification TEXT, protocol TEXT, protocol_config TEXT,
     updated_at INTEGER NOT NULL
   )`)
+  db.run(`CREATE TABLE IF NOT EXISTS request_history (
+    id TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    protocol TEXT NOT NULL DEFAULT 'http',
+    method TEXT NOT NULL,
+    url TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    status_text TEXT NOT NULL DEFAULT '',
+    duration INTEGER NOT NULL DEFAULT 0,
+    size INTEGER NOT NULL DEFAULT 0,
+    request_json TEXT NOT NULL,
+    response_headers TEXT NOT NULL DEFAULT '{}',
+    response_body TEXT NOT NULL DEFAULT '',
+    body_truncated INTEGER NOT NULL DEFAULT 0
+  )`)
+  db.run('CREATE INDEX IF NOT EXISTS idx_request_history_created ON request_history(created_at DESC)')
   recreateDraftTables()
   db.run(`CREATE TABLE IF NOT EXISTS env_drafts (
     env_id TEXT PRIMARY KEY REFERENCES environments(id) ON DELETE CASCADE,

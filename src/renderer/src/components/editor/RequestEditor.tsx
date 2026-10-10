@@ -13,7 +13,7 @@ import { HeadersTab } from '@/components/editor/tabs/HeadersTab'
 import { AuthTab } from '@/components/editor/tabs/AuthTab'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
-import { useRequestsStore } from '@/store/requests'
+import { useRequestsStore, isScratchId } from '@/store/requests'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
@@ -116,6 +116,7 @@ export function RequestEditor() {
         e.preventDefault()
         if (!editingRequestRef.current) return
         if (breadcrumbRef.current?.sourceType === 'backstage') return
+        if (isScratchId(editingRequestRef.current.id)) return
         saveRequestRef.current().then(() => triggerGitSaveRef.current())
         return
       }
@@ -206,6 +207,12 @@ export function RequestEditor() {
         />
       </div>
 
+      {isScratchId(editingRequest.id) && (
+        <div data-testid="history-banner" className="no-drag border-b border-th-border bg-th-surface-raised px-4 py-1 text-xs text-th-text-subtle">
+          Reopened from history — this request is not saved to a collection.
+        </div>
+      )}
+
       {/* Protocol selector + URL bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-th-border px-3 py-2">
         <ProtocolSelector
@@ -229,7 +236,7 @@ export function RequestEditor() {
         {(protocol === 'http' || protocol === 'graphql') && (
           <SendButton onClick={sendRequest} onCancel={cancelRequest} isLoading={isLoading} />
         )}
-        {breadcrumb?.sourceType !== 'backstage' && (
+        {breadcrumb?.sourceType !== 'backstage' && !isScratchId(editingRequest.id) && (
           <>
             <button
               onClick={async () => {
