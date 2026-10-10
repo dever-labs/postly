@@ -9,6 +9,8 @@ import { recordHistory } from '../services/history'
 import { createDynamicVariables, summarizeResolutions } from '../../shared/variables'
 import { variableValues } from '../services/variable-store'
 import { createSubstitution, substituteBody, substituteRecord } from '../services/request-variables'
+import { runExtraction, type ExtractRule } from '../../shared/extract'
+import { applyExtraction, guardedRegex } from '../services/extract-apply'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
 type LogLevel = 'info' | 'warn' | 'error'
@@ -81,6 +83,28 @@ function buildCookieHook(enabled: boolean): CookieJarHook {
       if (result.changed) saveCookies(envKey, result.rows)
       return result.stored
     },
+  }
+}
+
+/** Runs post-response rules. Whatever happens here, the request itself still succeeds. */
+function extractFromResponse(
+  rules: ExtractRule[] | undefined,
+  response: Awaited<ReturnType<typeof executeRequest>>,
+  envId: string | null,
+  collectionId: string | null,
+  log: (level: LogLevel, message: string, detail?: string) => void
+): { variable: string; scope: string }[] {
+  if (!rules || rules.length === 0) return []
+  try {
+    const outcomes = applyExtraction(runExtraction(rules, response, guardedRegex), { envId, collectionId })
+    for (const o of outcomes) {
+      if (o.ok) log('info', `Extract: ${o.variable} ← ${o.display ?? ''} (${o.scope})`)
+      else log('warn', `Extract: ${o.variable || '(no name)'} not set — ${o.error ?? 'unknown reason'}`)
+    }
+    return outcomes.filter((o) => o.ok).map((o) => ({ variable: o.variable, scope: o.scope }))
+  } catch (err) {
+    log('warn', `Extract: skipped — ${String(err)}`)
+    return []
   }
 }
 
@@ -265,7 +289,8 @@ export function registerHttpHandlers(): void {
       } catch (err) {
         log('warn', `Could not record history: ${String(err)}`)
       }
-      return { data: { ...response, logs } }
+      const extracted = extractFromResponse(req.extractRules, response, activeEnv?.id ?? null, rootFolder?.id ?? null, log)
+      return { data: { ...response, logs, extracted } }
     } catch (err) {
       currentAbortController = null
       log('error', `Unexpected error: ${String(err)}`)

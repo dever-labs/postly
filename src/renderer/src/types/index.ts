@@ -1,3 +1,4 @@
+import type { ExtractRule } from '../../../shared/extract'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
 export type ProtocolType = 'http' | 'graphql' | 'websocket' | 'grpc' | 'mqtt'
 export type GrantType = 'authorization_code' | 'client_credentials' | 'implicit' | 'password'
@@ -144,6 +145,7 @@ export interface HttpRequest {
   authConfig: Record<string, string>
   sslVerification?: SslVerification
   folderId?: string
+  extractRules?: ExtractRule[]
 }
 
 export interface CookieRecord {
@@ -173,6 +175,8 @@ export interface HttpResponse {
   size: number
   logs?: LogEntry[]
   cookies?: ResponseCookie[]
+  /** Variables written by Extract rules, so stores can refresh. */
+  extracted?: { variable: string; scope: 'environment' | 'collection' }[]
 }
 
 export interface BackstageSettings {
