@@ -1,4 +1,5 @@
 import type * as GrpcTypes from '@grpc/grpc-js'
+import type { TlsOptions } from './certificates'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -63,6 +64,8 @@ export interface GrpcInvokeParams {
   metadata: Record<string, string>
   requestBody: string
   useTls: boolean
+  /** PEM client certificate and extra CAs; gRPC cannot use PFX. */
+  tls?: TlsOptions
 }
 
 export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
@@ -96,8 +99,24 @@ export async function invokeGrpc(params: GrpcInvokeParams): Promise<{
       return { error: `Service "${params.serviceName}" not found in proto`, duration: Date.now() - start }
     }
 
+    if (params.useTls && params.tls?.pfx) {
+      return { error: 'gRPC client certificates must be PEM (certificate and key). Convert the PFX file or add a PEM pair.', duration: Date.now() - start }
+    }
+    // createSsl has no passphrase argument, so an encrypted key is decrypted here first
+    let clientKey = params.tls?.key
+    if (params.useTls && clientKey && params.tls?.passphrase) {
+      try {
+        clientKey = crypto.createPrivateKey({ key: clientKey, passphrase: params.tls.passphrase }).export({ type: 'pkcs8', format: 'pem' }).toString()
+      } catch {
+        return { error: 'The client certificate key could not be decrypted. Check its passphrase in Settings → Certificates.', duration: Date.now() - start }
+      }
+    }
     const creds = params.useTls
-      ? grpc.credentials.createSsl()
+      ? grpc.credentials.createSsl(
+          params.tls?.ca ? Buffer.from(params.tls.ca.join('\n')) : undefined,
+          clientKey ? Buffer.from(clientKey) : undefined,
+          params.tls?.cert ? Buffer.from(params.tls.cert) : undefined,
+        )
       : grpc.credentials.createInsecure()
 
     type GrpcClientCtor = new (url: string, creds: GrpcTypes.ChannelCredentials) => GrpcTypes.Client
