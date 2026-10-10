@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { tlsSelectionFor } from './certificates'
 import { connectMqtt, subscribeMqtt, unsubscribeMqtt, publishMqtt, disconnectMqtt, isMqttConnected } from '../services/mqtt'
 
 export function registerMqttHandlers(): void {
@@ -18,7 +19,7 @@ export function registerMqttHandlers(): void {
         password: args.password,
         keepAlive: args.keepAlive,
         cleanSession: args.cleanSession,
-      }, event.sender)
+      }, event.sender, tlsSelectionFor(args.brokerUrl).options)
       return { data: { connectionId: args.connectionId } }
     } catch (err) {
       return { error: String(err) }

@@ -8,7 +8,7 @@ vi.mock('electron', () => ({ session: { defaultSession: { resolveProxy: vi.fn(as
 
 import {
   isBypassed, parsePacResult, parseProxySettings, toPublicProxySettings, resolveProxy,
-  describeProxyError, getProxySettings, splitUrlCredentials, PROXY_DEFAULTS, type ProxySettings,
+  describeProxyError, getProxySettings, splitUrlCredentials, PROXY_DEFAULTS, installAxiosProxy, setTlsProvider, type ProxySettings,
 } from '../proxy'
 
 const manual = (over: Partial<ProxySettings> = {}): ProxySettings => ({ ...PROXY_DEFAULTS, mode: 'manual', url: 'http://proxy.test:8080', ...over })
@@ -147,4 +147,25 @@ describe('describeProxyError', () => {
     expect(describeProxyError('connect ECONNREFUSED 1.2.3.4:1', proxy)).toMatch(/Could not reach proxy http:\/\/p\.test:1/)
     expect(describeProxyError('something else', proxy)).toBe('something else')
   })
+})
+
+describe('axios TLS interceptor', () => {
+  it('gives other calls the client certificate while keeping their verification setting', async () => {
+    const { default: axios } = await import('axios')
+    const { Agent } = await import('https')
+    let seen: { httpsAgent?: { options?: Record<string, unknown> } } = {}
+    const instance = axios.create({ adapter: async (config) => { seen = config as typeof seen; return { data: '', status: 200, statusText: 'OK', headers: {}, config } } })
+    setTlsProvider((url) => ({ options: url.includes('mtls.test') ? { cert: 'CERT', key: 'KEY' } : {} }))
+    installAxiosProxy(instance)
+
+    await instance.get('https://mtls.test/x', { httpsAgent: new Agent({ rejectUnauthorized: false }) })
+    expect(seen.httpsAgent?.options).toMatchObject({ cert: 'CERT', key: 'KEY', rejectUnauthorized: false })
+
+    await instance.get('https://mtls.test/x')
+    expect(seen.httpsAgent?.options).toMatchObject({ cert: 'CERT', rejectUnauthorized: true })
+
+    seen = {}
+    await instance.get('https://plain.test/x')
+    expect(seen.httpsAgent).toBeUndefined()
+  }, 30_000)
 })
