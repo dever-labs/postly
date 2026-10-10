@@ -43,7 +43,7 @@ interface UIState {
   theme: Theme
   settingsOpen: boolean
   settingsTab: string
-  sidebarTab: 'apis' | 'environments'
+  sidebarTab: 'apis' | 'environments' | 'history'
   selectedEnvId: string | null
   sidebarWidth: number
   editorHeight: number
@@ -57,7 +57,7 @@ interface UIState {
   setTheme: (theme: Theme) => void
   openSettings: (tab?: string) => void
   closeSettings: () => void
-  setSidebarTab: (tab: 'apis' | 'environments') => void
+  setSidebarTab: (tab: 'apis' | 'environments' | 'history') => void
   setSelectedEnvId: (id: string | null) => void
   setSidebarWidth: (w: number) => void
   setEditorHeight: (h: number) => void

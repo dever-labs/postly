@@ -9,6 +9,7 @@ import { registerGitLabHandlers } from './gitlab'
 import { registerGitHandlers } from './git'
 import { registerSettingsHandlers } from './settings'
 import { registerProxyHandlers } from './proxy'
+import { registerHistoryHandlers } from './history'
 import { registerIntegrationHandlers } from './integrations'
 import { registerWsHandlers } from './ws'
 import { registerGrpcHandlers } from './grpc'
@@ -35,6 +36,7 @@ export function registerAllIpcHandlers(): void {
   registerGitHandlers()
   registerSettingsHandlers()
   registerProxyHandlers()
+  registerHistoryHandlers()
   registerIntegrationHandlers()
   registerWsHandlers()
   registerGrpcHandlers()

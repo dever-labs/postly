@@ -3,7 +3,7 @@ import { queryAll, queryOne, run } from '../database'
 import { parseProxySettings, toPublicProxySettings } from '../services/proxy'
 
 const DEFAULTS = {
-  general: { theme: 'dark', defaultTimeout: 30000, followRedirects: true, sslVerification: true, autoUpdate: true },
+  general: { theme: 'dark', defaultTimeout: 30000, followRedirects: true, sslVerification: true, autoUpdate: true, historyEnabled: true, historyLimit: 500 },
   backstage: { baseUrl: '', token: '', autoSync: false },
   github: { token: '', orgs: [] as string[] },
   gitlab: { baseUrl: 'https://gitlab.com', token: '', groups: [] as string[] },

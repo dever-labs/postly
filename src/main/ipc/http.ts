@@ -3,6 +3,7 @@ import { queryAll, queryOne } from '../database'
 import { executeRequest, HttpRequest, LogEntry } from '../services/http-executor'
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 import { getGeneralSettings } from './settings-utils'
+import { recordHistory } from '../services/history'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
 type LogLevel = 'info' | 'warn' | 'error'
@@ -18,6 +19,10 @@ type FolderLineageRow = {
 }
 
 let currentAbortController: AbortController | null = null
+
+function protocolOf(req: HttpRequest): string {
+  return (req as HttpRequest & { protocol?: string }).protocol ?? 'http'
+}
 
 function interpolateEnvVars(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => vars[key.trim()] ?? `{{${key}}}`)
@@ -230,6 +235,15 @@ export function registerHttpHandlers(): void {
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })
       currentAbortController = null
+      try {
+        recordHistory(
+          { ...req, protocol: protocolOf(req) },
+          response,
+          { enabled: generalSettings.historyEnabled ?? true, limit: generalSettings.historyLimit ?? 500 }
+        )
+      } catch (err) {
+        log('warn', `Could not record history: ${String(err)}`)
+      }
       return { data: { ...response, logs } }
     } catch (err) {
       currentAbortController = null

@@ -8,6 +8,8 @@ const DEFAULTS: GeneralSettings = {
   followRedirects: true,
   sslVerification: true,
   autoUpdate: true,
+  historyEnabled: true,
+  historyLimit: 500,
 }
 
 export function GeneralSettings() {
@@ -60,6 +62,29 @@ export function GeneralSettings() {
             />
             <span className="text-sm text-th-text-secondary">Follow Redirects</span>
           </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="history-enabled"
+              checked={settings.historyEnabled !== false}
+              onChange={(e) => update('historyEnabled', e.target.checked)}
+              className="h-4 w-4 accent-blue-500"
+            />
+            <span className="text-sm text-th-text-secondary">Keep request history</span>
+          </label>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">History limit (entries, max 5000)</label>
+          <Input
+            type="number"
+            min={1}
+            max={5000}
+            className="w-48"
+            value={settings.historyLimit ?? 500}
+            onChange={(e) => update('historyLimit', Math.min(5000, Math.max(1, Number(e.target.value) || 500)))}
+          />
         </div>
       </div>
     </div>

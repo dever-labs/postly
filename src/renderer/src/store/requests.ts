@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { HttpRequest, HttpResponse, Request } from '../types'
+import type { HistoryEntryDetail, HttpRequest, HttpResponse, Request, KeyValuePair } from '../types'
 import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { useCollectionsStore } from './collections'
 
@@ -10,6 +10,7 @@ interface RequestsState {
   response: HttpResponse | null
   isLoading: boolean
   setActiveRequest: (request: Request) => void
+  openHistoryEntry: (entry: HistoryEntryDetail) => void
   clearActiveRequest: () => void
   updateField: (field: keyof Request, value: unknown) => void
   undoRequest: () => void
@@ -27,6 +28,13 @@ const DIRTY_FIELDS = new Set<keyof Request>([
 ])
 
 const MAX_UNDO_STEPS = 50
+
+/** Requests reopened from history are not stored anywhere: no drafts, dirty tracking or saving. */
+export const SCRATCH_PREFIX = 'scratch:'
+export const isScratchId = (id: string | null | undefined): boolean => !!id && id.startsWith(SCRATCH_PREFIX)
+
+const recordToPairs = (rec: Record<string, string> | undefined): KeyValuePair[] =>
+  Object.entries(rec ?? {}).map(([key, value]) => ({ id: crypto.randomUUID(), key, value, enabled: true }))
 
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingDraftRequest: Request | null = null
@@ -138,6 +146,45 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       })
   },
 
+  openHistoryEntry: (entry: HistoryEntryDetail) => {
+    flushPendingDraftSave()
+    clearUndo()
+    const r = entry.request
+    const request: Request = {
+      id: `${SCRATCH_PREFIX}${entry.id}`,
+      folderId: '',
+      name: `${r.method} ${r.url}`,
+      protocol: (r.protocol ?? 'http') as Request['protocol'],
+      method: r.method as Request['method'],
+      url: r.url,
+      params: recordToPairs(r.params),
+      headers: recordToPairs(r.headers),
+      bodyType: r.bodyType ?? 'none',
+      bodyContent: r.body ?? '',
+      authType: r.authType ?? 'none',
+      authConfig: r.authConfig ?? {},
+      protocolConfig: {},
+      sslVerification: r.sslVerification ?? 'inherit',
+      isDirty: false,
+      sortOrder: 0,
+    }
+    const response: HttpResponse = {
+      status: entry.status,
+      statusText: entry.statusText,
+      headers: entry.responseHeaders,
+      body: entry.bodyTruncated ? `${entry.responseBody}\n\n… response truncated in history` : entry.responseBody,
+      duration: entry.duration,
+      size: entry.size,
+    }
+    set({
+      activeRequestId: request.id,
+      editingRequest: request,
+      savedRequest: JSON.parse(JSON.stringify(request)) as Request,
+      response,
+      isLoading: false,
+    })
+  },
+
   clearActiveRequest: () => {
     flushPendingDraftSave()
     clearUndo()
@@ -147,6 +194,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   updateField: (field: keyof Request, value: unknown) => {
     set((state) => {
       if (!state.editingRequest) return state
+      if (isScratchId(state.editingRequest.id)) return { editingRequest: { ...state.editingRequest, [field]: value } }
 
       if (DIRTY_FIELDS.has(field)) {
         // Push undo snapshot when: switching to a different field, OR 1s since last push
@@ -189,6 +237,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   },
 
   undoRequest: () => {
+    if (isScratchId(get().activeRequestId)) return
     const { savedRequest } = get()
     const previous = undoStack.pop()
     if (!previous) return
@@ -281,7 +330,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
   saveRequest: async () => {
     const { editingRequest } = get()
-    if (!editingRequest) return
+    if (!editingRequest || isScratchId(editingRequest.id)) return
 
     // Cancel any pending draft save and clear undo history
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
@@ -312,7 +361,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
   discardDraft: async () => {
     const { editingRequest } = get()
-    if (!editingRequest) return
+    if (!editingRequest || isScratchId(editingRequest.id)) return
 
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
     clearUndo()

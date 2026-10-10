@@ -1,7 +1,8 @@
-import { Globe, Layers, Settings, Link, Download, Upload } from 'lucide-react'
+import { Globe, History, Layers, Settings, Link, Download, Upload } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent, DragOverEvent } from '@dnd-kit/core'
+import { HistoryPanel } from '@/components/sidebar/HistoryPanel'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
@@ -154,6 +155,19 @@ export function CollectionsSidebar() {
           <Globe className="h-3.5 w-3.5" />
           Environments
         </button>
+        <button
+          data-testid="tab-history"
+          onClick={() => setSidebarTab('history')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
+            sidebarTab === 'history'
+              ? 'border-b-2 border-blue-500 text-th-text-primary'
+              : 'text-th-text-subtle hover:text-th-text-secondary'
+          )}
+        >
+          <History className="h-3.5 w-3.5" />
+          History
+        </button>
       </div>
 
       {sidebarTab === 'apis' && (
@@ -244,6 +258,12 @@ export function CollectionsSidebar() {
             </DragOverlay>
           </>
         </DndContext>
+      )}
+
+      {sidebarTab === 'history' && (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <HistoryPanel />
+        </div>
       )}
 
       {sidebarTab === 'environments' && (
