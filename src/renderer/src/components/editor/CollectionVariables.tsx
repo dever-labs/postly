@@ -18,6 +18,7 @@ interface Props {
 export function CollectionVariables({ collectionId, collectionName, isGit }: Props) {
   const stored = useVariablesStore((s) => s.collections[collectionId]) ?? NONE
   const save = useVariablesStore((s) => s.save)
+  const load = useVariablesStore((s) => s.load)
   const addToast = useUIStore((s) => s.addToast)
   const openGitAction = useUIStore((s) => s.openGitAction)
   const [rows, setRows] = useState<VariableRow[]>(stored)
@@ -28,6 +29,9 @@ export function CollectionVariables({ collectionId, collectionName, isGit }: Pro
   const storedKey = JSON.stringify(stored)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on content so a reload with identical values does not reset edits
   useEffect(() => { setRows(stored) }, [collectionId, storedKey])
+
+  // Import and git sync write variables behind the store's back, so refresh before editing
+  useEffect(() => { void load() }, [collectionId, load])
 
   const commit = async () => {
     setSaving(true)

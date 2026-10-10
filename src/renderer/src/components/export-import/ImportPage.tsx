@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
+import { useVariablesStore } from '@/store/variables'
 import type { CollectionSource } from '@/types'
 
 interface ParsedCollection {
@@ -109,6 +110,7 @@ export function ImportPage() {
     }
     if (data) {
       await load()
+      void useVariablesStore.getState().load()
       addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
       clearSelectedItem()
     }

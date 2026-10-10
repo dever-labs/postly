@@ -1,4 +1,4 @@
-import { DYNAMIC_VARIABLES, type VarScope, type VariableScopes } from '../../../shared/variables'
+import { DYNAMIC_VARIABLES, type VarScope } from '../../../shared/variables'
 import type { EnvVar, Folder } from '@/types'
 import type { VariableRow } from '@/store/variables'
 
@@ -37,11 +37,4 @@ export function mergeScopedVars({ environment, collection, global }: Inputs): Sc
   add(global, 'global')
   for (const d of DYNAMIC_VARIABLES) if (!out.has(d.name)) out.set(d.name, { key: d.name, value: d.description, isSecret: false, scope: 'dynamic' })
   return [...out.values()]
-}
-
-/** Scope values for interpolation, optionally leaving secrets out so they stay as {{placeholders}}. */
-export function toVariableScopes({ environment, collection, global }: Inputs, includeSecrets: boolean): VariableScopes {
-  const values = (rows: Pick<EnvVar, 'key' | 'value' | 'isSecret'>[]) =>
-    Object.fromEntries(rows.filter((r) => r.key && (includeSecrets || !r.isSecret)).map((r) => [r.key, r.value]))
-  return { global: values(global), collection: values(collection), environment: values(environment) }
 }
