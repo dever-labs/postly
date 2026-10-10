@@ -28,6 +28,54 @@ export function maskAuthConfig(config: Record<string, string>): Record<string, s
   return Object.fromEntries(Object.entries(config ?? {}).map(([k, v]) => [k, SECRET_CONFIG_KEYS.has(k) ? maskValue(String(v ?? '')) : v]))
 }
 
+function maskJsonValue(node: unknown): { value: unknown; changed: boolean } {
+  if (Array.isArray(node)) {
+    let changed = false
+    const out = node.map((n) => { const r = maskJsonValue(n); changed ||= r.changed; return r.value })
+    return { value: out, changed }
+  }
+  if (node && typeof node === 'object') {
+    let changed = false
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(node)) {
+      if (SECRET_NAME.test(k) && typeof v === 'string') {
+        const masked = maskValue(v)
+        changed ||= masked !== v
+        out[k] = masked
+      } else {
+        const r = maskJsonValue(v)
+        changed ||= r.changed
+        out[k] = r.value
+      }
+    }
+    return { value: out, changed }
+  }
+  return { value: node, changed: false }
+}
+
+/** Masks secret-named fields in JSON and urlencoded text; other content is returned untouched. */
+export function maskBodyText(text: string | undefined): string | undefined {
+  if (!text) return text
+  const trimmed = text.trimStart()
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const r = maskJsonValue(JSON.parse(text))
+      return r.changed ? JSON.stringify(r.value, null, 2) : text
+    } catch { return text }
+  }
+  if (/^[^\s=&]+=[^\s]*$/.test(text) && !text.includes('\n')) {
+    return text.split('&').map((pair) => {
+      const i = pair.indexOf('=')
+      if (i < 0) return pair
+      const key = pair.slice(0, i)
+      let name = key
+      try { name = decodeURIComponent(key) } catch { /* keep raw */ }
+      return SECRET_NAME.test(name) ? `${key}=${maskValue(pair.slice(i + 1))}` : pair
+    }).join('&')
+  }
+  return text
+}
+
 /** Query-string secrets (?api_key=…, ?access_token=…) are masked in stored URLs. */
 export function maskUrl(url: string): string {
   return url.replace(/([?&][^=&#]*(?:token|secret|password|key|sig)[^=&#]*=)([^&#]*)/gi, (_, prefix: string, value: string) =>
@@ -78,13 +126,13 @@ export function recordHistory(
 ): string | null {
   if (!settings.enabled || settings.limit <= 0) return null
   const id = crypto.randomUUID()
-  const body = truncateUtf8(response.body ?? '', MAX_STORED_BODY_BYTES)
+  const body = truncateUtf8(maskBodyText(response.body) ?? '', MAX_STORED_BODY_BYTES)
   const stored = {
     method: req.method,
     url: maskUrl(req.url),
     headers: maskHeaders(req.headers ?? {}),
-    params: req.params ?? {},
-    body: req.body,
+    params: maskHeaders(req.params ?? {}),
+    body: maskBodyText(req.body),
     bodyType: req.bodyType,
     authType: req.authType,
     authConfig: maskAuthConfig(req.authConfig),

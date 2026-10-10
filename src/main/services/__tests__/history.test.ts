@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
 import { initDatabase } from '../../database'
 import {
   recordHistory, listHistory, getHistoryEntry, deleteHistoryEntry, clearHistory, pruneHistory,
-  maskHeaders, maskAuthConfig, maskUrl, MAX_STORED_BODY_BYTES,
+  maskHeaders, maskAuthConfig, maskUrl, maskBodyText, MAX_STORED_BODY_BYTES,
 } from '../history'
 
 const dirs: string[] = []
@@ -54,6 +54,32 @@ describe('masking', () => {
     expect(maskUrl('https://a.test/x?api_key=SECRET&page=2&access_token=abc')).toBe('https://a.test/x?api_key=••••••••&page=2&access_token=••••••••')
     expect(maskUrl('https://a.test/x?token={{T}}')).toBe('https://a.test/x?token={{T}}')
     expect(maskUrl('https://a.test/x?q=1')).toBe('https://a.test/x?q=1')
+  })
+})
+
+describe('body and params masking', () => {
+  it('masks secret fields in JSON bodies, including nested ones, and keeps variables', () => {
+    const out = JSON.parse(maskBodyText('{"user":"a","password":"hunter2","n":{"client_secret":"x","ok":1},"token":"{{TOKEN}}"}') as string)
+    expect(out).toEqual({ user: 'a', password: '••••••••', n: { client_secret: '••••••••', ok: 1 }, token: '{{TOKEN}}' })
+  })
+
+  it('masks secret fields in urlencoded bodies', () => {
+    expect(maskBodyText('grant_type=password&username=a&password=hunter2')).toBe('grant_type=password&username=a&password=••••••••')
+  })
+
+  it('leaves other content untouched', () => {
+    expect(maskBodyText('plain text body')).toBe('plain text body')
+    expect(maskBodyText('{"a":1}')).toBe('{"a":1}')
+  })
+
+  it('masks params, request body and response body when stored', () => {
+    const id = recordHistory(
+      req({ params: { api_key: 'sk-live', page: '2' }, body: '{"password":"p"}', bodyType: 'json' }),
+      res({ body: '{"access_token":"abc"}' }), on) as string
+    const e = getHistoryEntry(id) as NonNullable<ReturnType<typeof getHistoryEntry>>
+    expect(e.request.params).toEqual({ api_key: '••••••••', page: '2' })
+    expect(JSON.stringify(e.request)).not.toContain('"p"')
+    expect(e.responseBody).not.toContain('abc')
   })
 })
 
