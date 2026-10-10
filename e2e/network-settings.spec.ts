@@ -16,7 +16,7 @@ test.describe('Network settings', () => {
     await window.getByPlaceholder(/proxy\.example\.com/).fill('http://proxy.test:8080')
     await window.getByPlaceholder(/localhost, 127/).fill('localhost')
     await window.locator('input[type="password"]').fill('s3cret')
-    await window.getByRole('button', { name: 'Save', exact: true }).click()
+    await window.getByTestId('settings-modal').getByRole('button', { name: 'Save', exact: true }).click()
     await expect(window.getByTestId('proxy-status')).toHaveText('Saved')
 
     // The password is write-only: after saving, the field is empty with a "saved" hint.

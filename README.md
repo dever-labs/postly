@@ -53,6 +53,7 @@ Collections from each source appear as separate groups in the sidebar. `*.postly
 - Per-entity SSL verification (inherit / enabled / disabled)
 - **Proxy support** (Settings → Network): system proxy (OS, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), or a manual HTTP/HTTPS/SOCKS proxy with credentials and a bypass list — applied to requests, OAuth, Backstage, GitHub and GitLab
 - **Request history** — every request you send is kept locally (History tab) with its response; search, reopen, delete or clear. Secrets in headers, auth, query strings, bodies are capped at 32 KB. Configure or disable under Settings → General
+- **Working set** — instead of tabs, a short list above the collection tree shows what you are working on: pinned requests, everything with unsaved changes (flagged and counted so nothing is forgotten) and your 8 most recent. Clean entries age out on their own. Back/forward (buttons or Alt+←/→) step through the requests you opened
 - Resizable sidebar and response panel
 - Search and filter across all collections
 - Dark and light theme

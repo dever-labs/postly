@@ -17,6 +17,10 @@ test.describe('Request history', () => {
 
   test.afterAll(() => { server.close() })
 
+  test.afterEach(async ({ window }) => {
+    await window.evaluate(() => window.api.proxy.set({ mode: 'system', url: '', username: '', password: '', bypass: '' }))
+  })
+
   test('sent requests are listed and can be reopened with their response', async ({ window }) => {
     const suffix = Date.now()
     const colName = `E2E History ${suffix}`

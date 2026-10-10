@@ -2,6 +2,7 @@ import { Globe, History, Layers, Settings, Link, Download, Upload } from 'lucide
 import React, { useEffect, useState } from 'react'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent, DragOverEvent } from '@dnd-kit/core'
+import { WorkingSet } from '@/components/sidebar/WorkingSet'
 import { HistoryPanel } from '@/components/sidebar/HistoryPanel'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
@@ -180,6 +181,7 @@ export function CollectionsSidebar() {
           onDragCancel={() => { setDragActiveId(null); setDragOverId(null) }}
         >
           <>
+            <WorkingSet />
             <div className="shrink-0 p-2">
               <SidebarSearch />
             </div>
