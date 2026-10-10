@@ -56,16 +56,18 @@ export function WorkingSet() {
               >
                 <Pin className="h-3 w-3" />
               </button>
-              {!isPinned && !r.isDirty && (
-                <button
-                  onClick={() => dismiss(id)}
-                  title="Remove from working set"
-                  aria-label="Remove from working set"
-                  className="shrink-0 text-th-text-subtle opacity-0 hover:text-th-text-primary focus:opacity-100 group-hover:opacity-100"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
+              <span className="flex h-3 w-3 shrink-0 items-center justify-center">
+                {!isPinned && !r.isDirty && (
+                  <button
+                    onClick={() => dismiss(id)}
+                    title="Remove from working set"
+                    aria-label="Remove from working set"
+                    className="text-th-text-subtle opacity-0 hover:text-th-text-primary focus:opacity-100 group-hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
             </div>
           )
         })}
