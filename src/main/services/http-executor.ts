@@ -169,10 +169,10 @@ export async function executeRequest(
     signal,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
-    // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
-    httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false }),
     // Proxying is resolved explicitly below so it can be logged; stop axios applying env proxies on top.
-    proxy: false
+    proxy: false,
+    // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
+    httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
   }
 
   const proxy = await resolveProxy(req.url, { rejectUnauthorized: sslVerification })

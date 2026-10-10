@@ -42,10 +42,59 @@ export function getProxySettings(): ProxySettings {
 /** Settings as shown to the renderer: the password is replaced by a flag. */
 export function toPublicProxySettings(s: ProxySettings): Omit<ProxySettings, 'password'> & { hasPassword: boolean } {
   const { password, ...rest } = s
-  return { ...rest, hasPassword: password !== '' }
+  return { ...rest, url: splitUrlCredentials(s.url).url, hasPassword: password !== '' }
 }
 
-/** Returns true when `url` matches a NO_PROXY style pattern list. */
+/** Moves credentials typed into the proxy URL (http://user:pass@host) into separate fields. */
+export function splitUrlCredentials(raw: string): { url: string; username: string; password: string } {
+  const trimmed = raw.trim()
+  try {
+    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`)
+    if (!u.username && !u.password) return { url: trimmed, username: '', password: '' }
+    const username = decodeURIComponent(u.username)
+    const password = decodeURIComponent(u.password)
+    u.username = ''
+    u.password = ''
+    const hadScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    const out = u.toString().replace(/\/$/, '')
+    return { url: hadScheme ? out : out.replace(/^http:\/\//, ''), username, password }
+  } catch {
+    return { url: trimmed, username: '', password: '' }
+  }
+}
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return null
+  let n = 0
+  for (const part of parts) {
+    const v = Number(part)
+    if (!/^\d+$/.test(part) || v > 255) return null
+    n = n * 256 + v
+  }
+  return n
+}
+
+function inCidr(host: string, cidr: string): boolean {
+  const [base, bitsRaw] = cidr.split('/')
+  const bits = Number(bitsRaw)
+  const h = ipv4ToInt(host)
+  const b = ipv4ToInt(base)
+  if (h === null || b === null || !Number.isInteger(bits) || bits < 0 || bits > 32) return false
+  if (bits === 0) return true
+  const mask = (0xffffffff << (32 - bits)) >>> 0
+  return ((h & mask) >>> 0) === ((b & mask) >>> 0)
+}
+
+/** Splits a NO_PROXY entry into host pattern and optional port, handling [ipv6]:port. */
+function splitEntry(entry: string): [string, string] {
+  const bracket = /^\[([^\]]+)\](?::(\d+))?$/.exec(entry)
+  if (bracket) return [bracket[1], bracket[2] ?? '']
+  const parts = entry.split(':')
+  return parts.length === 2 ? [parts[0], parts[1]] : [entry, '']
+}
+
+/** Returns true when `url` matches a NO_PROXY style pattern list (hosts, .suffixes, host:port, IPv4 CIDR, *). */
 export function isBypassed(url: URL, bypass: string): boolean {
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
   const port = url.port || (url.protocol === 'https:' ? '443' : '80')
@@ -53,9 +102,9 @@ export function isBypassed(url: URL, bypass: string): boolean {
     const entry = raw.trim().toLowerCase()
     if (!entry) continue
     if (entry === '*') return true
-    const [pattern, entryPort] = entry.includes(':') && !entry.includes(']') && entry.split(':').length === 2
-      ? entry.split(':') : [entry, '']
+    const [pattern, entryPort] = splitEntry(entry)
     if (entryPort && entryPort !== port) continue
+    if (pattern.includes('/') && inCidr(host, pattern)) return true
     const bare = pattern.replace(/^\*?\./, '')
     if (host === bare || host.endsWith(`.${bare}`)) return true
   }

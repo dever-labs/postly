@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import axios from 'axios'
 import { run } from '../database'
-import { getProxySettings, toPublicProxySettings, resolveProxy, installAxiosProxy, type ProxyMode } from '../services/proxy'
+import { getProxySettings, toPublicProxySettings, splitUrlCredentials, resolveProxy, installAxiosProxy, type ProxyMode } from '../services/proxy'
 
 interface ProxySetArgs {
   mode: ProxyMode
@@ -30,11 +30,12 @@ export function registerProxyHandlers(): void {
         } catch { return { error: 'Invalid proxy URL' } }
       }
       const current = getProxySettings()
+      const embedded = splitUrlCredentials(url)
       const next = {
         mode: args.mode,
-        url,
-        username: args.username ?? '',
-        password: args.password ?? current.password,
+        url: embedded.url,
+        username: embedded.username || (args.username ?? ''),
+        password: embedded.password || (args.password ?? current.password),
         bypass: args.bypass ?? '',
       }
       run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['proxy', JSON.stringify(next)])

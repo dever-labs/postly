@@ -8,7 +8,7 @@ vi.mock('electron', () => ({ session: { defaultSession: { resolveProxy: vi.fn(as
 
 import {
   isBypassed, parsePacResult, parseProxySettings, toPublicProxySettings, resolveProxy,
-  describeProxyError, getProxySettings, PROXY_DEFAULTS, type ProxySettings,
+  describeProxyError, getProxySettings, splitUrlCredentials, PROXY_DEFAULTS, type ProxySettings,
 } from '../proxy'
 
 const manual = (over: Partial<ProxySettings> = {}): ProxySettings => ({ ...PROXY_DEFAULTS, mode: 'manual', url: 'http://proxy.test:8080', ...over })
@@ -31,8 +31,29 @@ describe('isBypassed', () => {
     ['https://a.test/', 'a.test:443', true],
     ['http://a.test/', ' , ,', false],
     ['http://a.test/', 'x.test, a.test', true],
+    ['http://[::1]:3000/', '[::1]', true],
+    ['http://[::1]:3000/', '::1', true],
+    ['http://[::1]:3000/', '[::1]:3000', true],
+    ['http://[::1]:3000/', '[::1]:4000', false],
+    ['http://10.1.2.3/', '10.0.0.0/8', true],
+    ['http://11.1.2.3/', '10.0.0.0/8', false],
+    ['http://192.168.1.77/', '192.168.1.0/24', true],
+    ['http://192.168.2.77/', '192.168.1.0/24', false],
+    ['http://example.com/', '10.0.0.0/8', false],
   ])('%s vs "%s" -> %s', (url, list, expected) => {
     expect(isBypassed(new URL(url), list)).toBe(expected)
+  })
+})
+
+describe('splitUrlCredentials', () => {
+  it('moves embedded credentials out of the URL', () => {
+    expect(splitUrlCredentials('http://u:p%40ss@proxy.test:8080')).toEqual({ url: 'http://proxy.test:8080', username: 'u', password: 'p@ss' })
+    expect(splitUrlCredentials('u:pw@proxy.test:3128')).toEqual({ url: 'proxy.test:3128', username: 'u', password: 'pw' })
+    expect(splitUrlCredentials('http://proxy.test:8080')).toEqual({ url: 'http://proxy.test:8080', username: '', password: '' })
+  })
+
+  it('redacts credentials from public settings', () => {
+    expect(JSON.stringify(toPublicProxySettings(manual({ url: 'http://u:secret@p.test:1' })))).not.toContain('secret')
   })
 })
 

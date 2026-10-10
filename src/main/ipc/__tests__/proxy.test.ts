@@ -43,6 +43,13 @@ describe('proxy IPC', () => {
     expect(JSON.parse(store.get('proxy') as string).password).toBe('')
   })
 
+  it('moves credentials typed into the URL into the stored fields and never returns them', async () => {
+    const set = await handlers['postly:proxy:set'](null, { mode: 'manual', url: 'http://bob:topsecret@p.test:8080', username: '', bypass: '' })
+    expect(JSON.stringify(set)).not.toContain('topsecret')
+    expect(JSON.parse(store.get('proxy') as string)).toMatchObject({ url: 'http://p.test:8080', username: 'bob', password: 'topsecret' })
+    expect(JSON.stringify(await handlers['postly:settings:get'](null, { key: 'proxy' }))).not.toContain('topsecret')
+  })
+
   it('validates mode and URL scheme', async () => {
     expect((await handlers['postly:proxy:set'](null, { mode: 'bogus', url: '', username: '', bypass: '' })).error).toMatch(/mode/)
     expect((await handlers['postly:proxy:set'](null, { mode: 'manual', url: 'ftp://p.test', username: '', bypass: '' })).error).toMatch(/http, https, socks4 or socks5/)
