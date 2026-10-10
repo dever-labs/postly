@@ -1,4 +1,5 @@
-import type { AuthType, BodyType, HttpMethod, KeyValuePair, Request, SslVerification } from '@/types'
+import type { AuthType, BodyType, HttpMethod, KeyValuePair, SslVerification } from '@/types'
+import { IMPLIED_CONTENT_TYPE, buildSnippetModel, safeDecode, snippetNotes, type ExportableRequest, type GeneratedSnippet, type SnippetOptions } from '@/lib/snippets/model'
 
 export interface ParsedCurl {
   name: string
@@ -130,10 +131,6 @@ function newPair(key: string, value: string, extra: Partial<KeyValuePair> = {}):
   return { id: crypto.randomUUID(), key, value, enabled: true, ...extra }
 }
 
-function safeDecode(s: string): string {
-  try { return decodeURIComponent(s.replace(/\+/g, ' ')) } catch { return s }
-}
-
 function parseUrlEncodedPairs(body: string): KeyValuePair[] {
   return body.split('&').filter(Boolean).map((part) => {
     const eq = part.indexOf('=')
@@ -163,15 +160,6 @@ function inferBodyType(contentType: string | undefined, data: string): BodyType 
   if (!ct) return 'x-www-form-urlencoded'
   // Unknown type: a JSON-looking payload is still most useful as JSON, otherwise keep it verbatim
   return /^\s*[[{]/.test(data) ? 'raw-json' : 'raw-text'
-}
-
-const IMPLIED_CONTENT_TYPE: Partial<Record<BodyType, string>> = {
-  'raw-json': 'application/json',
-  'raw-xml': 'application/xml',
-  'raw-html': 'text/html',
-  'raw-javascript': 'application/javascript',
-  'raw-text': 'text/plain',
-  'x-www-form-urlencoded': 'application/x-www-form-urlencoded',
 }
 
 /** Parses a cURL command (bash, cmd.exe or PowerShell quoting). Returns null when the text is not a cURL command. */
@@ -379,211 +367,39 @@ function encodeDataUrlencode(value: string): string {
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
-export interface CurlExportOptions {
-  /** Values for {{VAR}} placeholders. Omit to keep the placeholders as they are. */
-  variables?: Record<string, string>
-  /** Include credentials (auth config and sensitive headers). When false they become placeholders. */
-  includeSecrets: boolean
-}
+export type CurlExportOptions = SnippetOptions
 
 export interface CurlExport {
   command: string
   notes: string[]
 }
 
-const SENSITIVE_HEADER = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|apikey|x-auth-token|x-access-token)$|token|secret|password/i
-
-const SENSITIVE_KEY = /token|secret|passw(or)?d|pwd|api[-_]?key|apikey|auth|signature|credential|session|private[-_]?key|^sig$/i
-const PLACEHOLDER_ONLY = /^\s*\{\{[^}]+\}\}\s*$/
-
-/** Replaces userinfo passwords and the values of credential-looking query parameters. Returns the new URL and whether anything changed. */
-function redactUrl(url: string): { url: string; changed: boolean } {
-  let changed = false
-  let out = url.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#@:]+):([^/?#@]+)@/i, (_m, head: string) => { changed = true; return `${head}:<password>@` })
-  out = out.replace(/([?&])([^=&#]+)=([^&#]*)/g, (m, sep: string, key: string, value: string) => {
-    if (!SENSITIVE_KEY.test(safeDecode(key)) || PLACEHOLDER_ONLY.test(value)) return m
-    changed = true
-    return `${sep}${key}=%3Credacted%3E`
-  })
-  return { url: out, changed }
-}
-
-function redactJsonValue(value: unknown, state: { changed: boolean }): unknown {
-  if (Array.isArray(value)) return value.map((v) => redactJsonValue(v, state))
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (SENSITIVE_KEY.test(k) && (typeof v === 'string' || typeof v === 'number') && !(typeof v === 'string' && PLACEHOLDER_ONLY.test(v))) {
-        out[k] = '<redacted>'
-        state.changed = true
-      } else out[k] = redactJsonValue(v, state)
-    }
-    return out
-  }
-  return value
-}
-
-/** Masks credential-looking fields in a raw body (JSON or key=value pairs). Other bodies are returned unchanged. */
-function redactBody(body: string, bodyType: BodyType): { body: string; changed: boolean } {
-  if (bodyType === 'raw-json') {
-    try {
-      const state = { changed: false }
-      const redacted = redactJsonValue(JSON.parse(body), state)
-      return state.changed ? { body: JSON.stringify(redacted, null, /\n/.test(body.trim()) ? 2 : 0), changed: true } : { body, changed: false }
-    } catch { return { body, changed: false } }
-  }
-  if (bodyType === 'raw-text' && /^[^\s=&]+=[^&]*(&[^\s=&]+=[^&]*)*$/.test(body.trim())) {
-    let changed = false
-    const out = body.replace(/(^|&)([^=&]+)=([^&]*)/g, (m, sep: string, key: string, value: string) => {
-      if (!SENSITIVE_KEY.test(safeDecode(key)) || PLACEHOLDER_ONLY.test(value)) return m
-      changed = true
-      return `${sep}${key}=<redacted>`
-    })
-    return { body: out, changed }
-  }
-  return { body, changed: false }
-}
-
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`
 }
 
-function interpolate(text: string, vars: Record<string, string> | undefined): string {
-  if (!vars) return text
-  return text.replace(/\{\{([^}]+)\}\}/g, (m, key: string) => vars[key.trim()] ?? m)
-}
-
-function encodeKeepingVars(s: string): string {
-  return s.split(/(\{\{[^}]+\}\})/).map((part) => (/^\{\{[^}]+\}\}$/.test(part) ? part : encodeURIComponent(part))).join('')
-}
-
-type ExportableRequest = Pick<Request, 'protocol' | 'method' | 'url' | 'params' | 'headers' | 'bodyType' | 'bodyContent' | 'authType' | 'authConfig' | 'sslVerification' | 'protocolConfig'>
-
 /** Builds a bash cURL command for an HTTP or GraphQL request. Returns null for other protocols. */
 export function buildCurl(req: ExportableRequest, options: CurlExportOptions): CurlExport | null {
-  if (req.protocol !== 'http' && req.protocol !== 'graphql') return null
-  const notes: string[] = []
-  const sub = (s: string) => interpolate(s, options.variables)
-  const args: string[] = []
+  const snippet = generateCurl(req, options)
+  return snippet ? { command: snippet.code, notes: snippet.notes } : null
+}
 
-  let url = sub(req.url)
-  const queryParts = req.params.filter((p) => p.enabled && p.key).map((p) => {
-    const k = sub(p.key)
-    const v = sub(p.value)
-    return `${encodeKeepingVars(k)}=${encodeKeepingVars(v)}`
-  })
-  const paramsRedaction = req.params.filter((p) => p.enabled && p.key).map((p) => SENSITIVE_KEY.test(sub(p.key)) && !PLACEHOLDER_ONLY.test(p.value))
-  if (queryParts.length > 0) {
-    const safe = options.includeSecrets ? queryParts : queryParts.map((q, i) => (paramsRedaction[i] ? `${q.split('=')[0]}=%3Credacted%3E` : q))
-    url += (url.includes('?') ? '&' : '?') + safe.join('&')
-  }
-  let redactedUrl = false
-  if (!options.includeSecrets) {
-    const r = redactUrl(url)
-    url = r.url
-    redactedUrl = r.changed || paramsRedaction.some(Boolean)
-  }
-
-  let method: string = req.protocol === 'graphql' ? 'POST' : req.method
-  let bodyType: BodyType = req.bodyType
-  let bodyContent = req.bodyContent
-
-  if (req.protocol === 'graphql') {
-    const body: Record<string, unknown> = { query: req.bodyContent }
-    const pc = req.protocolConfig ?? {}
-    if (pc.variables) { try { body.variables = JSON.parse(pc.variables) } catch { body.variables = {} } }
-    if (pc.operationName) body.operationName = pc.operationName
-    bodyType = 'raw-json'
-    bodyContent = JSON.stringify(body)
-  }
-
+export function generateCurl(req: ExportableRequest, options: SnippetOptions): GeneratedSnippet | null {
+  const model = buildSnippetModel(req, options)
+  if (!model) return null
+  const { method, body } = model
   const head = method === 'HEAD'
-  let redacted = redactedUrl
-  if (!options.includeSecrets && bodyContent) {
-    if (bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded') {
-      try {
-        const rows = JSON.parse(bodyContent) as KeyValuePair[]
-        const masked = rows.map((r) => (r.enabled && SENSITIVE_KEY.test(sub(r.key)) && r.fieldType !== 'file' && !PLACEHOLDER_ONLY.test(r.value) ? { ...r, value: '<redacted>' } : r))
-        if (masked.some((r, i) => r !== rows[i])) { bodyContent = JSON.stringify(masked); redacted = true }
-      } catch { /* not row data */ }
-    } else {
-      const r = redactBody(bodyContent, bodyType)
-      if (r.changed) { bodyContent = r.body; redacted = true }
-    }
+  const args = head ? '-I' : method !== 'GET' || body.kind !== 'none' ? `-X ${method}` : ''
+  const lines: string[] = [`curl ${args}`.trimEnd() + ` ${shellQuote(model.url)}`]
+  if (model.basic) lines.push(`-u ${shellQuote(`${model.basic.username}:${model.basic.password}`)}`)
+  for (const h of model.headers) lines.push(`-H ${shellQuote(`${h.key}: ${h.value}`)}`)
+  if (model.insecure) lines.push('-k')
+  switch (body.kind) {
+    case 'form': for (const r of body.rows) lines.push(`-F ${shellQuote(`${r.key}=${r.file ? '@' : ''}${r.value}`)}`); break
+    case 'urlencoded': for (const r of body.rows) lines.push(`--data-urlencode ${shellQuote(`${r.key}=${r.value}`)}`); break
+    case 'binary': lines.push(`--data-binary ${shellQuote(`@${body.path}`)}`); break
+    case 'raw': lines.push(`--data-raw ${shellQuote(body.text)}`); break
   }
-
-  const willSendBody = !head && bodyType !== 'none' && bodyContent !== ''
-  if (head) args.push('-I')
-  else if (method !== 'GET' || willSendBody) args.push(`-X ${method}`)
-  if (head && bodyType !== 'none' && bodyContent) notes.push('HEAD requests have no body; it was left out')
-
-  const secret = (value: string, placeholder: string): string => {
-    if (options.includeSecrets) return value
-    redacted = true
-    return placeholder
-  }
-
-  const headerLines: string[] = []
-  const hasHeader = (name: string) => req.headers.some((h) => h.enabled && h.key.toLowerCase() === name)
-  for (const h of req.headers) {
-    if (!h.enabled || !h.key) continue
-    const key = sub(h.key)
-    let value = sub(h.value)
-    // A {{VAR}} left unresolved is already a placeholder, not a secret
-    if (SENSITIVE_HEADER.test(key) && !/^\s*(\w+\s+)?\{\{[^}]+\}\}\s*$/.test(value)) value = secret(value, '<redacted>')
-    headerLines.push(`${key}: ${value}`)
-  }
-
-  let userArg: string | null = null
-  switch (req.authType) {
-    case 'basic':
-      if (req.authConfig.username) userArg = `${sub(req.authConfig.username)}:${secret(sub(req.authConfig.password ?? ''), '<password>')}`
-      break
-    case 'bearer': case 'oauth2':
-      if (req.authConfig.token) headerLines.push(`Authorization: Bearer ${secret(sub(req.authConfig.token), '<token>')}`)
-      break
-    case 'jwt':
-      if (req.authConfig.token) headerLines.push(`Authorization: ${req.authConfig.prefix?.trim() || 'Bearer'} ${secret(sub(req.authConfig.token), '<token>')}`)
-      break
-    case 'ntlm':
-      notes.push('NTLM authentication is not included')
-      break
-    case 'inherit':
-      notes.push('Authentication inherited from the collection or folder is not included')
-      break
-  }
-
-  const impliedType = IMPLIED_CONTENT_TYPE[bodyType]
-  if (impliedType && bodyType !== 'x-www-form-urlencoded' && bodyContent && !hasHeader('content-type')) headerLines.push(`Content-Type: ${impliedType}`)
-
-  const lines: string[] = [`curl ${args.join(' ')}`.trimEnd() + ` ${shellQuote(url)}`]
-  if (userArg) lines.push(`-u ${shellQuote(userArg)}`)
-  for (const h of headerLines) lines.push(`-H ${shellQuote(h)}`)
-  if (req.sslVerification === 'disabled') lines.push('-k')
-
-  if (head) {
-    // no body for HEAD
-  } else if (bodyType === 'form-data' || bodyType === 'x-www-form-urlencoded') {
-    let rows: KeyValuePair[] = []
-    try { rows = JSON.parse(bodyContent) as KeyValuePair[] } catch { /* empty */ }
-    for (const row of rows) {
-      if (!row.enabled || !row.key) continue
-      if (bodyType === 'form-data') {
-        lines.push(`-F ${shellQuote(`${sub(row.key)}=${row.fieldType === 'file' ? '@' : ''}${sub(row.value)}`)}`)
-      } else {
-        lines.push(`--data-urlencode ${shellQuote(`${sub(row.key)}=${sub(row.value)}`)}`)
-      }
-    }
-  } else if (bodyType === 'binary') {
-    if (bodyContent) lines.push(`--data-binary ${shellQuote(`@${bodyContent}`)}`)
-  } else if (bodyType !== 'none' && bodyContent) {
-    lines.push(`--data-raw ${shellQuote(sub(bodyContent))}`)
-  }
-
-  if (redacted) notes.push('Credentials were replaced with placeholders. Enable "Include secrets" to export them.')
-  if (options.variables) {
-    const left = [...new Set(lines.join(' ').match(/\{\{[^}]+\}\}/g) ?? [])]
-    if (left.length > 0) notes.push(`Unresolved variables kept as placeholders: ${left.join(', ')}`)
-  }
-  return { command: lines.join(' \\\n  '), notes }
+  const code = lines.join(' \\\n  ')
+  return { code, notes: snippetNotes(model, code, options) }
 }

@@ -1,9 +1,16 @@
 import { Terminal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { exportActiveAsCurl, type CurlCopyOptions } from '@/lib/curlActions'
+import { exportActiveAsSnippet, type CurlCopyOptions } from '@/lib/curlActions'
+import { LANGUAGES, type SnippetLanguage } from '@/lib/snippets'
 import { useUIStore } from '@/store/ui'
 
 const KEY = 'postly-curl-copy'
+const LANG_KEY = 'postly-snippet-language'
+
+function loadLanguage(): SnippetLanguage {
+  const saved = localStorage.getItem(LANG_KEY)
+  return LANGUAGES.some((l) => l.id === saved) ? (saved as SnippetLanguage) : 'curl'
+}
 
 function load(): CurlCopyOptions {
   try {
@@ -15,6 +22,7 @@ function load(): CurlCopyOptions {
 export function CurlCopyMenu() {
   const [open, setOpen] = useState(false)
   const [opts, setOpts] = useState<CurlCopyOptions>(load)
+  const [language, setLanguage] = useState<SnippetLanguage>(loadLanguage)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -29,12 +37,13 @@ export function CurlCopyMenu() {
   const update = (next: CurlCopyOptions) => { setOpts(next); localStorage.setItem(KEY, JSON.stringify(next)) }
 
   const copy = async () => {
-    const out = exportActiveAsCurl(opts)
+    const out = exportActiveAsSnippet(language, opts)
     const { addToast } = useUIStore.getState()
-    if (!out) { addToast('Copy as cURL is only available for HTTP and GraphQL requests', 'info'); return }
+    if (!out) { addToast('Code snippets are only available for HTTP and GraphQL requests', 'info'); return }
+    const label = LANGUAGES.find((l) => l.id === language)?.label ?? language
     try {
-      await navigator.clipboard.writeText(out.command)
-      addToast(out.notes.length > 0 ? `Copied as cURL. ${out.notes.join(' ')}` : 'Copied as cURL', 'success')
+      await navigator.clipboard.writeText(out.code)
+      addToast(out.notes.length > 0 ? `Copied ${label}. ${out.notes.join(' ')}` : `Copied ${label}`, 'success')
       setOpen(false)
     } catch {
       addToast('Could not access the clipboard', 'error')
@@ -48,14 +57,25 @@ export function CurlCopyMenu() {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Copy as cURL"
-        aria-label="Copy as cURL"
+        title="Copy as code"
+        aria-label="Copy as code"
         className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden"
       >
         <Terminal className="h-4 w-4" />
       </button>
       {open && (
-        <div role="dialog" aria-label="Copy as cURL" data-testid="curl-copy-menu" className="absolute right-0 top-full z-50 mt-1 w-72 rounded-md border border-th-border-strong bg-th-surface p-3 shadow-xl">
+        <div role="dialog" aria-label="Copy as code" data-testid="curl-copy-menu" className="absolute right-0 top-full z-50 mt-1 w-72 rounded-md border border-th-border-strong bg-th-surface p-3 shadow-xl">
+          <label className="mb-3 flex flex-col gap-1 text-xs text-th-text-secondary">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-th-text-subtle">Language</span>
+            <select
+              data-testid="snippet-language"
+              value={language}
+              onChange={(e) => { setLanguage(e.target.value as SnippetLanguage); localStorage.setItem(LANG_KEY, e.target.value) }}
+              className="rounded-sm border border-th-border-strong bg-th-surface-raised px-2 py-1"
+            >
+              {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </label>
           <fieldset className="flex flex-col gap-1 text-xs text-th-text-secondary">
             <legend className="pb-1 text-[10px] font-semibold uppercase tracking-wide text-th-text-subtle">Variables</legend>
             <label className="flex items-center gap-2"><input type="radio" name="curl-vars" checked={opts.resolveVariables} onChange={() => update({ ...opts, resolveVariables: true })} />Use the active environment's values</label>
