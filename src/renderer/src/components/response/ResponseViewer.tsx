@@ -3,6 +3,7 @@ import React, { Suspense, lazy, useState } from 'react'
 import { ResponseStatus } from '@/components/response/ResponseStatus'
 import { RawTab } from '@/components/response/tabs/RawTab'
 import { PreviewTab } from '@/components/response/tabs/PreviewTab'
+import { CookiesTab } from '@/components/response/tabs/CookiesTab'
 import { ConsoleTab } from '@/components/response/tabs/ConsoleTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
@@ -42,6 +43,7 @@ export function ResponseViewer() {
 
   const contentType = response.headers['content-type'] ?? response.headers['Content-Type'] ?? ''
   const logs = response.logs ?? []
+  const cookies = response.cookies ?? []
   const alertCount = logs.filter((e) => e.level === 'warn' || e.level === 'error').length
 
   return (
@@ -71,6 +73,12 @@ export function ResponseViewer() {
             <TabsTrigger value="raw">Raw</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
             <TabsTrigger value="headers">Headers</TabsTrigger>
+            <TabsTrigger value="cookies" data-testid="cookies-tab" className="flex items-center gap-1.5">
+              Cookies
+              {cookies.length > 0 && (
+                <span className="rounded-sm bg-th-surface-raised px-1 py-0.5 text-[9px] font-bold text-th-text-muted">{cookies.length}</span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="console" className="flex items-center gap-1.5">
               Console
               {alertCount > 0 && (
@@ -112,11 +120,15 @@ export function ResponseViewer() {
                 {Object.entries(response.headers).map(([k, v]) => (
                   <tr key={k} className="border-b border-th-surface hover:bg-th-surface/50">
                     <td className="px-4 py-1.5 font-mono text-th-text-muted">{k}</td>
-                    <td className="px-4 py-1.5 text-th-text-secondary break-all">{v}</td>
+                    <td className="px-4 py-1.5 text-th-text-secondary break-all whitespace-pre-wrap">{v}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </TabsContent>
+
+          <TabsContent value="cookies" className="flex-1 overflow-auto">
+            <CookiesTab cookies={cookies} />
           </TabsContent>
 
           <TabsContent value="console" className="flex-1 overflow-hidden">
