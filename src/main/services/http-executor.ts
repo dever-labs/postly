@@ -15,6 +15,8 @@ export interface HttpRequest {
   method: string
   url: string
   headers: Record<string, string>
+  /** Enabled query parameters from the Params tab, appended to the URL */
+  params?: Record<string, string>
   body?: string
   bodyType: string
   authType: string
@@ -32,8 +34,20 @@ export interface HttpResponse {
   size: number
 }
 
+/** Appends Params-tab entries to the URL, keeping any query string and fragment already present. */
+export function appendQueryParams(url: string, params?: Record<string, string>): string {
+  const entries = Object.entries(params ?? {}).filter(([key]) => key.trim() !== '')
+  if (entries.length === 0) return url
+  const hashAt = url.indexOf('#')
+  const base = hashAt === -1 ? url : url.slice(0, hashAt)
+  const hash = hashAt === -1 ? '' : url.slice(hashAt)
+  const query = entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')
+  const joiner = base.includes('?') ? (/[?&]$/.test(base) ? '' : '&') : '?'
+  return `${base}${joiner}${query}${hash}`
+}
+
 export async function executeRequest(
-  req: HttpRequest,
+  initialReq: HttpRequest,
   options: {
     sslVerification?: boolean
     followRedirects?: boolean
@@ -43,6 +57,7 @@ export async function executeRequest(
   } = {}
 ): Promise<HttpResponse> {
   const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog } = options
+  const req: HttpRequest = { ...initialReq, url: appendQueryParams(initialReq.url, initialReq.params) }
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 

@@ -409,3 +409,22 @@ describe('scenario activation', () => {
     expect(after.body).toContain('down')
   })
 })
+
+// ─── Query params ────────────────────────────────────────────────────────────
+
+describe('query params', () => {
+  it('sends Params-tab entries alongside the URL query over the wire', async () => {
+    const http = await import('node:http')
+    const seen: string[] = []
+    const echo = http.createServer((r, res) => { seen.push(r.url ?? ''); res.end('ok') })
+    await new Promise<void>((resolve) => echo.listen(0, '127.0.0.1', resolve))
+    const { port } = echo.address() as { port: number }
+    try {
+      const res = await executeRequest(req({ url: `http://127.0.0.1:${port}/search?q=1`, params: { page: '2', 'a b': 'c&d' } }))
+      expect(res.status).toBe(200)
+      expect(seen[0]).toBe('/search?q=1&page=2&a%20b=c%26d')
+    } finally {
+      echo.close()
+    }
+  })
+})
