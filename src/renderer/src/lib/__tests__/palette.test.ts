@@ -24,7 +24,7 @@ describe('buildItems', () => {
   })
 
   it('includes actions and environments', () => {
-    expect(items.filter((i) => i.kind === 'action')).toHaveLength(3)
+    expect(items.filter((i) => i.kind === 'action')).toHaveLength(4)
     expect(items.filter((i) => i.kind === 'environment').map((i) => i.id)).toEqual(['e1', 'e2'])
   })
 })

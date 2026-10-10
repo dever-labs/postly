@@ -18,6 +18,7 @@ export interface PaletteItem {
 export const ACTIONS: PaletteItem[] = [
   { key: 'action:new-request', kind: 'action', id: 'new-request', title: 'New request', path: [] },
   { key: 'action:open-settings', kind: 'action', id: 'open-settings', title: 'Open settings', path: [] },
+  { key: 'action:show-shortcuts', kind: 'action', id: 'show-shortcuts', title: 'Keyboard shortcuts', path: [] },
   { key: 'action:check-updates', kind: 'action', id: 'check-updates', title: 'Check for updates', path: [] },
 ]
 

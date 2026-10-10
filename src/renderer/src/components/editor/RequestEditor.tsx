@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from 'react'
+import { withShortcut } from '@/lib/shortcutHint'
+import React, { Suspense, lazy, useCallback, useMemo } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
@@ -15,6 +16,7 @@ import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore, isScratchId } from '@/store/requests'
 import { useNavigationStore } from '@/store/navigation'
+import { useShortcut } from '@/hooks/useShortcuts'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
@@ -54,7 +56,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft, undoRequest } = useRequestsStore()
+  const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft } = useRequestsStore()
   const folders = useCollectionsStore((s) => s.folders)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { selectItem } = useUIStore()
@@ -106,51 +108,12 @@ export function RequestEditor() {
     }
   }
 
-  // Refs so the keydown handler is registered only once and never stale-closes over state
-  const editingRequestRef = useRef(editingRequest)
-  editingRequestRef.current = editingRequest
-  const saveRequestRef = useRef(saveRequest)
-  saveRequestRef.current = saveRequest
-  const undoRequestRef = useRef(undoRequest)
-  undoRequestRef.current = undoRequest
-  const triggerGitSaveRef = useRef(triggerGitSave)
-  triggerGitSaveRef.current = triggerGitSave
-  const breadcrumbRef = useRef(breadcrumb)
-  breadcrumbRef.current = breadcrumb
-
-  // Ctrl+S: save; Ctrl+Z (when not in a text field): app-level undo
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's' && !e.shiftKey) {
-        e.preventDefault()
-        if (!editingRequestRef.current) return
-        if (breadcrumbRef.current?.sourceType === 'backstage') return
-        if (isScratchId(editingRequestRef.current.id)) return
-        saveRequestRef.current().then(() => triggerGitSaveRef.current())
-        return
-      }
-      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.ctrlKey && !e.metaKey) {
-        const el = e.target
-        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable)) return
-        e.preventDefault()
-        useNavigationStore.getState().go(e.key === 'ArrowLeft' ? -1 : 1)
-        return
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        const el = e.target
-        if (
-          el instanceof HTMLInputElement ||
-          el instanceof HTMLTextAreaElement ||
-          (el instanceof HTMLElement && el.isContentEditable)
-        ) return
-        e.preventDefault()
-        if (!editingRequestRef.current) return
-        undoRequestRef.current()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, []) // stable refs — no deps needed
+  // Ctrl/Cmd+S. The key itself is bound in lib/shortcuts.ts; the dispatcher only calls this.
+  useShortcut('save', () => {
+    if (!editingRequest || breadcrumb?.sourceType === 'backstage' || isScratchId(editingRequest.id)) return true
+    void saveRequest().then(() => triggerGitSave())
+    return true
+  })
 
   // Stable callbacks for tab components — must be before early return (Rules of Hooks)
   const onParamsChange = useCallback((p: KeyValuePair[]) => updateField('params', p), [updateField])
@@ -195,7 +158,7 @@ export function RequestEditor() {
             data-testid="nav-back"
             onClick={() => go(-1)}
             disabled={!canGoBack}
-            title="Back (Alt+←)"
+            title={withShortcut('Back', 'back')}
             aria-label="Back"
             className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
           >
@@ -205,7 +168,7 @@ export function RequestEditor() {
             data-testid="nav-forward"
             onClick={() => go(1)}
             disabled={!canGoForward}
-            title="Forward (Alt+→)"
+            title={withShortcut('Forward', 'forward')}
             aria-label="Forward"
             className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
           >
@@ -283,7 +246,7 @@ export function RequestEditor() {
               }}
               data-testid="request-save-button"
               className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
-              title={editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save'}
+              title={withShortcut(editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save', 'save')}
             >
               <Save className="h-4 w-4" />
             </button>
