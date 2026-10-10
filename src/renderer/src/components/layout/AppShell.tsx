@@ -14,6 +14,8 @@ import { ExportPage } from '@/components/export-import/ExportPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
 import { WindowControls } from '@/components/layout/WindowControls'
+import { useShortcutDispatcher } from '@/hooks/useShortcuts'
+import { useAppShortcuts } from '@/hooks/useAppShortcuts'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
 import type { AiContext } from '@/lib/aiContext'
@@ -107,6 +109,8 @@ function useDrag(direction: 'horizontal' | 'vertical', containerRef: React.RefOb
 }
 
 export function AppShell() {
+  useShortcutDispatcher()
+  useAppShortcuts()
   const sidebarTab = useUIStore((state) => state.sidebarTab)
   const selectedItem = useUIStore((state) => state.selectedItem)
   const setSidebarWidth = useUIStore((state) => state.setSidebarWidth)

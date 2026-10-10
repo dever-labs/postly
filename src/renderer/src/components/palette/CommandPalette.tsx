@@ -1,4 +1,4 @@
-import { ChevronRight, Command, Globe, Settings, RefreshCw, Plus, Check } from 'lucide-react'
+import { ChevronRight, Command, Keyboard, Globe, Settings, RefreshCw, Plus, Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
@@ -6,8 +6,11 @@ import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { usePaletteStore } from '@/store/palette'
 import { useRequestsStore } from '@/store/requests'
+import { useShortcutHelpStore } from '@/store/shortcutHelp'
 import { useUIStore } from '@/store/ui'
 import { useWorkingSetStore } from '@/store/workingSet'
+import { useShortcut } from '@/hooks/useShortcuts'
+import { createRequestInContext } from '@/lib/requestActions'
 import { buildItems, searchItems, ACTIONS, type PaletteItem } from '@/lib/palette'
 import { cn } from '@/lib/utils'
 
@@ -19,7 +22,7 @@ function ItemIcon({ item }: { item: PaletteItem }) {
   if (item.kind === 'request') {
     return <Badge variant={METHOD_COLORS[item.method ?? ''] ?? 'grey'} className="w-14 shrink-0 justify-center font-mono text-[10px]">{item.method ?? 'GET'}</Badge>
   }
-  const Icon = item.id === 'open-settings' ? Settings : item.id === 'check-updates' ? RefreshCw : item.kind === 'environment' ? Globe : Plus
+  const Icon = item.id === 'open-settings' ? Settings : item.id === 'show-shortcuts' ? Keyboard : item.id === 'check-updates' ? RefreshCw : item.kind === 'environment' ? Globe : Plus
   return <span className="flex w-14 shrink-0 justify-center text-th-text-subtle"><Icon className="h-3.5 w-3.5" /></span>
 }
 
@@ -28,18 +31,8 @@ export function CommandPalette() {
   const toggle = usePaletteStore((s) => s.toggle)
   const hide = usePaletteStore((s) => s.hide)
 
-  // Ctrl/Cmd+K, captured so it also works from inside inputs and the code editor
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        e.stopPropagation()
-        toggle()
-      }
-    }
-    window.addEventListener('keydown', handler, true)
-    return () => window.removeEventListener('keydown', handler, true)
-  }, [toggle])
+  // The key is bound in lib/shortcuts.ts and dispatched centrally (captured, so it also works inside Monaco)
+  useShortcut('palette', () => { toggle(); return true })
 
   if (!open) return null
   return <PaletteDialog onClose={hide} />
@@ -88,18 +81,9 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
       ui.addToast('Checking for updates…', 'info')
       await window.api.updater.check()
     } else if (item.id === 'new-request') {
-      const { folders, requests, addRequestToFolder } = useCollectionsStore.getState()
-      const active = useRequestsStore.getState().editingRequest
-      const target = (active && !active.id.startsWith('scratch:') && active.folderId) || folders.find((f) => !f.parentId)?.id
-      if (!target) { ui.addToast('Create a collection first', 'info'); return }
-      const before = requests.length
-      await addRequestToFolder(target)
-      const created = useCollectionsStore.getState().requests
-      if (created.length > before) {
-        ui.setSidebarTab('apis')
-        ui.clearSelectedItem()
-        useRequestsStore.getState().setActiveRequest(created[created.length - 1])
-      }
+      await createRequestInContext()
+    } else if (item.id === 'show-shortcuts') {
+      useShortcutHelpStore.getState().show()
     }
   }
 
