@@ -1,3 +1,5 @@
+import crypto from 'crypto'
+import https from 'https'
 import type { Agent } from 'http'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
@@ -167,24 +169,39 @@ export interface ResolvedProxy {
   display: string
   httpAgent: Agent
   httpsAgent: Agent
+  /** Same proxy with different TLS options, for a redirect to another host. */
+  withTls?: (rejectUnauthorized: boolean, tls?: ProxyTls) => ResolvedProxy
 }
 
 const agentCache = new Map<string, ResolvedProxy>()
 
-function buildAgents(proxyUrl: string, rejectUnauthorized: boolean): ResolvedProxy {
-  const key = `${proxyUrl}|${rejectUnauthorized}`
+export interface ProxyTls {
+  options: Record<string, unknown>
+  /** Distinguishes agents built with different certificates. */
+  key: string
+}
+
+type TlsProvider = (url: string) => { options: object }
+let tlsProvider: TlsProvider | null = null
+
+/** Lets the certificate store supply TLS options to the axios interceptor without this module depending on the database. */
+export function setTlsProvider(provider: TlsProvider): void { tlsProvider = provider }
+
+function buildAgents(proxyUrl: string, rejectUnauthorized: boolean, extra?: ProxyTls): ResolvedProxy {
+  const key = `${proxyUrl}|${rejectUnauthorized}|${extra?.key ?? ''}`
   const cached = agentCache.get(key)
   if (cached) return cached
 
   const u = new URL(proxyUrl)
   const display = `${u.protocol}//${u.host}`
-  const tls = { rejectUnauthorized }
+  const tls = { rejectUnauthorized, ...(extra?.options ?? {}) }
   const resolved: ResolvedProxy = u.protocol.startsWith('socks')
     ? (() => {
         const agent = new SocksProxyAgent(proxyUrl, tls as ConstructorParameters<typeof SocksProxyAgent>[1])
         return { display, httpAgent: agent, httpsAgent: agent }
       })()
     : { display, httpAgent: new HttpProxyAgent(proxyUrl, tls), httpsAgent: new HttpsProxyAgent(proxyUrl, tls) }
+  resolved.withTls = (reject, tlsOverride) => buildAgents(proxyUrl, reject, tlsOverride)
   if (agentCache.size > 20) agentCache.clear()
   agentCache.set(key, resolved)
   return resolved
@@ -196,7 +213,7 @@ function buildAgents(proxyUrl: string, rejectUnauthorized: boolean): ResolvedPro
  */
 export async function resolveProxy(
   targetUrl: string,
-  opts: { rejectUnauthorized?: boolean; settings?: ProxySettings } = {}
+  opts: { rejectUnauthorized?: boolean; settings?: ProxySettings; tls?: ProxyTls } = {}
 ): Promise<ResolvedProxy | null> {
   let url: URL
   try { url = new URL(targetUrl) } catch { return null }
@@ -211,7 +228,7 @@ export async function resolveProxy(
     proxyUrl = await fromSystem(url)
   }
   if (!proxyUrl) return null
-  return buildAgents(proxyUrl, opts.rejectUnauthorized ?? true)
+  return buildAgents(proxyUrl, opts.rejectUnauthorized ?? true, opts.tls)
 }
 
 /** Maps low-level proxy failures to an actionable message. */
@@ -223,6 +240,11 @@ export function describeProxyError(message: string, proxy: ResolvedProxy): strin
     return `Could not reach proxy ${proxy.display} (${message}). Check the proxy address in Settings → Network, or set the mode to "None".`
   }
   return message
+}
+
+/** Cheap fingerprint of TLS options for cache keys; never logged. */
+export function tlsIdentity(options: Record<string, unknown>): string {
+  return crypto.createHash('sha256').update(JSON.stringify(options, (_, v) => (Buffer.isBuffer(v) ? v.toString('base64') : v))).digest('hex').slice(0, 16)
 }
 
 let interceptorInstalled = false
@@ -238,11 +260,20 @@ export function installAxiosProxy(axiosInstance: import('axios').AxiosInstance):
     if (config.proxy === false || !config.url) return config
     const target = config.baseURL ? new URL(config.url, config.baseURL).toString() : config.url
     const existing = config.httpsAgent as { options?: { rejectUnauthorized?: boolean } } | undefined
-    const proxy = await resolveProxy(target, { rejectUnauthorized: existing?.options?.rejectUnauthorized !== false })
+    const rejectUnauthorized = existing?.options?.rejectUnauthorized !== false
+    const selected = (tlsProvider?.(target).options ?? {}) as Record<string, unknown>
+    const hasTls = Object.keys(selected).length > 0
+    const proxy = await resolveProxy(target, {
+      rejectUnauthorized,
+      tls: hasTls ? { options: selected, key: tlsIdentity(selected) } : undefined,
+    })
     if (proxy) {
       config.httpAgent = proxy.httpAgent
       config.httpsAgent = proxy.httpsAgent
       config.proxy = false
+    } else if (hasTls) {
+      // codeql[js/disabling-certificate-validation] -- rejectUnauthorized keeps the caller's own setting
+      config.httpsAgent = new https.Agent({ rejectUnauthorized, ...selected })
     }
     return config
   })

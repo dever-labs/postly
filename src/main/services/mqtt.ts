@@ -1,4 +1,5 @@
 import type { MqttClient } from 'mqtt'
+import type { TlsOptions } from './certificates'
 import type { WebContents } from 'electron'
 
 export interface MqttConnectOptions {
@@ -20,7 +21,8 @@ export async function connectMqtt(
   connectionId: string,
   brokerUrl: string,
   options: MqttConnectOptions,
-  sender: WebContents
+  sender: WebContents,
+  tls: TlsOptions = {}
 ): Promise<void> {
   const { default: mqtt } = await import('mqtt')
   return new Promise((resolve, reject) => {
@@ -37,6 +39,7 @@ export async function connectMqtt(
       keepalive: options.keepAlive ?? 60,
       clean: options.cleanSession ?? true,
       reconnectPeriod: 0, // don't auto-reconnect
+      ...tls,
     })
 
     client.on('connect', () => {

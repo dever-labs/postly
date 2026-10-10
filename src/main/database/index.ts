@@ -352,6 +352,19 @@ function runMigrations(): void {
     cookies_json TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   )`)
+  // Certificate files are kept as text inside the encrypted database, so passphrases and keys share its protection
+  db.run(`CREATE TABLE IF NOT EXISTS certificates (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    host TEXT NOT NULL DEFAULT '',
+    port INTEGER NOT NULL DEFAULT 0,
+    cert_pem TEXT NOT NULL DEFAULT '',
+    key_pem TEXT NOT NULL DEFAULT '',
+    pfx_b64 TEXT NOT NULL DEFAULT '',
+    passphrase TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+  )`)
   recreateDraftTables()
   db.run(`CREATE TABLE IF NOT EXISTS env_drafts (
     env_id TEXT PRIMARY KEY REFERENCES environments(id) ON DELETE CASCADE,

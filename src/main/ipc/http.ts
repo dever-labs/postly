@@ -9,6 +9,7 @@ import { recordHistory } from '../services/history'
 import { createDynamicVariables, summarizeResolutions } from '../../shared/variables'
 import { variableValues } from '../services/variable-store'
 import { createSubstitution, substituteBody, substituteRecord } from '../services/request-variables'
+import { tlsSelectionFor } from './certificates'
 import { runExtraction, type ExtractRule } from '../../shared/extract'
 import { applyExtraction, guardedRegex } from '../services/extract-apply'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
@@ -275,7 +276,7 @@ export function registerHttpHandlers(): void {
       const controller = new AbortController()
       currentAbortController = controller
       const response = await executeRequest(interpolatedReq, {
-        sslVerification, followRedirects, timeout, cookieJar,
+        sslVerification, followRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
         signal: controller.signal,
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })

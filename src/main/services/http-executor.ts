@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import type { ExtractRule } from '../../shared/extract'
 import https from 'https'
-import { resolveProxy, describeProxyError } from './proxy'
+import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
+import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
 
 type LogLevel = 'info' | 'warn' | 'error'
@@ -63,9 +64,11 @@ export async function executeRequest(
     signal?: AbortSignal
     onLog?: (entry: LogEntry) => void
     cookieJar?: CookieJarHook
+    /** Client certificate and custom CA options for the target URL. */
+    tlsFor?: (url: string) => TlsSelection
   } = {}
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar } = options
+  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor } = options
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 
@@ -207,6 +210,31 @@ export async function executeRequest(
     if (dropped.length > 0) log('warn', `Cookies: ignored ${dropped.length} (${describeCookies(dropped)})`)
   }
 
+  const tlsSelection: TlsSelection = options.tlsFor?.(req.url) ?? { options: {}, customCaCount: 0 }
+  const hasTls = Object.keys(tlsSelection.options).length > 0
+  if (tlsSelection.clientCertificate) log('info', `Client certificate: "${tlsSelection.clientCertificate}" presented to ${new URL(req.url).host}`)
+  if (tlsSelection.customCaCount > 0 && sslVerification) log('info', `Custom CA certificates: ${tlsSelection.customCaCount} trusted in addition to system roots`)
+
+  let activeProxy: ResolvedProxy | null = null
+  const initialIdentity = tlsIdentity(tlsSelection.options as Record<string, unknown>)
+
+  // The agent is built for the first host. After a redirect to another host it must not keep presenting that
+  // host's client certificate, and the new host may have its own, so the agent is rebuilt from the new selection.
+  const retargetTls = (options: { href?: string; agent?: unknown; agents?: Record<string, unknown> }) => {
+    if (!options.href?.startsWith('https:')) return
+    const next = options.href ? (tlsFor?.(options.href) ?? { options: {}, customCaCount: 0 }) : tlsSelection
+    const nextOptions = next.options as Record<string, unknown>
+    if (tlsIdentity(nextOptions) === initialIdentity) return
+    const hasNext = Object.keys(nextOptions).length > 0
+    const agent = activeProxy?.withTls
+      ? activeProxy.withTls(sslVerification, hasNext ? { options: nextOptions, key: tlsIdentity(nextOptions) } : undefined).httpsAgent
+      // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
+      : new https.Agent({ rejectUnauthorized: sslVerification, ...next.options })
+    options.agent = agent
+    options.agents = { ...options.agents, https: agent }
+    if (next.clientCertificate) log('info', `Client certificate: "${next.clientCertificate}" presented to ${new URL(options.href).host} after redirect`)
+  }
+
   const config: AxiosRequestConfig = {
     method: req.method,
     url: req.url,
@@ -217,6 +245,7 @@ export async function executeRequest(
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
     beforeRedirect: (options, responseDetails, requestDetails) => {
+      retargetTls(options as Parameters<typeof retargetTls>[0])
       const from = requestDetails?.url ?? req.url
       ingest(from, asList(responseDetails.headers['set-cookie']))
       if (manualCookie || !cookieJar?.enabled) return
@@ -229,10 +258,14 @@ export async function executeRequest(
     // Proxying is resolved explicitly below so it can be logged; stop axios applying env proxies on top.
     proxy: false,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
-    httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
+    httpsAgent: sslVerification && !hasTls ? undefined : new https.Agent({ rejectUnauthorized: sslVerification, ...tlsSelection.options })
   }
 
-  const proxy = await resolveProxy(req.url, { rejectUnauthorized: sslVerification })
+  const proxy = await resolveProxy(req.url, {
+    rejectUnauthorized: sslVerification,
+    tls: hasTls ? { options: tlsSelection.options as Record<string, unknown>, key: tlsIdentity(tlsSelection.options as Record<string, unknown>) } : undefined,
+  })
+  activeProxy = proxy
   if (proxy) {
     config.httpAgent = proxy.httpAgent
     config.httpsAgent = proxy.httpsAgent
@@ -289,7 +322,7 @@ export async function executeRequest(
 async function executeNtlmRequest(
   req: HttpRequest,
   headers: Record<string, string>,
-  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number; signal?: AbortSignal; onLog?: (entry: LogEntry) => void }
+  options: { sslVerification?: boolean; followRedirects?: boolean; timeout?: number; signal?: AbortSignal; onLog?: (entry: LogEntry) => void; tlsFor?: (url: string) => TlsSelection }
 ): Promise<HttpResponse> {
   const start = Date.now()
   const log = (level: LogLevel, message: string) => options.onLog?.({ level, message })
@@ -313,6 +346,7 @@ async function executeNtlmRequest(
     headers,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     rejectUnauthorized: options.sslVerification ?? true,
+    ...(options.tlsFor?.(req.url).options ?? {}),
   }
   if (req.body) ntlmOpts['body'] = req.body
 

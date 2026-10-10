@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
 import { VariablesSettings } from '@/components/settings/tabs/VariablesSettings'
+import { CertificateSettings } from '@/components/settings/tabs/CertificateSettings'
 import { CookieSettings } from '@/components/settings/tabs/CookieSettings'
 import { AiSettings } from '@/components/settings/tabs/AiSettings'
 import { NetworkSettings } from '@/components/settings/tabs/NetworkSettings'
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'variables', label: 'Variables' },
   { id: 'network', label: 'Network' },
   { id: 'cookies', label: 'Cookies' },
+  { id: 'certificates', label: 'Certificates' },
   { id: 'ai', label: 'AI' },
   { id: 'updates', label: 'Updates' },
 ]
@@ -27,6 +29,7 @@ function TabContent({ tab }: { tab: string }) {
     case 'variables': return <VariablesSettings />
     case 'network': return <NetworkSettings />
     case 'cookies': return <CookieSettings />
+    case 'certificates': return <CertificateSettings />
     case 'ai': return <AiSettings />
     case 'updates': return <UpdateSettings />
     default: return null

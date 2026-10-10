@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readdirSync, readFileSync } from 'fs'
 import { join, extname, relative } from 'path'
+
+// Each rule walks the whole renderer tree, which can exceed 5 s when the suite runs in parallel
+vi.setConfig({ testTimeout: 30_000 })
 
 const RENDERER_SRC = join(__dirname, '../..')
 

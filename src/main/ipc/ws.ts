@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { tlsSelectionFor } from './certificates'
 import { connectWebSocket, sendWebSocketMessage, disconnectWebSocket, isWebSocketConnected } from '../services/ws'
 
 export function registerWsHandlers(): void {
@@ -8,7 +9,7 @@ export function registerWsHandlers(): void {
     headers?: Record<string, string>
   }) => {
     try {
-      await connectWebSocket(args.connectionId, args.url, args.headers ?? {}, event.sender)
+      await connectWebSocket(args.connectionId, args.url, args.headers ?? {}, event.sender, tlsSelectionFor(args.url).options)
       return { data: { connectionId: args.connectionId } }
     } catch (err) {
       return { error: String(err) }
