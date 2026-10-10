@@ -52,8 +52,9 @@ export interface Integration {
   name: string
   baseUrl: string
   clientId: string
-  clientSecret: string
-  token: string
+  /** Secrets never reach the renderer; these only say whether one is stored. */
+  hasClientSecret: boolean
+  hasToken: boolean
   connectedUser?: { login?: string; username?: string; name: string; avatarUrl: string } | null
   repo: string
   branch: string

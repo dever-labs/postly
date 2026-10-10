@@ -157,7 +157,7 @@ export function GroupEditor({ folderId }: Props) {
   let inheritedAuthFrom: string | undefined
   if (collection && collection.authType !== 'none' && collection.authType !== 'inherit') {
     inheritedAuthFrom = collection.name
-  } else if (integration?.token) {
+  } else if (integration?.hasToken) {
     inheritedAuthFrom = integration.name
   }
 

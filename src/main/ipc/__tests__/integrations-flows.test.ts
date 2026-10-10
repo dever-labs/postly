@@ -48,7 +48,20 @@ beforeEach(() => {
 describe('integrations:list / delete / disconnect', () => {
   it('lists integrations', async () => {
     vi.mocked(queryAll).mockReturnValueOnce([{ id: 'a' }])
-    expect(await handlers['postly:integrations:list'](null)).toEqual({ data: [{ id: 'a' }] })
+    expect(await handlers['postly:integrations:list'](null)).toEqual({
+      data: [{ id: 'a', has_token: false, has_client_secret: false }],
+    })
+  })
+
+  it('never returns tokens or client secrets to the renderer', async () => {
+    vi.mocked(queryAll).mockReturnValueOnce([{ id: 'a', token: 'tok-123', client_secret: 'sec-456', name: 'n' }])
+    const list = await handlers['postly:integrations:list'](null)
+    expect(JSON.stringify(list)).not.toMatch(/tok-123|sec-456/)
+    expect(list).toEqual({ data: [{ id: 'a', name: 'n', has_token: true, has_client_secret: true }] })
+
+    vi.mocked(queryOne).mockReturnValueOnce({ id: 'a', token: 'tok-123', client_secret: 'sec-456' })
+    const created = await handlers['postly:integrations:create'](null, { type: 'backstage', name: 'n', baseUrl: 'https://b.example' })
+    expect(JSON.stringify(created)).not.toMatch(/tok-123|sec-456/)
   })
 
   it('deletes an integration', async () => {

@@ -75,7 +75,7 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
   const [branch, setBranch] = useState(integration?.branch ?? 'main')
   const [baseUrl, setBaseUrl] = useState(integration?.baseUrl ?? DEFAULTS[integration?.type ?? 'git']?.baseUrl ?? '')
   const [clientId, setClientId] = useState(integration?.clientId ?? '')
-  const [token, setToken] = useState(integration?.token ?? '')
+  const [token, setToken] = useState('')
   const [sslVerification, setSslVerification] = useState(integration?.sslVerification !== false)
 
   const [reconnecting, setReconnecting] = useState(false)
@@ -243,7 +243,12 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                   {(clientId === 'token' || (!clientId)) && (
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
-                      <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+                      <Input
+                        type="password"
+                        value={token}
+                        placeholder={integration?.hasToken ? 'Saved — leave blank to keep' : ''}
+                        onChange={(e) => setToken(e.target.value)}
+                      />
                     </div>
                   )}
                   {connectedUser && (
