@@ -151,7 +151,7 @@ export function CollectionEditor({ collectionId }: Props) {
   }
 
   const integration = collection.integrationId ? integrations.find((i) => i.id === collection.integrationId) : null
-  const inheritedFrom = integration?.token ? integration.name : undefined
+  const inheritedFrom = integration?.hasToken ? integration.name : undefined
   const isGit = ['git', 'github', 'gitlab'].includes(collection.source)
 
   const discard = async () => {

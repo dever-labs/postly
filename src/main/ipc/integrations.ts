@@ -9,10 +9,30 @@ import type { BackstageSettings } from '../services/backstage'
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
 
+const SECRET_COLUMNS = ['token', 'client_secret'] as const
+
+/**
+ * Strips credentials before a row crosses the IPC boundary. The renderer only learns
+ * whether a secret exists; main-process services read the real values from the DB.
+ */
+export function toPublicIntegration<T extends Record<string, unknown> | null | undefined>(row: T): T {
+  if (!row) return row
+  const out: Record<string, unknown> = { ...row }
+  for (const col of SECRET_COLUMNS) {
+    out[`has_${col}`] = typeof out[col] === 'string' && out[col] !== ''
+    delete out[col]
+  }
+  return out as T
+}
+
+function publicIntegration(id: string): Record<string, unknown> | null | undefined {
+  return toPublicIntegration(queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [id]))
+}
+
 export function registerIntegrationHandlers(): void {
   ipcMain.handle('postly:integrations:list', async () => {
     try {
-      return { data: queryAll('SELECT * FROM integrations ORDER BY created_at ASC') }
+      return { data: queryAll<Record<string, unknown>>('SELECT * FROM integrations ORDER BY created_at ASC').map(toPublicIntegration) }
     } catch (err) { return { error: String(err) } }
   })
 
@@ -36,7 +56,7 @@ export function registerIntegrationHandlers(): void {
       run(`INSERT INTO integrations (id, type, name, base_url, client_id, client_secret, repo, branch, status, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disconnected', ?, ?)`,
         [id, args.type, args.name, args.baseUrl, args.clientId ?? '', args.clientSecret ?? '', args.repo ?? '', args.branch ?? 'main', now, now])
-      return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [id]) }
+      return { data: publicIntegration(id) }
     } catch (err) { return { error: String(err) } }
   })
 
@@ -127,15 +147,15 @@ export function registerIntegrationHandlers(): void {
         const sslVerification = (integration.ssl_verification as string) !== 'disabled'
         try {
           const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'], sslVerification })
-          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncResult }
+          return { data: publicIntegration(args.id), syncResult }
         } catch (syncErr) {
           run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
             [String(syncErr), Date.now(), args.id])
-          return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]), syncError: String(syncErr) }
+          return { data: publicIntegration(args.id), syncError: String(syncErr) }
         }
       }
 
-      return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
+      return { data: publicIntegration(args.id) }
     } catch (err) {
       run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
         ['error', String(err), Date.now(), args.id])
@@ -195,7 +215,7 @@ export function registerIntegrationHandlers(): void {
       pendingDeviceFlows.delete(args.id)
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
         [token, connectedUserJson, 'connected', '', Date.now(), args.id])
-      return { data: queryOne('SELECT * FROM integrations WHERE id = ?', [args.id]) }
+      return { data: publicIntegration(args.id) }
     } catch (err) {
       pendingDeviceFlows.delete(args.id)
       run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',

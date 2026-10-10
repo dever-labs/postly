@@ -7,7 +7,7 @@ interface IntegrationsState {
   connect: (id: string) => Promise<{ error?: string }>
   disconnect: (id: string) => Promise<void>
   remove: (id: string) => Promise<void>
-  update: (id: string, fields: Partial<Integration>) => Promise<void>
+  update: (id: string, fields: Partial<Omit<Integration, 'hasToken' | 'hasClientSecret'>> & { token?: string; clientSecret?: string }) => Promise<void>
 }
 
 function normalize(raw: Record<string, unknown>): Integration {
@@ -19,8 +19,8 @@ function normalize(raw: Record<string, unknown>): Integration {
     name: raw.name as string,
     baseUrl: (raw.base_url ?? raw.baseUrl ?? '') as string,
     clientId: (raw.client_id ?? raw.clientId ?? '') as string,
-    clientSecret: (raw.client_secret ?? raw.clientSecret ?? '') as string,
-    token: (raw.token ?? '') as string,
+    hasClientSecret: Boolean(raw.has_client_secret ?? raw.hasClientSecret),
+    hasToken: Boolean(raw.has_token ?? raw.hasToken),
     connectedUser,
     repo: (raw.repo ?? '') as string,
     branch: (raw.branch ?? 'main') as string,
@@ -50,7 +50,7 @@ export const useIntegrationsStore = create<IntegrationsState>((set) => ({
 
   disconnect: async (id: string) => {
     await window.api.integrations.disconnect({ id })
-    set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? { ...i, status: 'disconnected' as const, token: '', connectedUser: null } : i) }))
+    set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? { ...i, status: 'disconnected' as const, hasToken: false, connectedUser: null } : i) }))
   },
 
   remove: async (id: string) => {
@@ -58,8 +58,16 @@ export const useIntegrationsStore = create<IntegrationsState>((set) => ({
     set((s) => ({ integrations: s.integrations.filter((i) => i.id !== id) }))
   },
 
-  update: async (id: string, fields: Partial<Integration>) => {
+  update: async (id: string, fields) => {
     await window.api.integrations.update({ id, ...fields })
-    set((s) => ({ integrations: s.integrations.map((i) => i.id === id ? { ...i, ...fields } : i) }))
+    const { token, clientSecret, ...visible } = fields
+    set((s) => ({
+      integrations: s.integrations.map((i) => i.id === id ? {
+        ...i,
+        ...visible,
+        ...(token !== undefined && { hasToken: token !== '' }),
+        ...(clientSecret !== undefined && { hasClientSecret: clientSecret !== '' }),
+      } : i),
+    }))
   },
 }))
