@@ -49,4 +49,11 @@ describe('useNavigationStore', () => {
     useRequestsStore.setState({ activeRequestId: 'scratch:1' })
     expect(useNavigationStore.getState().stack).toEqual(['a'])
   })
+
+  it('returns to the last real request when going back from a history request', () => {
+    open('a'); open('b')
+    useRequestsStore.setState({ activeRequestId: 'scratch:1' })
+    useNavigationStore.getState().go(-1)
+    expect(active()).toBe('b')
+  })
 })

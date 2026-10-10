@@ -22,7 +22,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   go: (delta) => {
     const { stack, index } = get()
     // skip entries whose request has since been deleted
-    let i = index + delta
+    // when the active request isn't the stack entry (e.g. a history request), Back returns to that entry
+    const offTrack = useRequestsStore.getState().activeRequestId !== stack[index]
+    let i = delta === -1 && offTrack ? index : index + delta
     while (i >= 0 && i < stack.length && !exists(stack[i])) i += delta
     if (i < 0 || i >= stack.length) return
     const request = useCollectionsStore.getState().requests.find((r) => r.id === stack[i])

@@ -64,7 +64,8 @@ export function RequestEditor() {
   const stack = useNavigationStore((s) => s.stack)
   const navIndex = useNavigationStore((s) => s.index)
   const alive = (id: string) => requestIds.some((r) => r.id === id)
-  const canGoBack = stack.slice(0, navIndex).some(alive)
+  const activeId = useRequestsStore((s) => s.activeRequestId)
+  const canGoBack = stack.slice(0, activeId !== stack[navIndex] ? navIndex + 1 : navIndex).some(alive)
   const canGoForward = stack.slice(navIndex + 1).some(alive)
 
   // no per-request title state needed — input is always rendered
