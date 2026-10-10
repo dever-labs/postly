@@ -26,7 +26,7 @@ export const guardedRegex: RegexExec = (pattern, text) => {
     return vm.runInNewContext('(() => { const m = new RegExp(pattern).exec(text); return m ? Array.from(m, (g) => (g === undefined ? "" : g)) : null })()',
       { pattern, text }, { timeout: REGEX_TIMEOUT_MS }) as string[] | null
   } catch (e) {
-    if ((e as { code?: string }).code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error(`Pattern took longer than ${REGEX_TIMEOUT_MS} ms and was stopped`)
+    if ((e as { code?: string }).code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') throw new Error(`Pattern took longer than ${REGEX_TIMEOUT_MS} ms and was stopped`, { cause: e })
     throw e
   }
 }

@@ -30,6 +30,8 @@ test.describe('Extract values', () => {
   test('a login response fills variables that the next request uses', async ({ window }) => {
     const suffix = Date.now()
     const colName = `E2E Extract ${suffix}`
+    const loginName = `Login ${suffix}`
+    const meName = `Me ${suffix}`
     await window.evaluate(() => window.api.proxy.set({ mode: 'none', url: '', username: '', password: '', bypass: '' }))
     envId = await window.evaluate(async (name: string) => {
       const env = (await window.api.environments.create({ name })) as { data: { id: string } }
@@ -44,16 +46,16 @@ test.describe('Extract values', () => {
       const res = await window.api.folders.create({ parentId: id, name: 'Default' })
       return (res as { data: { id: string } }).data.id
     }, colId)
-    await window.evaluate(async ([id]: [string]) => {
-      await window.api.requests.create({ folderId: id, name: 'Login', method: 'POST' })
-      await window.api.requests.create({ folderId: id, name: 'Me', method: 'GET' })
-    }, [grpId] as [string])
+    await window.evaluate(async ([id, login, me]: [string, string, string]) => {
+      await window.api.requests.create({ folderId: id, name: login, method: 'POST' })
+      await window.api.requests.create({ folderId: id, name: me, method: 'GET' })
+    }, [grpId, loginName, meName] as [string, string, string])
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
 
     // Login: add rules in the Extract tab
     await window.getByText(colName).first().click()
-    await window.getByText('Login', { exact: true }).first().click()
+    await window.getByText(loginName, { exact: true }).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
     await window.waitForTimeout(400)
@@ -82,7 +84,7 @@ test.describe('Extract values', () => {
     await expect(window.getByText('Extract: session ← sess-42 (environment)')).toBeVisible()
 
     // Me: use both extracted values
-    await window.getByText('Me', { exact: true }).first().click()
+    await window.getByText(meName, { exact: true }).first().click()
     const meUrl = window.getByTestId('url-input')
     await meUrl.waitFor({ state: 'visible' })
     await window.waitForTimeout(400)
