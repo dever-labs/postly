@@ -63,6 +63,18 @@ describe('body and params masking', () => {
     expect(out).toEqual({ user: 'a', password: '••••••••', n: { client_secret: '••••••••', ok: 1 }, token: '{{TOKEN}}' })
   })
 
+  it('masks non-string secret values and arrays', () => {
+    const out = JSON.parse(maskBodyText('{"password":123456,"refresh_tokens":["a","b"],"secret":true}') as string)
+    expect(out).toEqual({ password: '••••••••', refresh_tokens: ['••••••••', '••••••••'], secret: '••••••••' })
+  })
+
+  it('does not throw on malformed percent-escapes and masks key/sig params consistently', () => {
+    expect(maskUrl('https://a.test/x?token=100%&page=2')).toBe('https://a.test/x?token=••••••••&page=2')
+    const id = recordHistory(req({ params: { key: 'AIza', sig: 's', page: '1' } }), res(), on) as string
+    expect((getHistoryEntry(id) as NonNullable<ReturnType<typeof getHistoryEntry>>).request.params)
+      .toEqual({ key: '••••••••', sig: '••••••••', page: '1' })
+  })
+
   it('masks secret fields in urlencoded bodies', () => {
     expect(maskBodyText('grant_type=password&username=a&password=hunter2')).toBe('grant_type=password&username=a&password=••••••••')
   })

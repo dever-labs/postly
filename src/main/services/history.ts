@@ -7,6 +7,7 @@ export const MAX_STORED_BODY_BYTES = 32 * 1024
 const MASK = '••••••••'
 
 const SECRET_NAME = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|apikey|x-auth-token)$|token|secret|password|passwd|api[-_]?key/i
+const SECRET_PARAM = /token|secret|password|passwd|key|sig/i
 const SECRET_CONFIG_KEYS = new Set(['token', 'password', 'clientSecret', 'accessToken', 'refreshToken', 'apiKey', 'value'])
 const AUTH_SCHEMES = /^(bearer|basic|digest|jwt|token|ntlm)$/i
 
@@ -28,6 +29,20 @@ export function maskAuthConfig(config: Record<string, string>): Record<string, s
   return Object.fromEntries(Object.entries(config ?? {}).map(([k, v]) => [k, SECRET_CONFIG_KEYS.has(k) ? maskValue(String(v ?? '')) : v]))
 }
 
+/** Everything under a secret-named key is masked, whatever its type. */
+function maskSubtree(node: unknown): { value: unknown; changed: boolean } {
+  if (Array.isArray(node)) {
+    const parts = node.map(maskSubtree)
+    return { value: parts.map((p) => p.value), changed: parts.some((p) => p.changed) }
+  }
+  if (node && typeof node === 'object') {
+    const entries = Object.entries(node).map(([k, v]) => [k, maskSubtree(v)] as const)
+    return { value: Object.fromEntries(entries.map(([k, r]) => [k, r.value])), changed: entries.some(([, r]) => r.changed) }
+  }
+  const masked = maskValue(String(node))
+  return { value: masked, changed: masked !== node }
+}
+
 function maskJsonValue(node: unknown): { value: unknown; changed: boolean } {
   if (Array.isArray(node)) {
     let changed = false
@@ -38,10 +53,10 @@ function maskJsonValue(node: unknown): { value: unknown; changed: boolean } {
     let changed = false
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(node)) {
-      if (SECRET_NAME.test(k) && typeof v === 'string') {
-        const masked = maskValue(v)
-        changed ||= masked !== v
-        out[k] = masked
+      if (SECRET_NAME.test(k) && v !== null && v !== undefined) {
+        const r = maskSubtree(v)
+        changed ||= r.changed
+        out[k] = r.value
       } else {
         const r = maskJsonValue(v)
         changed ||= r.changed
@@ -76,10 +91,14 @@ export function maskBodyText(text: string | undefined): string | undefined {
   return text
 }
 
+function safeDecode(v: string): string {
+  try { return decodeURIComponent(v) } catch { return v }
+}
+
 /** Query-string secrets (?api_key=…, ?access_token=…) are masked in stored URLs. */
 export function maskUrl(url: string): string {
   return url.replace(/([?&][^=&#]*(?:token|secret|password|key|sig)[^=&#]*=)([^&#]*)/gi, (_, prefix: string, value: string) =>
-    `${prefix}${maskValue(decodeURIComponent(value.replace(/%7B%7B/gi, '{{').replace(/%7D%7D/gi, '}}')))}`)
+    `${prefix}${maskValue(safeDecode(value.replace(/%7B%7B/gi, '{{').replace(/%7D%7D/gi, '}}')))}`)
 }
 
 export interface HistorySettings { enabled: boolean; limit: number }
@@ -131,7 +150,7 @@ export function recordHistory(
     method: req.method,
     url: maskUrl(req.url),
     headers: maskHeaders(req.headers ?? {}),
-    params: maskHeaders(req.params ?? {}),
+    params: Object.fromEntries(Object.entries(req.params ?? {}).map(([k, v]) => [k, SECRET_PARAM.test(k) ? maskValue(String(v)) : v])),
     body: maskBodyText(req.body),
     bodyType: req.bodyType,
     authType: req.authType,
