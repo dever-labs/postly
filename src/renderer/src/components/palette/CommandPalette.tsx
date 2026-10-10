@@ -12,7 +12,10 @@ import { useWorkingSetStore } from '@/store/workingSet'
 import { useShortcut } from '@/hooks/useShortcuts'
 import { createRequestInContext } from '@/lib/requestActions'
 import { buildItems, searchItems, ACTIONS, type PaletteItem } from '@/lib/palette'
+import { shortcutLabels, type ShortcutId } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
+
+const ACTION_SHORTCUTS: Record<string, ShortcutId> = { 'open-settings': 'settings', 'new-request': 'new-request', 'show-shortcuts': 'help' }
 
 const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
   GET: 'green', POST: 'yellow', PUT: 'blue', DELETE: 'red', PATCH: 'orange', HEAD: 'purple', OPTIONS: 'grey',
@@ -154,6 +157,11 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
               </div>
+              {item.kind === 'action' && ACTION_SHORTCUTS[item.id] && (
+                <kbd className="shrink-0 rounded-sm border border-th-border px-1.5 py-0.5 font-mono text-[10px] text-th-text-subtle">
+                  {shortcutLabels(ACTION_SHORTCUTS[item.id], window.api.platform === 'darwin')[0]}
+                </kbd>
+              )}
             </div>
           ))}
         </div>

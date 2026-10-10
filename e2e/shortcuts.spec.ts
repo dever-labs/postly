@@ -70,7 +70,7 @@ test.describe('Keyboard shortcuts', () => {
     await window.keyboard.press('Control+/')
     const sheet = window.getByTestId('shortcut-sheet')
     await expect(sheet).toBeVisible()
-    await expect(sheet.getByTestId('shortcut-row')).toHaveCount(12)
+    await expect(sheet.getByTestId('shortcut-row')).toHaveCount(15)
     await expect(sheet).toContainText('Send request')
     await window.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
@@ -96,5 +96,37 @@ test.describe('Keyboard shortcuts', () => {
 
     await expect(window.getByTestId('nav-back')).toHaveAttribute('title', /Alt\+←/)
   })
-})
 
+  test('Alt+Up/Down steps through the working set and Ctrl+B toggles the sidebar', async ({ window }) => {
+    const suffix = Date.now()
+    const names = [`Step A ${suffix}`, `Step B ${suffix}`]
+    const colName = `E2E Step ${suffix}`
+    await window.evaluate(async ([col, a, b]: string[]) => {
+      const c = (await window.api.collections.create({ name: col })) as { data: { id: string } }
+      const g = (await window.api.folders.create({ parentId: c.data.id, name: 'Default' })) as { data: { id: string } }
+      await window.api.requests.create({ folderId: g.data.id, name: a, method: 'GET' })
+      await window.api.requests.create({ folderId: g.data.id, name: b, method: 'GET' })
+    }, [colName, names[0], names[1]])
+    await window.reload()
+    await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
+    await window.getByText(colName).first().click()
+    await window.getByText(names[0]).first().click()
+    await window.getByText(names[1]).first().click()
+    const nameInput = window.getByPlaceholder('Request name')
+    await expect(nameInput).toHaveValue(names[1])
+
+    // The working set is shared with other specs, so assert relative movement; stepping must not reorder it
+    await window.getByTestId('working-set').click({ position: { x: 4, y: 4 } })
+    await window.keyboard.press('Alt+ArrowDown')
+    await expect(nameInput).not.toHaveValue(names[1])
+    await window.keyboard.press('Alt+ArrowUp')
+    await expect(nameInput).toHaveValue(names[1])
+
+    const sidebar = window.getByTestId('sidebar-search')
+    await expect(sidebar).toBeVisible()
+    await window.keyboard.press('Control+b')
+    await expect(sidebar).not.toBeVisible()
+    await window.keyboard.press('Control+b')
+    await expect(sidebar).toBeVisible()
+  })
+})

@@ -55,7 +55,7 @@ Collections from each source appear as separate groups in the sidebar. `*.postly
 - **Request history** — every request you send is kept locally (History tab) with its response; search, reopen, delete or clear. Secrets in headers, auth, query strings, bodies are capped at 32 KB. Configure or disable under Settings → General
 - **Working set** — instead of tabs, a short list above the collection tree shows what you are working on: pinned requests, everything with unsaved changes (flagged and counted so nothing is forgotten) and your 8 most recent. Clean entries age out on their own. Back/forward (buttons or Alt+←/→) step through the requests you opened
 - **Command palette** (Ctrl/Cmd+K) — fuzzy-search every request by name, URL, source, collection or group, switch environment, open settings, create a request or check for updates, all from the keyboard
-- **Keyboard shortcuts** — Ctrl/Cmd+Enter send, Esc cancel, Ctrl/Cmd+S save, Ctrl/Cmd+N new request, Ctrl/Cmd+L focus URL, Ctrl/Cmd+Shift+F search the sidebar, Ctrl/Cmd+, settings, Alt+←/→ back/forward; press Ctrl/Cmd+/ (or ? when idle) for the full cheat sheet, and hover buttons to see their keys
+- **Keyboard shortcuts** — Ctrl/Cmd+Enter send, Esc cancel, Ctrl/Cmd+S save, Ctrl/Cmd+N new request, Ctrl/Cmd+L focus URL, Ctrl/Cmd+Shift+F search the sidebar, Ctrl/Cmd+B toggle the sidebar, Ctrl/Cmd+, settings, Alt+←/→ back/forward, Alt+↑/↓ step through the working set; press Ctrl/Cmd+/ (or ? when idle) for the full cheat sheet, and hover buttons to see their keys
 - Resizable sidebar and response panel
 - Search and filter across all collections
 - Dark and light theme

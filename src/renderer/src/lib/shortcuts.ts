@@ -30,6 +30,7 @@ export interface ShortcutDef {
 export type ShortcutId =
   | 'send' | 'cancel' | 'new-request' | 'save' | 'undo' | 'focus-url'
   | 'palette' | 'back' | 'forward' | 'help' | 'settings' | 'focus-search'
+  | 'prev-request' | 'next-request' | 'toggle-sidebar'
 
 export const SHORTCUTS: ShortcutDef[] = [
   { id: 'send', label: 'Send request', group: 'Requests', scope: 'app', combos: [{ key: 'Enter', mod: true }] },
@@ -39,6 +40,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'undo', label: 'Undo unsaved edit', group: 'Requests', scope: 'idle', combos: [{ key: 'z', mod: true }] },
   { id: 'focus-url', label: 'Focus URL bar', group: 'Requests', scope: 'app', combos: [{ key: 'l', mod: true }] },
   { id: 'focus-search', label: 'Search the sidebar', group: 'Navigation', scope: 'app', combos: [{ key: 'f', mod: true, shift: true }] },
+  { id: 'prev-request', label: 'Previous request in working set', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowUp', alt: true }] },
+  { id: 'next-request', label: 'Next request in working set', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowDown', alt: true }] },
+  { id: 'toggle-sidebar', label: 'Toggle sidebar', group: 'Navigation', scope: 'app', combos: [{ key: 'b', mod: true }] },
   { id: 'palette', label: 'Command palette', group: 'Navigation', scope: 'global', combos: [{ key: 'k', mod: true }] },
   { id: 'back', label: 'Back', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowLeft', alt: true }] },
   { id: 'forward', label: 'Forward', group: 'Navigation', scope: 'idle', combos: [{ key: 'ArrowRight', alt: true }] },

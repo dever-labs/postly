@@ -104,3 +104,11 @@ describe('settings and sidebar search', () => {
     expect(shortcutLabels('help', false)).toEqual(['Ctrl+/', '?'])
   })
 })
+
+describe('working-set and sidebar shortcuts', () => {
+  it('match', () => {
+    expect(findShortcut(ev('ArrowUp', { altKey: true }), false)?.id).toBe('prev-request')
+    expect(findShortcut(ev('ArrowDown', { altKey: true }), false)?.id).toBe('next-request')
+    expect(findShortcut(ev('b', { ctrlKey: true }), false)?.id).toBe('toggle-sidebar')
+  })
+})

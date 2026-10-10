@@ -46,6 +46,7 @@ interface UIState {
   sidebarTab: 'apis' | 'environments' | 'history'
   selectedEnvId: string | null
   sidebarWidth: number
+  sidebarHidden: boolean
   editorHeight: number
   pendingGitAction: GitPendingAction | null
   deletingCollectionId: string | null
@@ -60,6 +61,7 @@ interface UIState {
   setSidebarTab: (tab: 'apis' | 'environments' | 'history') => void
   setSelectedEnvId: (id: string | null) => void
   setSidebarWidth: (w: number) => void
+  toggleSidebar: () => void
   setEditorHeight: (h: number) => void
   openGitAction: (action: GitPendingAction) => void
   closeGitAction: () => void
@@ -80,6 +82,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   sidebarTab: 'apis',
   selectedEnvId: null,
   sidebarWidth: 280,
+  sidebarHidden: false,
   editorHeight: 300,
   pendingGitAction: null,
   deletingCollectionId: null,
@@ -107,6 +110,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
   setSelectedEnvId: (id) => set({ selectedEnvId: id }),
 
+  toggleSidebar: () => set((s) => ({ sidebarHidden: !s.sidebarHidden })),
   setSidebarWidth: (w: number) => set({ sidebarWidth: isNaN(w) ? 280 : w }),
   setEditorHeight: (h: number) => set({ editorHeight: isNaN(h) ? 300 : h }),
 
