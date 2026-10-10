@@ -216,6 +216,9 @@ export function registerHttpHandlers(): void {
         authType: resolvedAuthType,
         authConfig: resolvedAuthConfig,
         url: interpolateEnvVars(req.url, envVars),
+        params: req.params
+          ? Object.fromEntries(Object.entries(req.params).map(([key, value]) => [interpolateEnvVars(key, envVars), interpolateEnvVars(value, envVars)]))
+          : undefined,
         headers: Object.fromEntries(
           Object.entries(req.headers).map(([key, value]) => [key, interpolateEnvVars(value, envVars)])
         )

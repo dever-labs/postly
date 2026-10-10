@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { executeRequest, HttpRequest, LogEntry } from '../http-executor'
+import { executeRequest, appendQueryParams, HttpRequest, LogEntry } from '../http-executor'
 
 vi.mock('axios', () => ({
   default: vi.fn()
@@ -338,5 +338,24 @@ describe('executeRequest — abort signal', () => {
     expect(res.status).toBe(0)
     expect(res.statusText).toBe('Request cancelled')
     expect(mockAxios).not.toHaveBeenCalled()
+  })
+})
+
+describe('query params', () => {
+  it('appends encoded params to the URL, keeping an existing query and fragment', () => {
+    expect(appendQueryParams('https://a.test/x', { a: '1', 'b c': 'd&e' })).toBe('https://a.test/x?a=1&b%20c=d%26e')
+    expect(appendQueryParams('https://a.test/x?q=1#top', { a: '2' })).toBe('https://a.test/x?q=1&a=2#top')
+    expect(appendQueryParams('https://a.test/x?', { a: '2' })).toBe('https://a.test/x?a=2')
+  })
+
+  it('leaves the URL alone without usable params', () => {
+    expect(appendQueryParams('https://a.test/x', undefined)).toBe('https://a.test/x')
+    expect(appendQueryParams('https://a.test/x', { ' ': 'v' })).toBe('https://a.test/x')
+  })
+
+  it('sends the params with the request', async () => {
+    mockAxios.mockResolvedValue(makeAxiosResponse())
+    await executeRequest(makeReq({ url: 'https://a.test/x?q=1', params: { page: '2' } }))
+    expect((mockAxios.mock.calls[0][0] as { url: string }).url).toBe('https://a.test/x?q=1&page=2')
   })
 })
