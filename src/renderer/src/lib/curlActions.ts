@@ -2,7 +2,10 @@ import { buildCurl, parseCurl, type CurlExport, type ParsedCurl } from '@/lib/cu
 import { generateSnippet, type SnippetLanguage } from '@/lib/snippets'
 import type { GeneratedSnippet } from '@/lib/snippets/model'
 import { createRequestInContext } from '@/lib/requestActions'
+import { mergeScopedVars, rootCollectionId } from '@/lib/variableScopes'
+import { useCollectionsStore } from '@/store/collections'
 import { useEnvironmentsStore } from '@/store/environments'
+import { useVariablesStore } from '@/store/variables'
 import { useRequestsStore } from '@/store/requests'
 import { useUIStore } from '@/store/ui'
 
@@ -60,11 +63,16 @@ export async function importCurlAsNewRequest(text: string): Promise<boolean> {
 function exportOptions(options: CurlCopyOptions) {
   let variables: Record<string, string> | undefined
   if (options.resolveVariables) {
-    variables = {}
-    for (const v of useEnvironmentsStore.getState().vars) {
-      if (v.isSecret && !options.includeSecrets) continue
-      variables[v.key] = v.value
-    }
+    const request = useRequestsStore.getState().editingRequest
+    const collectionId = rootCollectionId(request?.folderId, useCollectionsStore.getState().folders)
+    const activeEnvId = useEnvironmentsStore.getState().activeEnv?.id
+    // Resolve precedence first, then drop secrets, so a secret never lets a lower scope's value show through
+    const merged = mergeScopedVars({
+      environment: useEnvironmentsStore.getState().vars.filter((v) => v.envId === activeEnvId),
+      collection: collectionId ? useVariablesStore.getState().collections[collectionId] ?? [] : [],
+      global: useVariablesStore.getState().globals,
+    })
+    variables = Object.fromEntries(merged.filter((v) => v.scope !== 'dynamic' && (options.includeSecrets || !v.isSecret)).map((v) => [v.key, v.value]))
   }
   return { variables, includeSecrets: options.includeSecrets }
 }

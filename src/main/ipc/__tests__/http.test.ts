@@ -62,6 +62,8 @@ function setupDb({
   collection = null as Record<string, unknown> | null,
   integration = null as Record<string, unknown> | null,
   settings = null as string | null,
+  globalVars = [] as { key: string; value: string }[],
+  collectionVars = [] as { key: string; value: string }[],
 } = {}) {
   mockQ1.mockImplementation((sql: string) => {
     if (sql.includes('environments')) return envName ? { id: 'e1', name: envName } : null
@@ -69,7 +71,8 @@ function setupDb({
     if (sql.includes('settings')) return settings ? { value: settings } : null
     return null
   })
-  mockQA.mockImplementation((sql: string) => {
+  mockQA.mockImplementation((sql: string, params?: unknown[]) => {
+    if (sql.includes('FROM variables')) return (params?.[0] === 'global' ? globalVars : collectionVars).map((v, i) => ({ ...v, is_secret: 0, sort_order: i }))
     if (sql.includes('env_vars')) return envVars
     if (sql.includes('WITH RECURSIVE lineage')) {
       if (!folder) return []
@@ -205,13 +208,56 @@ describe('http IPC handler', () => {
       expect(calledReq.headers['Authorization']).toBe('Bearer secret-123')
     })
 
-    it('logs the total interpolated variable count across URL and headers', async () => {
+    it('logs where each variable resolved from, without values', async () => {
       setupDb({ envName: 'Dev', envVars: [{ key: 'HOST', value: 'h' }, { key: 'TOKEN', value: 't' }] })
       const data = await invokeOk(baseReq({
         url: '{{HOST}}/path',
         headers: { Authorization: 'Bearer {{TOKEN}}' }
       }))
-      expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Interpolated 2 environment variables' }))
+      expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Variables: HOST ← environment, TOKEN ← environment' }))
+    })
+
+    it('resolves global < collection < environment and logs the source of each variable', async () => {
+      setupDb({
+        envName: 'Dev', envVars: [{ key: 'A', value: 'env' }],
+        folder: { id: 'c1', name: 'Col' },
+        globalVars: [{ key: 'A', value: 'global' }, { key: 'B', value: 'global' }, { key: 'C', value: 'global' }],
+        collectionVars: [{ key: 'B', value: 'col' }, { key: 'C', value: 'col' }],
+      })
+      const data = await invokeOk(baseReq({ url: 'https://x/{{A}}/{{B}}/{{C}}/{{D}}', folderId: 'c1' }))
+      const [calledReq] = mockExec.mock.calls[0]
+      expect(calledReq.url).toBe('https://x/env/col/col/{{D}}')
+      expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Variables: A ← environment, B ← collection, C ← collection' }))
+      expect(data.logs).toContainEqual(expect.objectContaining({ level: 'warn', message: 'Unresolved variables left as written: {{D}}' }))
+    })
+
+    it('uses global variables when there is no collection or environment', async () => {
+      setupDb({ globalVars: [{ key: 'HOST', value: 'g.example' }] })
+      await invoke(baseReq({ url: 'https://{{HOST}}/' }))
+      expect(mockExec.mock.calls[0][0].url).toBe('https://g.example/')
+    })
+
+    it('evaluates dynamic variables per send in the URL, headers, body and auth', async () => {
+      setupDb()
+      await invoke(baseReq({
+        method: 'POST', url: 'https://x/{{$guid}}', headers: { 'X-Id': '{{$guid}}' },
+        bodyType: 'raw-json', body: '{"t":{{$timestamp}},"n":"{{$randomInt}}"}',
+        authType: 'bearer', authConfig: { token: '{{$isoTimestamp}}' },
+      }))
+      const [calledReq] = mockExec.mock.calls[0]
+      expect(calledReq.url).toMatch(/^https:\/\/x\/[0-9a-f-]{36}$/)
+      expect(calledReq.headers['X-Id']).toMatch(/^[0-9a-f-]{36}$/)
+      expect(calledReq.headers['X-Id']).not.toBe(calledReq.url.split('/').pop())
+      expect(JSON.parse(calledReq.body as string).t).toBeGreaterThan(1_700_000_000)
+      expect(calledReq.authConfig.token).toMatch(/^\d{4}-\d\d-\d\dT/)
+      await invoke(baseReq({ url: 'https://x/{{$guid}}' }))
+      expect(mockExec.mock.calls[1][0].url).not.toBe(calledReq.url)
+    })
+
+    it('does not write variable values to the Console', async () => {
+      setupDb({ envName: 'Dev', envVars: [{ key: 'TOKEN', value: 'top-secret-value' }] })
+      const data = await invokeOk(baseReq({ headers: { A: '{{TOKEN}}' } }))
+      expect(JSON.stringify(data.logs)).not.toContain('top-secret-value')
     })
 
     it('leaves unresolved {{VAR}} in URL unchanged', async () => {

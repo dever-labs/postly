@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useEnvAutocomplete } from '@/hooks/useEnvAutocomplete'
-import { useEnvironmentsStore } from '@/store/environments'
+import { useScopedVars } from '@/hooks/useScopedVars'
+import type { ScopedVar } from '@/lib/variableScopes'
 import { EnvSuggestions } from './EnvSuggestions'
 import { VarTooltip } from './VarTooltip'
-import type { EnvVar } from '@/types'
 
 // ─── Token parsing ───────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ type Segment =
   | { type: 'text'; text: string }
   | { type: 'var'; key: string; raw: string; isDefined: boolean }
 
-function parseSegments(value: string, activeVars: EnvVar[]): Segment[] {
+function parseSegments(value: string, activeVars: ScopedVar[]): Segment[] {
   const segs: Segment[] = []
   let last = 0
   for (const tok of parseTokens(value)) {
@@ -97,18 +97,13 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
   const overlayRef = useRef<HTMLDivElement>(null)
   const colorProbeRef = useRef<HTMLSpanElement>(null)
   const ac = useEnvAutocomplete()
-  const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
-  const vars = useEnvironmentsStore((s) => s.vars)
+  const activeVars = useScopedVars()
 
   // hitZones only needed for mouse-move hit testing — use a ref to avoid
   // triggering an extra render cycle on every keystroke
   const hitZonesRef = useRef<TokenHitZone[]>([])
   const [hovered, setHovered] = useState<{ key: string; left: number } | null>(null)
 
-  const activeVars = useMemo(
-    () => vars.filter((v) => v.envId === activeEnv?.id),
-    [vars, activeEnv?.id],
-  )
   const hasVars = /\{\{[^}]+\}\}/.test(value)
   const segments = hasVars ? parseSegments(value, activeVars) : null
 

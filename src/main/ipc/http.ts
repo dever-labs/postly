@@ -6,6 +6,9 @@ import { applySetCookies, cookieHeaderFor, parseResponseCookies } from '../servi
 import { getValidTokenForConfig, authorizeInline } from '../services/oauth'
 import { getGeneralSettings } from './settings-utils'
 import { recordHistory } from '../services/history'
+import { createDynamicVariables, summarizeResolutions } from '../../shared/variables'
+import { variableValues } from '../services/variable-store'
+import { createSubstitution, substituteBody, substituteRecord } from '../services/request-variables'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
 type LogLevel = 'info' | 'warn' | 'error'
@@ -24,16 +27,6 @@ let currentAbortController: AbortController | null = null
 
 function protocolOf(req: HttpRequest): string {
   return (req as HttpRequest & { protocol?: string }).protocol ?? 'http'
-}
-
-function interpolateEnvVars(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => vars[key.trim()] ?? `{{${key}}}`)
-}
-
-function countInterpolations(text: string, vars: Record<string, string>): number {
-  let n = 0
-  text.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => { if (vars[key.trim()] !== undefined) n++; return '' })
-  return n
 }
 
 function safeParseJSON<T>(value: unknown, fallback: T): T {
@@ -121,6 +114,15 @@ export function registerHttpHandlers(): void {
       const lineage = getFolderLineage(req.folderId)
       const rootFolder = lineage.find((f) => !f.parent_id)
 
+      const { sub, resolutions } = createSubstitution(
+        {
+          global: variableValues('global'),
+          collection: rootFolder ? variableValues('collection', rootFolder.id) : {},
+          environment: envVars,
+        },
+        createDynamicVariables()
+      )
+
       let resolvedAuthType = req.authType
       let resolvedAuthConfig = req.authConfig
       let authSource = 'request'
@@ -179,6 +181,8 @@ export function registerHttpHandlers(): void {
       if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
       if (!followRedirects) log('info', 'Following redirects: disabled')
 
+      resolvedAuthConfig = substituteRecord(resolvedAuthConfig, sub)
+
       if (resolvedAuthType === 'oauth2') {
         const cfg = {
           id: '',
@@ -222,22 +226,18 @@ export function registerHttpHandlers(): void {
         }
       }
 
-      const urlCount = countInterpolations(req.url, envVars)
-      const headerCount = Object.values(req.headers).reduce((sum, value) => sum + countInterpolations(value, envVars), 0)
-      const totalCount = urlCount + headerCount
-      if (totalCount > 0) {
-        log('info', `Interpolated ${totalCount} environment variable${totalCount !== 1 ? 's' : ''}`)
-      }
-
       const interpolatedReq: HttpRequest = {
         ...req,
         authType: resolvedAuthType,
         authConfig: resolvedAuthConfig,
-        url: interpolateEnvVars(req.url, envVars),
-        headers: Object.fromEntries(
-          Object.entries(req.headers).map(([key, value]) => [key, interpolateEnvVars(value, envVars)])
-        )
+        url: sub(req.url),
+        headers: substituteRecord(req.headers, sub),
+        body: substituteBody(req.bodyType, req.body, sub),
       }
+
+      const { resolved, unresolved } = summarizeResolutions(resolutions())
+      if (resolved) log('info', `Variables: ${resolved}`)
+      if (unresolved.length > 0) log('warn', `Unresolved variables left as written: ${unresolved.join(', ')}`)
 
       const localFiles = collectLocalFilePaths(interpolatedReq)
       if (localFiles.length > 0 && !(await confirmLocalFileReads(localFiles, interpolatedReq.url, event.sender))) {
