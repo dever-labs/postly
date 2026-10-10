@@ -4,6 +4,30 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/dever-labs/postly/compare/v0.8.4...v0.9.0) (2026-10-10)
+
+
+### Features
+
+* **history:** keep a searchable history of sent requests ([9e1bee0](https://github.com/dever-labs/postly/commit/9e1bee086c91580e27515780140888a28bd94d05)), closes [#254](https://github.com/dever-labs/postly/issues/254)
+* **history:** searchable request history ([eb011ce](https://github.com/dever-labs/postly/commit/eb011ce50dd03d3d2d79e463e765b7e4affe2551))
+* **navigation:** working set and back/forward instead of tabs ([b6413fa](https://github.com/dever-labs/postly/commit/b6413fafc909b9f3dfb7c778ca95fbc3029dc664))
+* **navigation:** working set and back/forward instead of tabs ([c1af86a](https://github.com/dever-labs/postly/commit/c1af86aa0c79ebc32dd09cd1f16dc33d838014b6)), closes [#255](https://github.com/dever-labs/postly/issues/255)
+* **palette:** add Ctrl/Cmd+K command palette ([88b8b09](https://github.com/dever-labs/postly/commit/88b8b09b8ed9d3170c11da668f695d50e9e0ce3f)), closes [#270](https://github.com/dever-labs/postly/issues/270)
+* **palette:** Ctrl/Cmd+K command palette ([13f0144](https://github.com/dever-labs/postly/commit/13f01449bc0c72b554162872ca9ca6bfdc7a58cb))
+* **palette:** show keyboard hints in the footer ([4076948](https://github.com/dever-labs/postly/commit/40769486958ec72c3083c87ab346756db6857176))
+* **proxy:** add system and manual proxy support ([5e8507b](https://github.com/dever-labs/postly/commit/5e8507b38755d18531c7b480a9f7ee8d76970b63))
+* **proxy:** add system and manual proxy support ([4b38d70](https://github.com/dever-labs/postly/commit/4b38d708fec6d64306039054ab455ff784b1772e)), closes [#256](https://github.com/dever-labs/postly/issues/256)
+
+
+### Bug Fixes
+
+* **history:** mask non-string secrets, tolerate bad escapes, unify param rule ([1156d82](https://github.com/dever-labs/postly/commit/1156d82e6a45fc096d16dfa835ccefc74334e12c))
+* **history:** mask secret params and body fields before storing ([af80f7d](https://github.com/dever-labs/postly/commit/af80f7dd5fb469ed7a7fada9fe804cf1b7c89020))
+* **navigation:** back from a history request returns to the last real request ([67e4f5c](https://github.com/dever-labs/postly/commit/67e4f5c5336c675b1585619b8b05471efea7ad3e))
+* **proxy:** strip embedded URL credentials, match IPv6 and CIDR bypass entries ([45b40d8](https://github.com/dever-labs/postly/commit/45b40d8e540ec049ebe1da39b00398813bcdb663))
+* **ui:** align working set actions; clearer history rows ([046263e](https://github.com/dever-labs/postly/commit/046263e1848af936f76ddc5860953c93ddf827cf))
+
 ## [0.8.4](https://github.com/dever-labs/postly/compare/v0.8.3...v0.8.4) (2026-10-08)
 
 
