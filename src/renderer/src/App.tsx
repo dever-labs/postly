@@ -1,4 +1,5 @@
 import { ShortcutCheatSheet } from '@/components/shortcuts/ShortcutCheatSheet'
+import { CurlImportDialog } from '@/components/editor/CurlImportDialog'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import React, { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
@@ -30,6 +31,7 @@ export default function App(): React.ReactElement {
         <SettingsModal />
         <GitCommitOverlay />
         <CommandPalette />
+        <CurlImportDialog />
         <ShortcutCheatSheet />
         <DeleteCollectionOverlay />
         <Toaster />

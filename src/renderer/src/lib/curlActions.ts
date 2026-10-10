@@ -1,0 +1,71 @@
+import { buildCurl, parseCurl, type CurlExport, type ParsedCurl } from '@/lib/curl'
+import { createRequestInContext } from '@/lib/requestActions'
+import { useEnvironmentsStore } from '@/store/environments'
+import { useRequestsStore } from '@/store/requests'
+import { useUIStore } from '@/store/ui'
+
+const DEFAULT_NAMES = new Set(['', 'New Request'])
+
+export interface CurlCopyOptions {
+  resolveVariables: boolean
+  includeSecrets: boolean
+}
+
+function applyToActive(parsed: ParsedCurl): void {
+  const { editingRequest, updateField } = useRequestsStore.getState()
+  if (!editingRequest) return
+  if (DEFAULT_NAMES.has(editingRequest.name)) updateField('name', parsed.name)
+  updateField('protocol', 'http')
+  updateField('method', parsed.method)
+  updateField('url', parsed.url)
+  updateField('params', [])
+  updateField('headers', parsed.headers)
+  updateField('bodyType', parsed.bodyType)
+  updateField('bodyContent', parsed.bodyContent)
+  updateField('authType', parsed.authType)
+  updateField('authConfig', parsed.authConfig)
+  updateField('sslVerification', parsed.sslVerification)
+}
+
+function report(parsed: ParsedCurl): void {
+  const { addToast } = useUIStore.getState()
+  if (parsed.warnings.length === 0) { addToast('Imported from cURL', 'success'); return }
+  const shown = parsed.warnings.slice(0, 3).join('; ')
+  const more = parsed.warnings.length > 3 ? ` (+${parsed.warnings.length - 3} more)` : ''
+  addToast(`Imported from cURL with ${parsed.warnings.length} note${parsed.warnings.length === 1 ? '' : 's'}: ${shown}${more}`, 'info')
+}
+
+/** Replaces the open request's fields with the parsed command. Returns false when the text is not cURL. */
+export function importCurlIntoActive(text: string): boolean {
+  const parsed = parseCurl(text)
+  if (!parsed || !useRequestsStore.getState().editingRequest) return false
+  applyToActive(parsed)
+  report(parsed)
+  return true
+}
+
+/** Creates a new request next to the current one and fills it from the command. */
+export async function importCurlAsNewRequest(text: string): Promise<boolean> {
+  const parsed = parseCurl(text)
+  if (!parsed) return false
+  const created = await createRequestInContext()
+  if (!created) return false
+  applyToActive(parsed)
+  report(parsed)
+  return true
+}
+
+/** Builds the cURL command for the open request. Secret environment variables stay as {{NAME}} unless secrets are included. */
+export function exportActiveAsCurl(options: CurlCopyOptions): CurlExport | null {
+  const request = useRequestsStore.getState().editingRequest
+  if (!request) return null
+  let variables: Record<string, string> | undefined
+  if (options.resolveVariables) {
+    variables = {}
+    for (const v of useEnvironmentsStore.getState().vars) {
+      if (v.isSecret && !options.includeSecrets) continue
+      variables[v.key] = v.value
+    }
+  }
+  return buildCurl(request, { variables, includeSecrets: options.includeSecrets })
+}
