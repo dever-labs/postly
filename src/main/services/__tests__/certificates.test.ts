@@ -62,6 +62,7 @@ describe('host matching', () => {
     expect(hostMatch('a.com', 'b.com')).toBe(0)
   })
   it('validates host patterns', () => {
+    expect(hostMatch('[::1]', '::1')).toBe(3)
     for (const ok of ['a.com', '*.a.com', '*', 'localhost', '127.0.0.1']) expect(isValidHostPattern(ok)).toBe(true)
     for (const bad of ['a.com:8443', 'https://a.com', 'a/b', '', 'a *']) expect(isValidHostPattern(bad)).toBe(false)
   })

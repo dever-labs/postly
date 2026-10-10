@@ -128,7 +128,7 @@ const TLS_SCHEMES = new Set(['https:', 'wss:', 'grpcs:', ...MQTT_TLS_SCHEMES])
 
 /** Specificity of a match, or 0 for no match: exact host 3, wildcard domain 2, `*` 1. */
 export function hostMatch(pattern: string, host: string): number {
-  const p = pattern.trim().toLowerCase()
+  const p = pattern.trim().toLowerCase().replace(/^\[|\]$/g, '')
   const h = host.trim().toLowerCase()
   if (p === '*') return 1
   if (p.startsWith('*.')) return h.endsWith(p.slice(1)) && h.length > p.length - 1 ? 2 : 0

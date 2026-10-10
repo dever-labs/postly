@@ -169,6 +169,8 @@ export interface ResolvedProxy {
   display: string
   httpAgent: Agent
   httpsAgent: Agent
+  /** Same proxy with different TLS options, for a redirect to another host. */
+  withTls?: (rejectUnauthorized: boolean, tls?: ProxyTls) => ResolvedProxy
 }
 
 const agentCache = new Map<string, ResolvedProxy>()
@@ -199,6 +201,7 @@ function buildAgents(proxyUrl: string, rejectUnauthorized: boolean, extra?: Prox
         return { display, httpAgent: agent, httpsAgent: agent }
       })()
     : { display, httpAgent: new HttpProxyAgent(proxyUrl, tls), httpsAgent: new HttpsProxyAgent(proxyUrl, tls) }
+  resolved.withTls = (reject, tlsOverride) => buildAgents(proxyUrl, reject, tlsOverride)
   if (agentCache.size > 20) agentCache.clear()
   agentCache.set(key, resolved)
   return resolved
