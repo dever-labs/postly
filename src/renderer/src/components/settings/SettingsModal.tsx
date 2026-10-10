@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
 import { AiSettings } from '@/components/settings/tabs/AiSettings'
+import { NetworkSettings } from '@/components/settings/tabs/NetworkSettings'
 import { UpdateSettings } from '@/components/settings/tabs/UpdateSettings'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,7 @@ import { cn } from '@/lib/utils'
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'appearance', label: 'Appearance' },
+  { id: 'network', label: 'Network' },
   { id: 'ai', label: 'AI' },
   { id: 'updates', label: 'Updates' },
 ]
@@ -18,6 +20,7 @@ function TabContent({ tab }: { tab: string }) {
   switch (tab) {
     case 'general': return <GeneralSettings />
     case 'appearance': return <AppearanceSettings />
+    case 'network': return <NetworkSettings />
     case 'ai': return <AiSettings />
     case 'updates': return <UpdateSettings />
     default: return null

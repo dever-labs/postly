@@ -51,6 +51,7 @@ Collections from each source appear as separate groups in the sidebar. `*.postly
 ### Quality of Life
 - **Console tab** on every response — structured log of auth source, environment resolution, OAuth token state, SSL settings, and request/response summary
 - Per-entity SSL verification (inherit / enabled / disabled)
+- **Proxy support** (Settings → Network): system proxy (OS, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), or a manual HTTP/HTTPS/SOCKS proxy with credentials and a bypass list — applied to requests, OAuth, Backstage, GitHub and GitLab
 - Resizable sidebar and response panel
 - Search and filter across all collections
 - Dark and light theme

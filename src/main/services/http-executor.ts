@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import https from 'https'
+import { resolveProxy, describeProxyError } from './proxy'
 
 type LogLevel = 'info' | 'warn' | 'error'
 export interface LogEntry { level: LogLevel; message: string; detail?: string }
@@ -168,11 +169,20 @@ export async function executeRequest(
     signal,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
+    // Proxying is resolved explicitly below so it can be logged; stop axios applying env proxies on top.
+    proxy: false,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
     httpsAgent: sslVerification ? undefined : new https.Agent({ rejectUnauthorized: false })
   }
 
+  const proxy = await resolveProxy(req.url, { rejectUnauthorized: sslVerification })
+  if (proxy) {
+    config.httpAgent = proxy.httpAgent
+    config.httpsAgent = proxy.httpsAgent
+  }
+
   log('info', `→ ${req.method.toUpperCase()} ${req.url}`)
+  log('info', proxy ? `Proxy: ${proxy.display}` : 'Proxy: none (direct)')
 
   try {
     const response = await axios(config)
@@ -203,14 +213,15 @@ export async function executeRequest(
   } catch (err: unknown) {
     const duration = Date.now() - start
     const message = err instanceof Error ? err.message : String(err)
-    log('error', `Request failed: ${message}`)
+    const shown = proxy ? describeProxyError(message, proxy) : message
+    log('error', `Request failed: ${shown}`)
     return {
       status: 0,
-      statusText: message,
+      statusText: shown,
       headers: {},
-      body: message,
+      body: shown,
       duration,
-      size: Buffer.byteLength(message, 'utf8')
+      size: Buffer.byteLength(shown, 'utf8')
     }
   }
 }
