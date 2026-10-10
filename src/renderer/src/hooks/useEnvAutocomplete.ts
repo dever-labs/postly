@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
-import { useEnvironmentsStore } from '@/store/environments'
+import { useScopedVars } from '@/hooks/useScopedVars'
+import type { ScopedVar } from '@/lib/variableScopes'
 import { detectEnvPattern, completeEnvVar } from '@/lib/envAutocomplete'
-import type { EnvVar } from '@/types'
 
 export interface EnvAutocompleteState {
   show: boolean
-  filtered: EnvVar[]
+  filtered: ScopedVar[]
   selectedIndex: number
   setSelectedIndex: (i: number) => void
   close: () => void
@@ -13,16 +13,14 @@ export interface EnvAutocompleteState {
   complete: (value: string, cursorPos: number, key: string) => { newValue: string; newCursorPos: number }
 }
 
-/** Detects `{{partial` at the cursor and provides matching env var suggestions. */
+/** Detects `{{partial` at the cursor and provides matching variable suggestions from every scope. */
 export function useEnvAutocomplete(): EnvAutocompleteState {
-  const vars = useEnvironmentsStore((s) => s.vars)
-  const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
+  const activeVars = useScopedVars()
 
   const [show, setShow] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
 
-  const activeVars = vars.filter((v) => v.envId === activeEnv?.id)
   const filtered = activeVars.filter(
     (v) => !search || v.key.toLowerCase().includes(search.toLowerCase())
   )
@@ -52,7 +50,7 @@ export function useEnvAutocomplete(): EnvAutocompleteState {
   const close = useCallback(() => { setShow(false); setSearch('') }, [])
 
   return {
-    show: show && filtered.length > 0 && !!activeEnv,
+    show: show && filtered.length > 0,
     filtered,
     selectedIndex,
     setSelectedIndex,

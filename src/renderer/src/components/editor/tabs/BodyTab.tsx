@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { EnvInput } from '@/components/editor/EnvInput'
 import { ResizablePanel } from '@/components/layout/ResizablePanel'
-import { useEnvironmentsStore } from '@/store/environments'
+import { SCOPE_LABELS } from '../../../../../shared/variables'
+import { useScopedVars } from '@/hooks/useScopedVars'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
@@ -184,10 +185,9 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
   const fileInputRef = useRef<HTMLInputElement>(null)
   const gqlQueryRef = useRef<HTMLDivElement>(null)
   const monaco = useMonaco()
-  const activeEnv = useEnvironmentsStore((s) => s.activeEnv)
-  const vars = useEnvironmentsStore((s) => s.vars)
-  const activeVarsRef = useRef(vars.filter((v) => v.envId === activeEnv?.id))
-  activeVarsRef.current = vars.filter((v) => v.envId === activeEnv?.id)
+  const scopedVars = useScopedVars()
+  const activeVarsRef = useRef(scopedVars)
+  activeVarsRef.current = scopedVars
 
   // Register completion provider once per Monaco instance
   useEffect(() => {
@@ -202,15 +202,15 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
             startLineNumber: position.lineNumber, startColumn: 1,
             endLineNumber: position.lineNumber, endColumn: position.column,
           })
-          const match = lineUntil.match(/\{\{(\w*)$/)
+          const match = lineUntil.match(/\{\{(\$?\w*)$/)
           if (!match) return { suggestions: [] }
           const startCol = position.column - match[0].length
           return {
             suggestions: activeVarsRef.current.map((v) => ({
               label: v.key,
               kind: monaco.languages.CompletionItemKind.Variable,
-              detail: v.isSecret ? '••••••' : v.value,
-              documentation: `Environment variable · {{${v.key}}}`,
+              detail: v.scope === 'dynamic' ? 'built-in' : v.isSecret ? '••••••' : v.value,
+              documentation: `${SCOPE_LABELS[v.scope]} variable · {{${v.key}}}`,
               insertText: `{{${v.key}}}`,
               filterText: `{{${v.key}`,
               range: {
@@ -236,7 +236,7 @@ export const BodyTab = React.memo(function BodyTab({ bodyType, bodyContent, onTy
         startLineNumber: pos.lineNumber, startColumn: 1,
         endLineNumber: pos.lineNumber, endColumn: pos.column,
       })
-      if (/\{\{(\w*)$/.test(lineUntil)) {
+      if (/\{\{(\$?\w*)$/.test(lineUntil)) {
         editor.trigger('postly', 'editor.action.triggerSuggest', {})
       }
     })

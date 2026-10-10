@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
 import * as gitLocal from '../services/git-local'
+import { deleteCollectionVariables } from '../services/variable-store'
 
 interface FolderRow {
   id: string
@@ -84,6 +85,7 @@ async function deleteFolder(args: { id: string; commitMessage?: string }) {
   }
 
   run('DELETE FROM folders WHERE id = ?', [args.id])
+  deleteCollectionVariables(args.id)
   return true
 }
 

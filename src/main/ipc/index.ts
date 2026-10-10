@@ -11,6 +11,7 @@ import { registerSettingsHandlers } from './settings'
 import { registerProxyHandlers } from './proxy'
 import { registerHistoryHandlers } from './history'
 import { registerCookieHandlers } from './cookies'
+import { registerVariableHandlers } from './variables'
 import { registerIntegrationHandlers } from './integrations'
 import { registerWsHandlers } from './ws'
 import { registerGrpcHandlers } from './grpc'
@@ -39,6 +40,7 @@ export function registerAllIpcHandlers(): void {
   registerProxyHandlers()
   registerHistoryHandlers()
   registerCookieHandlers()
+  registerVariableHandlers()
   registerIntegrationHandlers()
   registerWsHandlers()
   registerGrpcHandlers()

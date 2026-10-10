@@ -5,6 +5,11 @@ vi.mock('../../database', () => ({
   run: vi.fn(),
 }))
 
+vi.mock('../../services/variable-store', () => ({
+  exportCollectionVariables: vi.fn(() => []),
+  importCollectionVariables: vi.fn(),
+}))
+
 import { queryAll, run } from '../../database'
 import { tryParse, buildExport, importData } from '../export-import'
 import type { PostlyExportFile } from '../export-import'

@@ -225,7 +225,8 @@ export function snippetNotes(model: SnippetModel, code: string, options: Snippet
   const notes = [...model.notes]
   if (model.redacted) notes.push('Credentials were replaced with placeholders. Enable "Include secrets" to export them.')
   if (options.variables) {
-    const left = [...new Set(code.match(/\{\{[^}]+\}\}/g) ?? [])]
+    // Built-ins such as {{$guid}} are meant to stay: they are generated each time the request is sent
+    const left = [...new Set(code.match(/\{\{[^}]+\}\}/g) ?? [])].filter((v) => !v.startsWith('{{$'))
     if (left.length > 0) notes.push(`Unresolved variables kept as placeholders: ${left.join(', ')}`)
   }
   return notes
