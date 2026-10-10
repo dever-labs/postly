@@ -10,6 +10,7 @@ import { registerGitHandlers } from './git'
 import { registerSettingsHandlers } from './settings'
 import { registerProxyHandlers } from './proxy'
 import { registerHistoryHandlers } from './history'
+import { registerCookieHandlers } from './cookies'
 import { registerIntegrationHandlers } from './integrations'
 import { registerWsHandlers } from './ws'
 import { registerGrpcHandlers } from './grpc'
@@ -37,6 +38,7 @@ export function registerAllIpcHandlers(): void {
   registerSettingsHandlers()
   registerProxyHandlers()
   registerHistoryHandlers()
+  registerCookieHandlers()
   registerIntegrationHandlers()
   registerWsHandlers()
   registerGrpcHandlers()

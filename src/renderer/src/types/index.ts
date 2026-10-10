@@ -146,6 +146,24 @@ export interface HttpRequest {
   folderId?: string
 }
 
+export interface CookieRecord {
+  name: string
+  value: string
+  domain: string
+  path: string
+  /** Epoch ms, or null for a session cookie. */
+  expires: number | null
+  secure: boolean
+  httpOnly: boolean
+  sameSite: 'strict' | 'lax' | 'none' | ''
+  hostOnly: boolean
+}
+
+export interface ResponseCookie extends CookieRecord {
+  rejected?: boolean
+  deleted?: boolean
+}
+
 export interface HttpResponse {
   status: number
   statusText: string
@@ -154,6 +172,7 @@ export interface HttpResponse {
   duration: number
   size: number
   logs?: LogEntry[]
+  cookies?: ResponseCookie[]
 }
 
 export interface BackstageSettings {
@@ -223,6 +242,7 @@ export interface GeneralSettings {
   updateFeedUrl?: string
   historyEnabled?: boolean
   historyLimit?: number
+  cookiesEnabled?: boolean
 }
 
 export interface AiSettings {

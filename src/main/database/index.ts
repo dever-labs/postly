@@ -337,6 +337,11 @@ function runMigrations(): void {
     body_truncated INTEGER NOT NULL DEFAULT 0
   )`)
   db.run('CREATE INDEX IF NOT EXISTS idx_request_history_created ON request_history(created_at DESC)')
+  db.run(`CREATE TABLE IF NOT EXISTS cookie_jars (
+    env_key TEXT PRIMARY KEY,
+    cookies_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`)
   recreateDraftTables()
   db.run(`CREATE TABLE IF NOT EXISTS env_drafts (
     env_id TEXT PRIMARY KEY REFERENCES environments(id) ON DELETE CASCADE,

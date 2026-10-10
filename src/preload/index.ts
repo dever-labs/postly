@@ -92,6 +92,12 @@ const api = {
     set: (data: { key: string; value: unknown }) => ipcRenderer.invoke('postly:settings:set', data),
     getAll: () => ipcRenderer.invoke('postly:settings:get-all'),
   },
+  cookies: {
+    list: () => ipcRenderer.invoke('postly:cookies:list'),
+    upsert: (data: { cookie: unknown; previous?: { name: string; domain: string; path: string } }) => ipcRenderer.invoke('postly:cookies:upsert', data),
+    delete: (data: { name: string; domain: string; path: string }) => ipcRenderer.invoke('postly:cookies:delete', data),
+    clear: (data?: { domain?: string }) => ipcRenderer.invoke('postly:cookies:clear', data),
+  },
   history: {
     list: (data?: { search?: string; limit?: number; offset?: number }) => ipcRenderer.invoke('postly:history:list', data),
     get: (data: { id: string }) => ipcRenderer.invoke('postly:history:get', data),

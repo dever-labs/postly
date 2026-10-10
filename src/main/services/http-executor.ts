@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import https from 'https'
 import { resolveProxy, describeProxyError } from './proxy'
+import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
 
 type LogLevel = 'info' | 'warn' | 'error'
 export interface LogEntry { level: LogLevel; message: string; detail?: string }
@@ -30,6 +31,24 @@ export interface HttpResponse {
   body: string
   duration: number
   size: number
+  /** Cookies set by the response, including any redirect hops. */
+  cookies?: ResponseCookie[]
+}
+
+/** Lets the caller decide which cookies are sent and where received cookies are kept. */
+export interface CookieJarHook {
+  enabled: boolean
+  attach(url: string): { header: string; names: string[] }
+  store(url: string, setCookie: string[]): ResponseCookie[]
+}
+
+const findHeader = (headers: Record<string, string>, name: string): string | undefined =>
+  Object.keys(headers).find((k) => k.toLowerCase() === name)
+
+const asList = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === 'string' ? [v] : [])
+
+function describeCookies(cookies: ResponseCookie[]): string {
+  return cookies.map((c) => `${c.name} @ ${c.domain}${c.path}`).join(', ')
 }
 
 export async function executeRequest(
@@ -40,9 +59,10 @@ export async function executeRequest(
     timeout?: number
     signal?: AbortSignal
     onLog?: (entry: LogEntry) => void
+    cookieJar?: CookieJarHook
   } = {}
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog } = options
+  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar } = options
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 
@@ -160,6 +180,30 @@ export async function executeRequest(
     } catch { /* skip */ }
   }
 
+  // Cookie values are never logged, only their names. A hand-written Cookie header wins over the jar.
+  const manualCookie = findHeader(headers, 'cookie')
+  const receivedCookies: ResponseCookie[] = []
+  if (manualCookie) {
+    log('info', 'Cookie header set on the request: cookies from the jar are not sent')
+  } else if (cookieJar?.enabled) {
+    const { header, names } = cookieJar.attach(req.url)
+    if (header) {
+      headers['Cookie'] = header
+      log('info', `Cookies: sending ${names.length} from the jar (${names.join(', ')})`)
+    }
+  }
+  const ingest = (url: string, setCookie: string[]) => {
+    if (setCookie.length === 0) return
+    const stored = cookieJar ? cookieJar.store(url, setCookie) : parseResponseCookies(url, setCookie)
+    receivedCookies.push(...stored)
+    const kept = stored.filter((c) => !c.rejected && !c.deleted)
+    if (kept.length > 0) log('info', `Cookies: ${cookieJar?.enabled ? 'stored' : 'received (jar disabled, not stored)'} ${kept.length} (${describeCookies(kept)})`)
+    const removed = stored.filter((c) => c.deleted)
+    if (removed.length > 0) log('info', `Cookies: ${cookieJar?.enabled ? 'removed' : 'expired by the response'} ${removed.length} (${describeCookies(removed)})`)
+    const dropped = stored.filter((c) => c.rejected)
+    if (dropped.length > 0) log('warn', `Cookies: ignored ${dropped.length} (${describeCookies(dropped)})`)
+  }
+
   const config: AxiosRequestConfig = {
     method: req.method,
     url: req.url,
@@ -169,6 +213,16 @@ export async function executeRequest(
     signal,
     maxRedirects: followRedirects ? 5 : 0,
     validateStatus: () => true,
+    beforeRedirect: (options, responseDetails, requestDetails) => {
+      const from = requestDetails?.url ?? req.url
+      ingest(from, asList(responseDetails.headers['set-cookie']))
+      if (manualCookie || !cookieJar?.enabled) return
+      const target = (options as { href?: string }).href ?? from
+      const headerBag = options.headers as Record<string, string>
+      for (const k of Object.keys(headerBag)) if (k.toLowerCase() === 'cookie') delete headerBag[k]
+      const { header } = cookieJar.attach(target)
+      if (header) headerBag['Cookie'] = header
+    },
     // Proxying is resolved explicitly below so it can be logged; stop axios applying env proxies on top.
     proxy: false,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
@@ -194,8 +248,10 @@ export async function executeRequest(
 
     const responseHeaders: Record<string, string> = {}
     for (const [k, v] of Object.entries(response.headers)) {
-      responseHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
+      responseHeaders[k] = Array.isArray(v) ? v.join(k.toLowerCase() === 'set-cookie' ? '\n' : ', ') : String(v ?? '')
     }
+    const finalUrl = (response.request as { res?: { responseUrl?: string } } | undefined)?.res?.responseUrl ?? req.url
+    ingest(finalUrl, asList(response.headers['set-cookie']))
 
     const size = Buffer.byteLength(body, 'utf8')
     const statusLine = `← ${response.status} ${response.statusText} (${duration}ms, ${formatBytes(size)})`
@@ -208,7 +264,8 @@ export async function executeRequest(
       headers: responseHeaders,
       body,
       duration,
-      size
+      size,
+      cookies: receivedCookies
     }
   } catch (err: unknown) {
     const duration = Date.now() - start

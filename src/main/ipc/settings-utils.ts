@@ -8,6 +8,7 @@ export type GeneralSettings = {
   updateFeedUrl?: string
   historyEnabled?: boolean
   historyLimit?: number
+  cookiesEnabled?: boolean
 }
 
 const GENERAL_DEFAULTS: GeneralSettings = {
@@ -18,6 +19,7 @@ const GENERAL_DEFAULTS: GeneralSettings = {
   updateFeedUrl: undefined,
   historyEnabled: true,
   historyLimit: 500,
+  cookiesEnabled: true,
 }
 
 export function parseGeneralSettings(value: string | undefined): GeneralSettings {
@@ -30,6 +32,7 @@ export function parseGeneralSettings(value: string | undefined): GeneralSettings
     if (typeof parsed['defaultTimeout'] === 'number') result.defaultTimeout = parsed['defaultTimeout']
     if (typeof parsed['autoUpdate'] === 'boolean') result.autoUpdate = parsed['autoUpdate']
     if (typeof parsed['historyEnabled'] === 'boolean') result.historyEnabled = parsed['historyEnabled']
+    if (typeof parsed['cookiesEnabled'] === 'boolean') result.cookiesEnabled = parsed['cookiesEnabled']
     if (typeof parsed['historyLimit'] === 'number' && parsed['historyLimit'] >= 0) result.historyLimit = Math.min(Math.floor(parsed['historyLimit']), 5000)
     if (typeof parsed['updateFeedUrl'] === 'string') result.updateFeedUrl = parsed['updateFeedUrl'] || undefined
   } catch { /* use defaults */ }
