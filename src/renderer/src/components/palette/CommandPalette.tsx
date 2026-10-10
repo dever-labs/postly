@@ -173,6 +173,11 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+        <div aria-hidden="true" className="flex gap-4 border-t border-th-border px-3 py-1.5 text-[10px] text-th-text-subtle">
+          <span>↑↓ navigate</span>
+          <span>↵ select</span>
+          <span>Esc close</span>
+        </div>
       </div>
     </div>
   )
