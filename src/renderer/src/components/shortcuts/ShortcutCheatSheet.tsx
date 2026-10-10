@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
-import { cheatSheet } from '@/lib/shortcuts'
+import { cheatSheet, shortcutLabels } from '@/lib/shortcuts'
 import { useShortcutHelpStore } from '@/store/shortcutHelp'
 
 export function ShortcutCheatSheet() {
@@ -12,18 +12,36 @@ function Sheet() {
   const hide = useShortcutHelpStore((s) => s.hide)
   const closeRef = useRef<HTMLButtonElement>(null)
   const previouslyFocused = useRef<Element | null>(document.activeElement)
-  const groups = useMemo(() => cheatSheet(window.api.platform === 'darwin'), [])
+  const isMac = window.api.platform === 'darwin'
+  const groups = useMemo(() => cheatSheet(isMac), [isMac])
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { closeRef.current?.focus() }, [])
-  useEffect(() => () => { if (previouslyFocused.current instanceof HTMLElement) previouslyFocused.current.focus() }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); hide(); return }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button, [href], input, [tabindex]:not([tabindex="-1"])'))
+      if (items.length === 0) { e.preventDefault(); return }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (!dialogRef.current.contains(active)) { e.preventDefault(); first.focus() }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [hide])
+  useEffect(() => () => { const el = previouslyFocused.current; if (el instanceof HTMLElement && el.isConnected) el.focus() }, [])
 
   return (
     <div
       className="fixed inset-0 z-[300] flex items-start justify-center bg-black/50 pt-[10vh] backdrop-blur-xs"
       onMouseDown={(e) => { if (e.target === e.currentTarget) hide() }}
-      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); hide() } }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"
@@ -53,7 +71,7 @@ function Sheet() {
             </section>
           ))}
           <p className="border-t border-th-border py-2 text-[11px] text-th-text-subtle">
-            Inside the code editor, its own keys win (for example Ctrl+Enter and Ctrl+/); only Save and the command palette work there.
+            Inside the code editor, its own keys win (for example {shortcutLabels('send', isMac)[0]} and {shortcutLabels('help', isMac)[0]}); only Save and the command palette work there.
           </p>
         </div>
       </div>

@@ -7,7 +7,10 @@ export async function createRequestInContext(): Promise<void> {
   const ui = useUIStore.getState()
   const { folders, requests, addRequestToFolder } = useCollectionsStore.getState()
   const active = useRequestsStore.getState().editingRequest
-  const target = (active && !isScratchId(active.id) && active.folderId) || folders.find((f) => !f.parentId)?.id
+  const selected = ui.selectedItem
+  const openFolder = selected && (selected.type === 'group' || selected.type === 'collection') && folders.some((f) => f.id === selected.id) ? selected.id : null
+  const activeFolder = !selected && active && !isScratchId(active.id) ? active.folderId : null
+  const target = openFolder || activeFolder || folders.find((f) => !f.parentId)?.id
   if (!target) { ui.addToast('Create a collection first', 'info'); return }
   const before = requests.length
   await addRequestToFolder(target)
