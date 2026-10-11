@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import https from 'https'
 import type { Agent } from 'http'
 import { HttpProxyAgent } from 'http-proxy-agent'
@@ -242,10 +241,17 @@ export function describeProxyError(message: string, proxy: ResolvedProxy): strin
   return message
 }
 
-/** Cheap fingerprint of TLS options for cache keys; never logged. */
+const tlsIdentities = new Map<string, string>()
+
+/** Short stable id for a set of TLS options, used in cache keys. Nothing derived from the options leaves memory. */
 export function tlsIdentity(options: Record<string, unknown>): string {
-  // codeql[js/insufficient-password-hash] -- cache-key fingerprint, not password storage
-  return crypto.createHash('sha256').update(JSON.stringify(options, (_, v) => (Buffer.isBuffer(v) ? v.toString('base64') : v))).digest('hex').slice(0, 16)
+  const serialized = JSON.stringify(options, (_, v) => (Buffer.isBuffer(v) ? v.toString('base64') : v))
+  let id = tlsIdentities.get(serialized)
+  if (!id) {
+    id = `tls${tlsIdentities.size + 1}`
+    tlsIdentities.set(serialized, id)
+  }
+  return id
 }
 
 let interceptorInstalled = false
