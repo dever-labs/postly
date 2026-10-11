@@ -524,7 +524,9 @@ async function readBody(
   // axios only guards the body while following redirects, so idle time is enforced here for every response.
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let timedOut = false
+  let lastActivity = Date.now()
   const armIdle = () => {
+    lastActivity = Date.now()
     if (idleTimer) clearTimeout(idleTimer)
     if (opts.idleTimeout > 0) idleTimer = setTimeout(() => { timedOut = true; data.destroy() }, opts.idleTimeout)
   }
@@ -554,7 +556,10 @@ async function readBody(
     parser?.end()
     if (timedOut && !cancelled) error = `timeout of ${opts.idleTimeout}ms exceeded`
   } catch (err) {
-    if (!cancelled) error = timedOut ? `timeout of ${opts.idleTimeout}ms exceeded` : err instanceof Error ? err.message : String(err)
+    const message = err instanceof Error ? err.message : String(err)
+    // With redirects on, axios' own socket timeout can fire a moment before the idle timer above and surfaces as "aborted"
+    const abortedWhileIdle = opts.idleTimeout > 0 && /aborted|premature close|socket hang up|ECONNRESET/i.test(message) && Date.now() - lastActivity >= opts.idleTimeout - 50
+    if (!cancelled) error = timedOut || abortedWhileIdle ? `timeout of ${opts.idleTimeout}ms exceeded` : message
   } finally {
     if (idleTimer) clearTimeout(idleTimer)
     opts.signal?.removeEventListener('abort', onAbort)
