@@ -10,6 +10,7 @@ const DEFAULTS: GeneralSettings = {
   autoUpdate: true,
   historyEnabled: true,
   historyLimit: 500,
+  cookiesEnabled: true,
 }
 
 export function GeneralSettings() {
@@ -72,6 +73,17 @@ export function GeneralSettings() {
               className="h-4 w-4 accent-blue-500"
             />
             <span className="text-sm text-th-text-secondary">Keep request history</span>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="cookies-enabled"
+              checked={settings.cookiesEnabled !== false}
+              onChange={(e) => update('cookiesEnabled', e.target.checked)}
+              className="h-4 w-4 accent-blue-500"
+            />
+            <span className="text-sm text-th-text-secondary">Remember cookies between requests</span>
           </label>
         </div>
 
