@@ -1,3 +1,4 @@
+import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../../shared/extract'
 // Postman Collection Format v2.0 / v2.1
 
 interface PostmanUrl {
@@ -48,10 +49,16 @@ interface PostmanRequest {
   description?: string | { content?: string }
 }
 
+interface PostmanEvent {
+  listen?: string
+  script?: { exec?: string[] | string }
+}
+
 interface PostmanItem {
   name?: string
   description?: string | { content?: string }
   request?: PostmanRequest
+  event?: PostmanEvent[]
   item?: PostmanItem[]
   auth?: PostmanAuth
 }
@@ -87,7 +94,7 @@ export interface PostmanOutRequest {
   auth: { type: string; config: Record<string, string> }
   ssl: string
   description: string
-  protocolConfig: Record<string, never>
+  protocolConfig: Record<string, string>
 }
 
 export interface PostmanOutGroup {
@@ -105,6 +112,8 @@ export interface PostmanOutCollection {
   auth: { type: string; config: Record<string, string> }
   ssl: string
   groups: PostmanOutGroup[]
+  /** Things that could not be converted, such as test scripts. */
+  warnings: string[]
 }
 
 // ─── Detection ────────────────────────────────────────────────────────────────
@@ -237,7 +246,57 @@ function parseAuth(auth?: PostmanAuth): { type: string; config: Record<string, s
   }
 }
 
-function convertItem(item: PostmanItem): PostmanOutRequest {
+const SET_CALL = /^pm\.(environment|collectionVariables|globals|variables)\.set\(\s*(['"])([^'"]+)\2\s*,\s*(.+?)\s*\)\s*;?$/
+const JSON_ALIAS = /^(?:const|let|var)\s+(\w+)\s*=\s*(?:pm\.response\.json\(\)|JSON\.parse\(\s*responseBody\s*\))\s*;?$/
+
+function valueToRule(expr: string, aliases: Set<string>): Pick<ExtractRule, 'source' | 'expression'> | null {
+  const header = /^pm\.response\.headers\.get\(\s*(['"])([^'"]+)\1\s*\)$/.exec(expr)
+  if (header) return { source: 'header', expression: header[2] }
+  const cookie = /^pm\.cookies\.get\(\s*(['"])([^'"]+)\1\s*\)$/.exec(expr)
+  if (cookie) return { source: 'cookie', expression: cookie[2] }
+  if (/^pm\.response\.code$/.test(expr)) return { source: 'status', expression: '' }
+  const json = /^(pm\.response\.json\(\)|\w+)((?:\.\w+|\[\d+\]|\[(?:'[^']*'|"[^"]*")\])*)$/.exec(expr)
+  if (json && (json[1] === 'pm.response.json()' || aliases.has(json[1]))) return { source: 'json', expression: `$${json[2]}` }
+  return null
+}
+
+/**
+ * Converts the simple "save a response value" test scripts into Extract rules. Anything else is
+ * reported as a warning rather than guessed at, because Postman scripts are arbitrary JavaScript.
+ */
+export function convertPostmanScripts(requestName: string, events: PostmanEvent[] | undefined): { rules: ExtractRule[]; warnings: string[] } {
+  const rules: ExtractRule[] = []
+  const warnings: string[] = []
+  for (const event of events ?? []) {
+    if (event.listen !== 'test') {
+      if (event.listen === 'prerequest' && scriptLines(event).length > 0) warnings.push(`"${requestName}": pre-request script was not imported`)
+      continue
+    }
+    const aliases = new Set<string>()
+    const skipped: string[] = []
+    for (const line of scriptLines(event)) {
+      const alias = JSON_ALIAS.exec(line)
+      if (alias) { aliases.add(alias[1]); continue }
+      const set = SET_CALL.exec(line)
+      const rule = set && (set[1] === 'environment' || set[1] === 'collectionVariables') ? valueToRule(set[4], aliases) : null
+      if (set && rule) {
+        rules.push({ id: `postman-${nextId()}`, ...rule, variable: set[3], scope: set[1] === 'environment' ? 'environment' : 'collection', enabled: true })
+      } else skipped.push(line)
+    }
+    if (skipped.length > 0) {
+      warnings.push(`"${requestName}": ${skipped.length} script line${skipped.length !== 1 ? 's' : ''} could not be converted (first: ${skipped[0].slice(0, 70)})`)
+    }
+  }
+  return { rules, warnings }
+}
+
+function scriptLines(event: PostmanEvent): string[] {
+  const exec = event.script?.exec
+  const lines = Array.isArray(exec) ? exec : typeof exec === 'string' ? exec.split('\n') : []
+  return lines.map((l) => l.replace(/\/\/.*$/, '').trim()).filter(Boolean)
+}
+
+function convertItem(item: PostmanItem, warnings: string[]): PostmanOutRequest {
   const req = item.request ?? {}
   const { raw: url, query } = resolveUrl(req.url)
   const { bodyType, bodyContent } = parseBody(req.body)
@@ -246,8 +305,12 @@ function convertItem(item: PostmanItem): PostmanOutRequest {
     .filter((h) => h.key)
     .map((h) => ({ key: h.key, value: h.value ?? '', enabled: !h.disabled }))
 
+  const name = item.name ?? 'Request'
+  const scripts = convertPostmanScripts(name, item.event)
+  warnings.push(...scripts.warnings)
+
   return {
-    name: item.name ?? 'Request',
+    name,
     method: (req.method ?? 'GET').toUpperCase(),
     url,
     protocol: 'http',
@@ -258,7 +321,7 @@ function convertItem(item: PostmanItem): PostmanOutRequest {
     auth: parseAuth(req.auth),
     ssl: 'inherit',
     description: extractText(req.description),
-    protocolConfig: {},
+    protocolConfig: scripts.rules.length > 0 ? { [EXTRACT_RULES_KEY]: serializeRules(scripts.rules) } : {},
   }
 }
 
@@ -285,6 +348,8 @@ export function parsePostmanCollection(json: unknown): PostmanOutCollection {
     return groupMap.get(groupName)!
   }
 
+  const warnings: string[] = []
+
   function processItems(items: PostmanItem[], parentFolder?: string) {
     for (const item of items) {
       if (item.item) {
@@ -296,7 +361,7 @@ export function parsePostmanCollection(json: unknown): PostmanOutCollection {
       } else if (item.request) {
         const groupName = parentFolder ?? 'Default'
         const group = ensureGroup(groupName, extractText(item.description), undefined)
-        group.requests.push(convertItem(item))
+        group.requests.push(convertItem(item, warnings))
       }
     }
   }
@@ -327,6 +392,7 @@ export function parsePostmanCollection(json: unknown): PostmanOutCollection {
     auth: parseAuth(col.auth),
     ssl: 'inherit',
     groups: finalGroups,
+    warnings,
   }
 }
 

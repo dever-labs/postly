@@ -15,6 +15,8 @@ import { MqttView } from '@/components/editor/MqttView'
 import { ParamsTab } from '@/components/editor/tabs/ParamsTab'
 import { HeadersTab } from '@/components/editor/tabs/HeadersTab'
 import { AuthTab } from '@/components/editor/tabs/AuthTab'
+import { ExtractTab } from '@/components/editor/tabs/ExtractTab'
+import { EXTRACT_RULES_KEY, parseRules } from '../../../../shared/extract'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore, isScratchId } from '@/store/requests'
@@ -332,6 +334,9 @@ export function RequestEditor() {
               <TabsTrigger value="headers">Headers</TabsTrigger>
               {protocol === 'http' && <TabsTrigger value="body">Body</TabsTrigger>}
               <TabsTrigger value="auth">Auth</TabsTrigger>
+              <TabsTrigger value="extract" data-testid="extract-trigger">
+                Extract{parseRules(pc[EXTRACT_RULES_KEY]).length > 0 ? ` (${parseRules(pc[EXTRACT_RULES_KEY]).length})` : ''}
+              </TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
 
@@ -379,6 +384,9 @@ export function RequestEditor() {
                 onTypeChange={onAuthTypeChange}
                 onConfigChange={onAuthConfigChange}
               />
+            </TabsContent>
+            <TabsContent value="extract">
+              <ExtractTab value={pc[EXTRACT_RULES_KEY]} onChange={(v) => updatePc(EXTRACT_RULES_KEY, v)} />
             </TabsContent>
             <TabsContent value="settings">
               <div className="flex flex-col gap-4 p-3">

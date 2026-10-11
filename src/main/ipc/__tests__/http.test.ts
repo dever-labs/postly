@@ -28,6 +28,11 @@ vi.mock('../../services/file-access', () => ({
   confirmLocalFileReads: vi.fn(async () => true)
 }))
 
+vi.mock('../../services/extract-apply', () => ({
+  applyExtraction: vi.fn(),
+  guardedRegex: vi.fn()
+}))
+
 vi.mock('../../services/history', () => ({
   recordHistory: vi.fn()
 }))
@@ -38,6 +43,7 @@ vi.mock('../../services/oauth', () => ({
 }))
 
 import { registerHttpHandlers } from '../http'
+import { applyExtraction } from '../../services/extract-apply'
 import { recordHistory } from '../../services/history'
 import { queryOne, queryAll } from '../../database'
 import { executeRequest } from '../../services/http-executor'
@@ -258,6 +264,36 @@ describe('http IPC handler', () => {
       setupDb({ envName: 'Dev', envVars: [{ key: 'TOKEN', value: 'top-secret-value' }] })
       const data = await invokeOk(baseReq({ headers: { A: '{{TOKEN}}' } }))
       expect(JSON.stringify(data.logs)).not.toContain('top-secret-value')
+    })
+
+    it('runs Extract rules after the response and reports them without failing the request', async () => {
+      setupDb({ envName: 'Dev', folder: { id: 'c1', name: 'Col' } })
+      mockExec.mockResolvedValueOnce({ status: 200, statusText: 'OK', headers: {}, body: '{"token":"abc"}', duration: 1, size: 15 })
+      vi.mocked(applyExtraction).mockImplementationOnce((results) =>
+        results.map((r) => ({ variable: r.rule.variable, scope: r.rule.scope, ok: r.ok, display: r.value, error: r.error })))
+      const rules = [
+        { id: '1', source: 'json', expression: '$.token', variable: 'TOKEN', scope: 'environment', enabled: true },
+        { id: '2', source: 'json', expression: '$.missing', variable: 'NOPE', scope: 'collection', enabled: true },
+      ]
+      const data = await invokeOk({ ...baseReq({ folderId: 'c1' }), extractRules: rules })
+      expect(vi.mocked(applyExtraction).mock.calls.at(-1)?.[1]).toEqual({ envId: 'e1', collectionId: 'c1' })
+      expect(data.logs).toContainEqual(expect.objectContaining({ level: 'info', message: 'Extract: TOKEN ← abc (environment)' }))
+      expect(data.logs).toContainEqual(expect.objectContaining({ level: 'warn', message: expect.stringContaining('NOPE not set') }))
+      expect(data.extracted).toEqual([{ variable: 'TOKEN', scope: 'environment' }])
+    })
+
+    it('still returns the response when storing extracted values throws', async () => {
+      setupDb({ envName: 'Dev' })
+      vi.mocked(applyExtraction).mockImplementationOnce(() => { throw new Error('disk full') })
+      const data = await invokeOk({ ...baseReq(), extractRules: [{ id: '1', source: 'status', expression: '', variable: 'S', scope: 'environment', enabled: true }] })
+      expect(data.logs).toContainEqual(expect.objectContaining({ level: 'warn', message: expect.stringContaining('disk full') }))
+      expect(data.status).toBeDefined()
+    })
+
+    it('does nothing without rules', async () => {
+      const before = vi.mocked(applyExtraction).mock.calls.length
+      await invokeOk(baseReq())
+      expect(vi.mocked(applyExtraction).mock.calls.length).toBe(before)
     })
 
     it('leaves unresolved {{VAR}} in URL unchanged', async () => {
