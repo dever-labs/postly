@@ -1,6 +1,9 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import type { ExtractRule } from '../../shared/extract'
 import https from 'https'
+import type { Readable } from 'stream'
+import { StringDecoder } from 'string_decoder'
+import { createNdjsonParser, createSseParser, streamKindOf, type StreamEvent, type StreamKind } from '../../shared/stream'
 import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
 import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
@@ -66,9 +69,11 @@ export async function executeRequest(
     cookieJar?: CookieJarHook
     /** Client certificate and custom CA options for the target URL. */
     tlsFor?: (url: string) => TlsSelection
+    /** Receives live events for Server-Sent Events and NDJSON responses. */
+    onStream?: (message: StreamMessage) => void
   } = {}
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor } = options
+  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor, onStream } = options
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
 
@@ -258,6 +263,8 @@ export async function executeRequest(
     // Proxying is resolved explicitly below so it can be logged; stop axios applying env proxies on top.
     proxy: false,
     // codeql[js/disabling-certificate-validation] -- intentional: user-controlled dev setting
+    // The body is read incrementally so event streams can be shown live; other responses are buffered below.
+    responseType: 'stream',
     httpsAgent: sslVerification && !hasTls ? undefined : new https.Agent({ rejectUnauthorized: sslVerification, ...tlsSelection.options })
   }
 
@@ -276,12 +283,6 @@ export async function executeRequest(
 
   try {
     const response = await axios(config)
-    const duration = Date.now() - start
-    const body =
-      typeof response.data === 'string'
-        ? response.data
-        : JSON.stringify(response.data, null, 2)
-
     const responseHeaders: Record<string, string> = {}
     for (const [k, v] of Object.entries(response.headers)) {
       responseHeaders[k] = Array.isArray(v) ? v.join(k.toLowerCase() === 'set-cookie' ? '\n' : ', ') : String(v ?? '')
@@ -289,9 +290,20 @@ export async function executeRequest(
     const finalUrl = (response.request as { res?: { responseUrl?: string } } | undefined)?.res?.responseUrl ?? req.url
     ingest(finalUrl, asList(response.headers['set-cookie']))
 
-    const size = Buffer.byteLength(body, 'utf8')
-    const statusLine = `← ${response.status} ${response.statusText} (${duration}ms, ${formatBytes(size)})`
-    if (response.status >= 400) log('warn', statusLine)
+    const kind = streamKindOf(responseHeaders[findHeader(responseHeaders, 'content-type') ?? ''])
+    const received = await readBody(response.data, {
+      kind: onStream ? kind : null,
+      signal,
+      onStream,
+      onLog: log,
+      start: () => onStream?.({ type: 'start', kind: kind as StreamKind, status: response.status, statusText: response.statusText, headers: responseHeaders }),
+    })
+    const duration = Date.now() - start
+    const body = received.body
+    const size = received.size
+    const note = received.cancelled ? ', stopped' : received.error ? `, interrupted: ${received.error}` : ''
+    const statusLine = `← ${response.status} ${response.statusText} (${duration}ms, ${formatBytes(size)}${note})`
+    if (response.status >= 400 || received.error) log('warn', statusLine)
     else log('info', statusLine)
 
     return {
@@ -317,6 +329,96 @@ export async function executeRequest(
       size: Buffer.byteLength(shown, 'utf8')
     }
   }
+}
+
+export type StreamMessage =
+  | { type: 'start'; kind: StreamKind; status: number; statusText: string; headers: Record<string, string> }
+  | { type: 'events'; events: StreamEvent[] }
+
+/** Raw stream bodies are kept up to this size; the live event list is unaffected. */
+const MAX_STREAM_BODY_BYTES = 5 * 1024 * 1024
+const EVENT_BATCH_MS = 50
+
+interface ReadResult { body: string; size: number; cancelled?: boolean; error?: string }
+
+/** Matches how axios presents buffered bodies: JSON is pretty-printed, anything else is returned as text. */
+function formatBuffered(text: string): string {
+  if (text === '') return text
+  try { return JSON.stringify(JSON.parse(text), null, 2) } catch { return text }
+}
+
+const isReadable = (v: unknown): v is Readable => !!v && typeof (v as Readable).on === 'function' && typeof (v as Readable).pipe === 'function'
+
+async function readBody(
+  data: unknown,
+  opts: { kind: StreamKind | null; signal?: AbortSignal; onStream?: (m: StreamMessage) => void; onLog: (level: LogLevel, message: string) => void; start: () => void }
+): Promise<ReadResult> {
+  if (!isReadable(data)) {
+    const body = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
+    return { body, size: Buffer.byteLength(body, 'utf8') }
+  }
+
+  const decoder = new StringDecoder('utf8')
+  const streamStart = Date.now()
+  let pending: StreamEvent[] = []
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let count = 0
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null }
+    if (pending.length === 0) return
+    opts.onStream?.({ type: 'events', events: pending })
+    pending = []
+  }
+  const emit = (e: Omit<StreamEvent, 'index' | 'at'>) => {
+    pending.push({ ...e, index: ++count, at: Date.now() - streamStart })
+    if (!timer) timer = setTimeout(flush, EVENT_BATCH_MS)
+  }
+  const parser = opts.kind === 'sse' ? createSseParser(emit) : opts.kind === 'ndjson' ? createNdjsonParser(emit) : null
+  if (opts.kind) {
+    opts.start()
+    opts.onLog('info', `Streaming ${opts.kind === 'sse' ? 'Server-Sent Events' : 'NDJSON'} response`)
+  }
+
+  const chunks: string[] = []
+  let size = 0
+  let kept = 0
+  let truncated = false
+  let cancelled = false
+  let error: string | undefined
+
+  const onAbort = () => { cancelled = true; data.destroy() }
+  if (opts.signal?.aborted) onAbort()
+  else opts.signal?.addEventListener('abort', onAbort, { once: true })
+
+  try {
+    for await (const chunk of data) {
+      const buf = chunk as Buffer
+      size += buf.length
+      const text = decoder.write(buf)
+      parser?.push(text)
+      if (kept < MAX_STREAM_BODY_BYTES || !opts.kind) {
+        chunks.push(text)
+        kept += buf.length
+      } else if (!truncated) {
+        truncated = true
+        opts.onLog('warn', `Stream body exceeded ${formatBytes(MAX_STREAM_BODY_BYTES)}; later data is shown in the Stream tab only`)
+      }
+    }
+    const tail = decoder.end()
+    if (tail) { parser?.push(tail); chunks.push(tail) }
+    parser?.end()
+  } catch (err) {
+    if (!cancelled) error = err instanceof Error ? err.message : String(err)
+  } finally {
+    opts.signal?.removeEventListener('abort', onAbort)
+    flush()
+  }
+
+  // Cancelling a plain (non-streamed) request should still report as a cancellation.
+  if (cancelled && !opts.kind) throw new Error('canceled')
+  if (error && !opts.kind) throw new Error(error)
+  const text = chunks.join('')
+  return { body: opts.kind ? text : formatBuffered(text), size, cancelled, error }
 }
 
 async function executeNtlmRequest(

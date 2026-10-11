@@ -278,6 +278,7 @@ export function registerHttpHandlers(): void {
       const response = await executeRequest(interpolatedReq, {
         sslVerification, followRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
         signal: controller.signal,
+        onStream: (message) => { if (!event.sender.isDestroyed()) event.sender.send('postly:http:stream', message) },
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })
       currentAbortController = null

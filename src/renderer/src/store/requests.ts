@@ -5,6 +5,34 @@ import { useCollectionsStore } from './collections'
 import { useEnvironmentsStore } from './environments'
 import { useVariablesStore } from './variables'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../shared/extract'
+import { MAX_STREAM_EVENTS, type StreamEvent, type StreamKind } from '../../../shared/stream'
+
+export interface StreamState {
+  kind: StreamKind
+  events: StreamEvent[]
+  /** Older events discarded to keep memory bounded. */
+  dropped: number
+  active: boolean
+}
+
+type StreamMessage =
+  | { type: 'start'; kind: StreamKind; status: number; statusText: string; headers: Record<string, string> }
+  | { type: 'events'; events: StreamEvent[] }
+
+let pendingResume: { lastEventId: string; previous: StreamState } | null = null
+
+const endStream = (stream: StreamState | null): StreamState | null => (stream ? { ...stream, active: false } : null)
+
+function appendEvents(stream: StreamState, incoming: StreamEvent[]): StreamState {
+  const next = incoming.map((e, i) => ({ ...e, index: stream.dropped + stream.events.length + i + 1 }))
+  let events = stream.events.concat(next)
+  let dropped = stream.dropped
+  if (events.length > MAX_STREAM_EVENTS) {
+    dropped += events.length - MAX_STREAM_EVENTS
+    events = events.slice(events.length - MAX_STREAM_EVENTS)
+  }
+  return { ...stream, events, dropped }
+}
 
 /** Extract rules write variables in the main process; bring the renderer's copies up to date. */
 async function refreshExtractedVariables(extracted: NonNullable<HttpResponse['extracted']>): Promise<void> {
@@ -20,6 +48,10 @@ interface RequestsState {
   savedRequest: Request | null
   response: HttpResponse | null
   isLoading: boolean
+  /** Live Server-Sent Events / NDJSON data for the current response, if it is a stream. */
+  stream: StreamState | null
+  /** Re-sends the request with Last-Event-ID so the server can continue after the last received event. */
+  resumeStream: () => void
   setActiveRequest: (request: Request) => void
   openHistoryEntry: (entry: HistoryEntryDetail) => void
   clearActiveRequest: () => void
@@ -121,6 +153,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   savedRequest: null,
   response: null,
   isLoading: false,
+  stream: null,
 
   setActiveRequest: (request: Request) => {
     // Flush any pending draft save for the outgoing request before switching
@@ -129,7 +162,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const saved: Request = JSON.parse(JSON.stringify(request)) as Request
     const base: Request = JSON.parse(JSON.stringify(request)) as Request
     // Set state immediately so the UI responds without waiting for IPC
-    set({ activeRequestId: request.id, editingRequest: base, savedRequest: saved, response: null })
+    set({ activeRequestId: request.id, editingRequest: base, savedRequest: saved, response: null, stream: null })
     // Load any persisted draft in the background; discard result if user already moved on
     void window.api.drafts.request.get({ requestId: request.id })
       .then((result) => {
@@ -193,13 +226,14 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       savedRequest: JSON.parse(JSON.stringify(request)) as Request,
       response,
       isLoading: false,
+      stream: null,
     })
   },
 
   clearActiveRequest: () => {
     flushPendingDraftSave()
     clearUndo()
-    set({ activeRequestId: null, editingRequest: null, savedRequest: null, response: null })
+    set({ activeRequestId: null, editingRequest: null, savedRequest: null, response: null, stream: null })
   },
 
   updateField: (field: keyof Request, value: unknown) => {
@@ -276,7 +310,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const { editingRequest, isLoading } = get()
     if (!editingRequest || isLoading) return
 
-    set({ isLoading: true, response: null })
+    const resume = pendingResume
+    pendingResume = null
+    set({ isLoading: true, response: null, stream: null })
 
     const pc = editingRequest.protocolConfig ?? {}
     let bodyContent = editingRequest.bodyContent
@@ -305,8 +341,23 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       folderId: editingRequest.folderId,
     }
     httpRequest.params = kvpToRecord(editingRequest.params)
+    if (resume) httpRequest.headers = { ...httpRequest.headers, 'Last-Event-ID': resume.lastEventId }
     const extractRules = parseRules(pc[EXTRACT_RULES_KEY])
     if (extractRules.length > 0) httpRequest.extractRules = extractRules
+
+    const offStream = window.api.http.onStream((raw) => {
+      const message = raw as StreamMessage
+      if (message.type === 'start') {
+        const base: StreamState = resume ? { ...resume.previous, kind: message.kind, active: true } : { kind: message.kind, events: [], dropped: 0, active: true }
+        set({
+          stream: base,
+          response: { status: message.status, statusText: message.statusText, headers: message.headers, body: '', duration: 0, size: 0 },
+        })
+      } else {
+        const current = get().stream
+        if (current) set({ stream: appendEvents(current, message.events) })
+      }
+    })
 
     try {
       const { data, error, logs } = await window.api.http.execute(httpRequest) as { data?: HttpResponse; error?: string; logs?: HttpResponse['logs'] }
@@ -320,10 +371,11 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
           size: 0,
           logs,
         }
-        set({ response: errorResponse, isLoading: false })
+        set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
         return
       }
-      set({ response: data as HttpResponse, isLoading: false })
+      const finished = get().stream
+      set({ response: data as HttpResponse, isLoading: false, stream: endStream(finished) })
       if (data?.extracted?.length) void refreshExtractedVariables(data.extracted)
     } catch (err) {
       const errorResponse: HttpResponse = {
@@ -334,8 +386,19 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
         duration: 0,
         size: 0,
       }
-      set({ response: errorResponse, isLoading: false })
+      set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
+    } finally {
+      offStream()
     }
+  },
+
+  resumeStream: () => {
+    const { stream, isLoading } = get()
+    if (!stream || isLoading) return
+    const last = [...stream.events].reverse().find((e) => e.id)?.id
+    if (!last) return
+    pendingResume = { lastEventId: last, previous: stream }
+    void get().sendRequest()
   },
 
   cancelRequest: () => {
