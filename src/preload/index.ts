@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+interface UpdaterEventData {
+  type: string
+  version?: string
+  percent?: number
+  error?: string
+  manualInstall?: boolean
+  url?: string
+}
+
 const api = {
   folders: {
     list: () => ipcRenderer.invoke('postly:folders:list'),
@@ -221,8 +230,8 @@ const api = {
     install: () => ipcRenderer.invoke('postly:updater:install'),
     setFeed: (data: { url: string }) => ipcRenderer.invoke('postly:updater:set-feed', data),
     getEnterpriseConfig: () => ipcRenderer.invoke('postly:updater:get-enterprise-config') as Promise<{ data?: { updateUrl?: string }; error?: string }>,
-    onEvent: (cb: (event: { type: string; version?: string; percent?: number; error?: string }) => void) => {
-      const handler = (_: unknown, event: unknown) => cb(event as { type: string; version?: string; percent?: number; error?: string })
+    onEvent: (cb: (event: UpdaterEventData) => void) => {
+      const handler = (_: unknown, event: unknown) => cb(event as UpdaterEventData)
       ipcRenderer.on('postly:updater:event', handler)
       return () => ipcRenderer.removeListener('postly:updater:event', handler)
     },

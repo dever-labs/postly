@@ -9,6 +9,10 @@ export interface UpdaterEvent {
   version?: string
   percent?: number
   error?: string
+  /** The update can't be installed in-app (e.g. macOS rejected its code signature); the user has to download it. */
+  manualInstall?: boolean
+  /** Where to download the update when manualInstall is set. */
+  url?: string
 }
 
 export interface EnterpriseConfig {
@@ -31,7 +35,14 @@ type AutoUpdater = {
 /** Default GitHub publish config — mirrors electron-builder.yml */
 const GITHUB_FEED = { provider: 'github', owner: 'dever-labs', repo: 'postly' }
 
+const RELEASES_URL = 'https://github.com/dever-labs/postly/releases'
+
+/** Squirrel.Mac refuses an update whose signature doesn't satisfy the running app's code requirement,
+ *  which is always the case for builds that aren't signed with a Developer ID certificate. */
+const SIGNATURE_ERROR = /code signature|did not pass validation|code requirement|kode opfyldte/i
+
 let win: BrowserWindow | null = null
+let offeredVersion: string | undefined
 let _autoUpdater: AutoUpdater | null = null
 let listenersAttached = false
 
@@ -110,11 +121,22 @@ export function initUpdater(mainWindow: BrowserWindow): void {
   au.logger = null
 
   au.on('checking-for-update', () => emit({ type: 'checking' }))
-  au.on('update-available', (info: unknown) => emit({ type: 'available', version: (info as { version?: string }).version }))
+  au.on('update-available', (info: unknown) => {
+    offeredVersion = (info as { version?: string }).version
+    emit({ type: 'available', version: offeredVersion })
+  })
   au.on('update-not-available', () => emit({ type: 'not-available' }))
   au.on('download-progress', (progress: unknown) => emit({ type: 'progress', percent: Math.round((progress as { percent: number }).percent) }))
   au.on('update-downloaded', (info: unknown) => emit({ type: 'downloaded', version: (info as { version?: string }).version }))
-  au.on('error', (err: unknown) => emit({ type: 'error', error: (err as Error).message }))
+  au.on('error', (err: unknown) => {
+    const message = (err as Error).message
+    if (SIGNATURE_ERROR.test(message)) {
+      const url = offeredVersion ? `${RELEASES_URL}/tag/v${offeredVersion}` : `${RELEASES_URL}/latest`
+      emit({ type: 'error', error: message, manualInstall: true, url, version: offeredVersion })
+    } else {
+      emit({ type: 'error', error: message })
+    }
+  })
 }
 
 export function checkForUpdates(): void {

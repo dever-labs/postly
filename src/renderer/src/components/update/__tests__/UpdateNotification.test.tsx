@@ -42,3 +42,22 @@ describe('UpdateNotification layout', () => {
     expect(mount('win32').className).toContain('h-8')
   })
 })
+
+describe('UpdateNotification — update that macOS will not install', () => {
+  it('points the user to a manual download', () => {
+    let emit: (e: Record<string, unknown>) => void = () => {}
+    const open = vi.fn()
+    vi.stubGlobal('open', open)
+    ;(window as unknown as { api: unknown }).api = {
+      platform: 'darwin',
+      updater: { onEvent: (cb: typeof emit) => { emit = cb; return () => {} }, download: vi.fn(), install: vi.fn() },
+    }
+    render(<UpdateNotification />)
+    act(() => emit({ type: 'error', error: 'did not pass validation', manualInstall: true, url: 'https://example.test/r', version: '1.2.3' }))
+    expect(screen.getByText(/can't be installed automatically/)).toBeDefined()
+    expect(screen.queryByText(/Update check failed/)).toBeNull()
+    act(() => { screen.getByText('Download manually').click() })
+    expect(open).toHaveBeenCalledWith('https://example.test/r', '_blank')
+    vi.unstubAllGlobals()
+  })
+})
