@@ -1,4 +1,4 @@
-import { simpleGit } from 'simple-git'
+import { simpleGit as createGit, type SimpleGit } from 'simple-git'
 import { app } from 'electron'
 import path from 'path'
 import os from 'os'
@@ -8,6 +8,68 @@ import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 import { importCollectionVariables } from './variable-store'
 import type { PostlyExportFile, ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+
+export const GIT_MISSING_MESSAGE =
+  "Git isn't installed or isn't on your PATH. Postly uses the git on your computer for git repositories. Install it from https://git-scm.com/downloads, then restart Postly."
+
+export class GitNotInstalledError extends Error {
+  constructor() {
+    super(GIT_MISSING_MESSAGE)
+    this.name = 'GitNotInstalledError'
+  }
+
+  // IPC handlers report String(err); keep the message free of an "Error:" prefix
+  toString(): string {
+    return this.message
+  }
+}
+
+function isGitMissing(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null
+  return e?.code === 'ENOENT' || /spawn git ENOENT/i.test(e?.message ?? '')
+}
+
+/** Variables Postly sets itself, which simple-git's environment guard must let through. */
+const POSTLY_GIT_ENV_KEYS = ['GIT_TERMINAL_PROMPT', 'GCM_INTERACTIVE', 'GIT_SSH_COMMAND']
+
+/** simple-git rejects an explicit environment containing GIT_* or editor/askpass/pager variables, so inherit everything else. */
+function inheritedEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (/^(GIT_|SSH_ASKPASS$|EDITOR$|VISUAL$|PAGER$)/i.test(key)) continue
+    env[key] = value
+  }
+  return env
+}
+
+/** simple-git instance whose "git not found" failures become a readable GitNotInstalledError. */
+function simpleGit(baseDir?: string): SimpleGit {
+  const git = createGit({
+    ...(baseDir === undefined ? {} : { baseDir }),
+    allowEnvironment: POSTLY_GIT_ENV_KEYS,
+    // Only for GIT_SSH_COMMAND on SSH URLs; option-injection categories such as --upload-pack stay blocked
+    unsafe: { allowUnsafeSshCommand: true },
+  })
+  const guard = (value: unknown): unknown => {
+    const then = (value as { then?: unknown } | null)?.then
+    if (typeof then !== 'function') return value
+    return (value as PromiseLike<unknown>).then(undefined, (err: unknown) => {
+      throw isGitMissing(err) ? new GitNotInstalledError() : err
+    })
+  }
+  const proxy: SimpleGit = new Proxy(git, {
+    get(target, prop, receiver) {
+      const member = Reflect.get(target, prop, receiver)
+      if (typeof member !== 'function' || prop === 'then') return member
+      return (...args: unknown[]) => {
+        const result = member.apply(target, args)
+        return result === target ? proxy : guard(result)
+      }
+    },
+  })
+  return proxy
+}
+
 
 export function getDataDir(): string {
   return app.getPath('userData')
@@ -45,7 +107,7 @@ export function isSshUrl(url: string): boolean {
 
 /** Base environment applied to all git network operations (no SSH override). */
 const GIT_ENV_BASE = {
-  ...process.env,
+  ...inheritedEnv(),
   GIT_TERMINAL_PROMPT: '0',
   GCM_INTERACTIVE: 'never',
 }

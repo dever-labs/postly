@@ -246,13 +246,13 @@ export function IntegrationSetupPage() {
                 <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
                 <Input
                   autoFocus
-                  placeholder="https://github.com/org/repo.git   or   git@github.com:org/repo.git"
+                  placeholder="https://github.com/org/repo.git"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                   className="font-mono text-xs"
                 />
                 <p className="mt-1 text-[11px] text-th-text-faint">
-                  Uses your local git credentials — no token or OAuth app needed.
+                  Also accepts SSH URLs such as <span className="font-mono">git@github.com:org/repo.git</span>. Uses your local git credentials — no token or OAuth app needed.
                 </p>
               </div>
 
