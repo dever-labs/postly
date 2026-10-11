@@ -4,6 +4,7 @@ import { ResponseStatus } from '@/components/response/ResponseStatus'
 import { RawTab } from '@/components/response/tabs/RawTab'
 import { PreviewTab } from '@/components/response/tabs/PreviewTab'
 import { CookiesTab } from '@/components/response/tabs/CookiesTab'
+import { StreamTab } from '@/components/response/tabs/StreamTab'
 import { ConsoleTab } from '@/components/response/tabs/ConsoleTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils'
 const PrettyTab = lazy(() => import('@/components/response/tabs/PrettyTab').then((m) => ({ default: m.PrettyTab })))
 
 export function ResponseViewer() {
-  const { response, isLoading } = useRequestsStore()
+  const { response, isLoading, stream, resumeStream } = useRequestsStore()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -23,7 +24,7 @@ export function ResponseViewer() {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  if (isLoading) {
+  if (isLoading && !stream) {
     return (
       <div data-testid="response-loading" className="flex h-full items-center justify-center gap-2 text-sm text-th-text-subtle">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-th-border-strong border-t-th-text-secondary" />
@@ -67,8 +68,9 @@ export function ResponseViewer() {
 
       {/* Tabs */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Tabs defaultValue="pretty" className="flex h-full flex-col">
+        <Tabs key={stream ? 'stream' : 'plain'} defaultValue={stream ? 'stream' : 'pretty'} className="flex h-full flex-col">
           <TabsList className="px-3">
+            {stream && <TabsTrigger value="stream" data-testid="stream-tab-trigger">Stream</TabsTrigger>}
             <TabsTrigger value="pretty">Pretty</TabsTrigger>
             <TabsTrigger value="raw">Raw</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
@@ -93,6 +95,12 @@ export function ResponseViewer() {
               )}
             </TabsTrigger>
           </TabsList>
+
+          {stream && (
+            <TabsContent value="stream" className="flex-1 overflow-hidden">
+              <StreamTab stream={stream} onResume={resumeStream} />
+            </TabsContent>
+          )}
 
           <TabsContent value="pretty" className="flex-1 overflow-hidden">
             <Suspense fallback={null}>
