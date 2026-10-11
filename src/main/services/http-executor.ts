@@ -293,6 +293,7 @@ export async function executeRequest(
     const kind = streamKindOf(responseHeaders[findHeader(responseHeaders, 'content-type') ?? ''])
     const received = await readBody(response.data, {
       kind: onStream ? kind : null,
+      idleTimeout: timeout,
       signal,
       onStream,
       onLog: log,
@@ -351,7 +352,7 @@ const isReadable = (v: unknown): v is Readable => !!v && typeof (v as Readable).
 
 async function readBody(
   data: unknown,
-  opts: { kind: StreamKind | null; signal?: AbortSignal; onStream?: (m: StreamMessage) => void; onLog: (level: LogLevel, message: string) => void; start: () => void }
+  opts: { kind: StreamKind | null; idleTimeout: number; signal?: AbortSignal; onStream?: (m: StreamMessage) => void; onLog: (level: LogLevel, message: string) => void; start: () => void }
 ): Promise<ReadResult> {
   if (!isReadable(data)) {
     const body = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
@@ -386,12 +387,22 @@ async function readBody(
   let cancelled = false
   let error: string | undefined
 
+  // axios only guards the body while following redirects, so idle time is enforced here for every response.
+  let idleTimer: ReturnType<typeof setTimeout> | null = null
+  let timedOut = false
+  const armIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    if (opts.idleTimeout > 0) idleTimer = setTimeout(() => { timedOut = true; data.destroy() }, opts.idleTimeout)
+  }
+  armIdle()
+
   const onAbort = () => { cancelled = true; data.destroy() }
   if (opts.signal?.aborted) onAbort()
   else opts.signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
     for await (const chunk of data) {
+      armIdle()
       const buf = chunk as Buffer
       size += buf.length
       const text = decoder.write(buf)
@@ -407,9 +418,11 @@ async function readBody(
     const tail = decoder.end()
     if (tail) { parser?.push(tail); chunks.push(tail) }
     parser?.end()
+    if (timedOut && !cancelled) error = `timeout of ${opts.idleTimeout}ms exceeded`
   } catch (err) {
-    if (!cancelled) error = err instanceof Error ? err.message : String(err)
+    if (!cancelled) error = timedOut ? `timeout of ${opts.idleTimeout}ms exceeded` : err instanceof Error ? err.message : String(err)
   } finally {
+    if (idleTimer) clearTimeout(idleTimer)
     opts.signal?.removeEventListener('abort', onAbort)
     flush()
   }

@@ -31,6 +31,9 @@ beforeAll(async () => {
       let i = 0
       const t = setInterval(() => { res.write(`data: ${++i}\n\n`); if (i === 6) { clearInterval(t); res.end() } }, 100)
       res.on('close', () => clearInterval(t))
+    } else if (req.url === '/stall') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      res.write('hi')
     } else if (req.url === '/idle') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
       res.write('data: only\n\n')
@@ -106,6 +109,19 @@ describe('streaming responses', () => {
   it('ends an idle stream once the timeout elapses and keeps received events', async () => {
     const rec = recorder()
     const res = await executeRequest(req('/idle'), { timeout: 200, onStream: rec.onStream })
+    expect(res.status).toBe(200)
+    expect(rec.events().map((e) => e.data)).toEqual(['only'])
+  })
+
+  it.each([true, false])('reports a stalled plain body as a timeout (followRedirects=%s)', async (followRedirects) => {
+    const res = await executeRequest(req('/stall'), { timeout: 300, followRedirects, onStream: () => {} })
+    expect(res.status).toBe(0)
+    expect(res.statusText).toBe('timeout of 300ms exceeded')
+  })
+
+  it('ends a stalled event stream with received events when redirects are off', async () => {
+    const rec = recorder()
+    const res = await executeRequest(req('/idle'), { timeout: 200, followRedirects: false, onStream: rec.onStream })
     expect(res.status).toBe(200)
     expect(rec.events().map((e) => e.data)).toEqual(['only'])
   })
