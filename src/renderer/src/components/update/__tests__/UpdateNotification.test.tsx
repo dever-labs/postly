@@ -29,7 +29,16 @@ describe('UpdateNotification layout', () => {
     expect(mount('darwin').className).toContain('pl-20')
   })
 
-  it('keeps normal padding elsewhere', () => {
-    expect(mount('win32').className).not.toContain('pl-20')
+  it('leaves room for the minimize/maximize/close buttons on Windows and Linux', () => {
+    for (const platform of ['win32', 'linux']) {
+      const banner = mount(platform)
+      expect(banner.className).toContain('pr-44')
+      expect(banner.className).not.toContain('pl-20')
+      cleanup()
+    }
+  })
+
+  it('is as tall as the window controls', () => {
+    expect(mount('win32').className).toContain('h-8')
   })
 })

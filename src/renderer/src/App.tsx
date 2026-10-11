@@ -3,6 +3,7 @@ import { CurlImportDialog } from '@/components/editor/CurlImportDialog'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import React, { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
+import { WindowControls } from './components/layout/WindowControls'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { GitCommitOverlay } from './components/git/GitCommitOverlay'
 import { DeleteCollectionOverlay } from './components/collections/DeleteCollectionOverlay'
@@ -28,9 +29,11 @@ export default function App(): React.ReactElement {
 
   return (
     <TooltipProvider delayDuration={400}>
-      <div data-testid="app-root" className="h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
+      <div data-testid="app-root" className="relative h-screen w-screen bg-th-bg text-th-text-primary flex flex-col overflow-hidden">
         <UpdateNotification />
         <AppShell />
+        {/* Pinned to the window corner so it stays put when the update banner is shown */}
+        {window.api.platform !== 'darwin' && <WindowControls />}
         <SettingsModal />
         <GitCommitOverlay />
         <CommandPalette />
