@@ -35,6 +35,7 @@ beforeAll(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   base = `https://127.0.0.1:${(server.address() as AddressInfo).port}`
   // Same CA, reached by another host name, and happy to see a client certificate without requiring one
+  // codeql[js/disabling-certificate-validation] -- test server that accepts clients with or without a certificate
   other = https.createServer({ key: serverPem.key, cert: serverPem.cert, ca: [ca.cert], requestCert: true, rejectUnauthorized: false }, (req, res) => {
     const peer = (req.socket as TLSSocket).getPeerCertificate()
     res.end(JSON.stringify({ client: peer?.subject?.CN ?? null }))

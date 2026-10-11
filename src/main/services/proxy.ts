@@ -244,6 +244,7 @@ export function describeProxyError(message: string, proxy: ResolvedProxy): strin
 
 /** Cheap fingerprint of TLS options for cache keys; never logged. */
 export function tlsIdentity(options: Record<string, unknown>): string {
+  // codeql[js/insufficient-password-hash] -- cache-key fingerprint, not password storage
   return crypto.createHash('sha256').update(JSON.stringify(options, (_, v) => (Buffer.isBuffer(v) ? v.toString('base64') : v))).digest('hex').slice(0, 16)
 }
 
