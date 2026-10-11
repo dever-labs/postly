@@ -17,6 +17,7 @@ import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
+import { useVariablesStore } from '@/store/variables'
 
 // ─── Source icon helper ────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
     setSyncing(false)
     if (error) { addToast(`Sync failed: ${error}`, 'error'); return }
     await loadCollections()
+    void useVariablesStore.getState().load()
     addToast('Synced from remote', 'success')
   }
 

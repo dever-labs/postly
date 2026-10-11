@@ -6,6 +6,7 @@ import fs from 'fs'
 import crypto from 'crypto'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
+import { importCollectionVariables } from './variable-store'
 import type { PostlyExportFile, ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
 
 export function getDataDir(): string {
@@ -263,6 +264,7 @@ function upsertPostlyCollection(
 ) {
   run('DELETE FROM requests WHERE folder_id = ?', [collectionId])
   run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
+  importCollectionVariables(collectionId, col.variables)
   run(
     'UPDATE folders SET name = ?, source_meta = ?, updated_at = ? WHERE id = ?',
     [col.name, JSON.stringify({ integrationId, fileName }), now, collectionId]
