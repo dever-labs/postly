@@ -52,6 +52,15 @@ test.describe('cURL import and export', () => {
     await expect.poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText())).toContain("-u 'ann:hunter2'")
     await window.getByTestId('curl-copy-button').click()
     await window.getByTestId('curl-include-secrets').uncheck()
+
+    // Other languages share the same menu
+    await window.getByTestId('snippet-language').selectOption('python')
+    await window.getByTestId('curl-copy-submit').click()
+    await expect.poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText())).toContain('requests.request(')
+    const py = await electronApp.evaluate(({ clipboard }) => clipboard.readText())
+    expect(py).not.toContain('hunter2')
+    await window.getByTestId('curl-copy-button').click()
+    await window.getByTestId('snippet-language').selectOption('curl')
     await window.keyboard.press('Escape')
 
     // Import from the palette creates a new request
