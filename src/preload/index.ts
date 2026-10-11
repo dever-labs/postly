@@ -36,6 +36,11 @@ const api = {
   http: {
     execute: (request: unknown) => ipcRenderer.invoke('postly:http:execute', request),
     cancel: () => ipcRenderer.invoke('postly:http:cancel'),
+    onStream: (cb: (data: unknown) => void) => {
+      const handler = (_: unknown, data: unknown) => cb(data)
+      ipcRenderer.on('postly:http:stream', handler)
+      return () => ipcRenderer.removeListener('postly:http:stream', handler)
+    },
   },
   oauth: {
     configs: {
