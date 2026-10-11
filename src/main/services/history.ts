@@ -8,7 +8,7 @@ const MASK = '••••••••'
 
 const SECRET_NAME = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|apikey|x-auth-token)$|token|secret|password|passwd|api[-_]?key/i
 const SECRET_PARAM = /token|secret|password|passwd|key|sig/i
-const SECRET_CONFIG_KEYS = new Set(['token', 'password', 'clientSecret', 'accessToken', 'refreshToken', 'apiKey', 'value'])
+const SECRET_CONFIG_KEYS = new Set(['token', 'password', 'clientSecret', 'accessToken', 'refreshToken', 'apiKey', 'value', 'secretKey', 'sessionToken'])
 const AUTH_SCHEMES = /^(bearer|basic|digest|jwt|token|ntlm)$/i
 
 /** A value is safe to keep when it only consists of {{VARIABLE}} references (and an auth scheme word). */

@@ -5,6 +5,7 @@ import type { Readable } from 'stream'
 import { StringDecoder } from 'string_decoder'
 import { createNdjsonParser, createSseParser, streamKindOf, type StreamEvent, type StreamKind } from '../../shared/stream'
 import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
+import { applyApiKey, buildDigestHeader, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
 import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
 
@@ -72,9 +73,7 @@ export function appendQueryParams(url: string, params?: Record<string, string>):
   return `${base}${joiner}${query}${hash}`
 }
 
-export async function executeRequest(
-  initialReq: HttpRequest,
-  options: {
+export type ExecuteOptions = {
     sslVerification?: boolean
     followRedirects?: boolean
     timeout?: number
@@ -85,7 +84,43 @@ export async function executeRequest(
     tlsFor?: (url: string) => TlsSelection
     /** Receives live events for Server-Sent Events and NDJSON responses. */
     onStream?: (message: StreamMessage) => void
-  } = {}
+}
+
+/** Digest needs a challenge first: send without credentials, then answer a 401 once. */
+export async function executeRequest(initialReq: HttpRequest, options: ExecuteOptions = {}): Promise<HttpResponse> {
+  if (initialReq.authType !== 'digest') return runRequest(initialReq, options)
+
+  const log = (level: LogLevel, message: string) => options.onLog?.({ level, message })
+  const { username = '', password = '' } = initialReq.authConfig
+  if (!username) {
+    log('warn', 'Digest auth: no username set, sending without credentials')
+    return runRequest({ ...initialReq, authType: 'none' }, options)
+  }
+  const url = appendQueryParams(initialReq.url, initialReq.params)
+  const plain: HttpRequest = { ...initialReq, url, params: undefined, authType: 'none', authConfig: {} }
+  const first = await runRequest(plain, { ...options, onStream: undefined })
+  const wwwAuth = Object.entries(first.headers).find(([k]) => k.toLowerCase() === 'www-authenticate')?.[1]
+  const challenge = first.status === 401 ? parseDigestChallenge(wwwAuth) : null
+  if (!challenge) {
+    log('info', first.status === 401
+      ? 'Digest auth: the server answered 401 without a Digest challenge'
+      : 'Digest auth: the server did not ask for credentials, so none were sent')
+    return first
+  }
+  if (!isSupportedDigestAlgorithm(challenge.algorithm)) {
+    log('warn', `Digest auth: algorithm ${challenge.algorithm} is not supported`)
+    return first
+  }
+  const target = new URL(url)
+  const header = buildDigestHeader({ challenge, username, password, method: initialReq.method, uri: `${target.pathname}${target.search}` })
+  log('info', `Digest auth: answering the challenge for realm "${challenge.realm}" (${challenge.algorithm}${challenge.qop.includes('auth') ? ', qop=auth' : ''}); password hidden`)
+  const second = await runRequest({ ...plain, headers: { ...initialReq.headers, Authorization: header } }, options)
+  return { ...second, duration: first.duration + second.duration }
+}
+
+async function runRequest(
+  initialReq: HttpRequest,
+  options: ExecuteOptions
 ): Promise<HttpResponse> {
   const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor, onStream } = options
   const req: HttpRequest = { ...initialReq, url: appendQueryParams(initialReq.url, initialReq.params) }
@@ -206,6 +241,43 @@ export async function executeRequest(
     } catch { /* skip */ }
   }
 
+  // Credentials that end up in the URL must not reach the Console.
+  const displayUrl = req.url
+  if (req.authType === 'apikey') {
+    const applied = applyApiKey(req.url, headers, req.authConfig)
+    if (applied) {
+      req.url = applied.url
+      Object.assign(headers, applied.headers)
+      log('info', `Auth: ${applied.description}`)
+    } else {
+      log('warn', 'Auth: API key needs both a name and a value, nothing was added')
+    }
+  } else if (req.authType === 'awsv4') {
+    const { accessKey = '', secretKey = '', sessionToken = '', region = '', service = '' } = req.authConfig
+    if (!accessKey || !secretKey || !region || !service) {
+      log('warn', 'Auth: AWS Signature V4 needs access key, secret key, region and service, so the request was not signed')
+    } else {
+      const unsignable = data instanceof FormData
+      if (!unsignable && data !== null && typeof data === 'object' && !Buffer.isBuffer(data)) data = JSON.stringify(data)
+      // axios re-processes string bodies sent as JSON (trimming, quoting), which would change the signed bytes; Buffers are sent as is.
+      if (typeof data === 'string') data = Buffer.from(data, 'utf8')
+      try {
+        const signed = signAwsV4({
+          method: req.method,
+          url: req.url,
+          headers,
+          body: unsignable ? null : (data as string | Buffer | undefined),
+          config: { accessKey, secretKey, sessionToken: sessionToken || undefined, region, service },
+        })
+        Object.assign(headers, signed.headers)
+        log('info', `Auth: AWS Signature V4 signed for ${service} in ${region} (access key ${maskTail(accessKey)}; signed headers: ${signed.signedHeaders}; secrets hidden)`)
+        if (unsignable) log('warn', 'AWS Signature V4: multipart bodies are sent as UNSIGNED-PAYLOAD')
+      } catch (err) {
+        log('error', `AWS Signature V4 signing failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
   // Cookie values are never logged, only their names. A hand-written Cookie header wins over the jar.
   const manualCookie = findHeader(headers, 'cookie')
   const receivedCookies: ResponseCookie[] = []
@@ -293,7 +365,7 @@ export async function executeRequest(
     config.httpsAgent = proxy.httpsAgent
   }
 
-  log('info', `→ ${req.method.toUpperCase()} ${req.url}`)
+  log('info', `→ ${req.method.toUpperCase()} ${displayUrl}`)
   log('info', proxy ? `Proxy: ${proxy.display}` : 'Proxy: none (direct)')
 
   try {

@@ -194,6 +194,23 @@ export function buildSnippetModel(req: ExportableRequest, options: SnippetOption
     case 'ntlm':
       notes.push('NTLM authentication is not included')
       break
+    case 'apikey': {
+      const { key, value, in: where } = req.authConfig
+      if (key && value) {
+        if (where === 'query') {
+          const shown = secret(sub(value), '<api-key>')
+          url = url + (url.includes('?') ? '&' : '?') + `${encodeURIComponent(sub(key))}=${options.includeSecrets ? encodeURIComponent(shown) : shown}`
+        }
+        else headers.push({ key, value: secret(sub(value), '<api-key>') })
+      }
+      break
+    }
+    case 'digest':
+      notes.push('Digest authentication needs a challenge round trip and is not included')
+      break
+    case 'awsv4':
+      notes.push('AWS Signature V4 signs the final request when sent and is not included')
+      break
     case 'inherit':
       notes.push('Authentication inherited from the collection or folder is not included')
       break
