@@ -4,6 +4,9 @@ import React, { Suspense, lazy, useCallback, useMemo } from 'react'
 import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
+import { CurlCopyMenu } from '@/components/editor/CurlCopyMenu'
+import { importCurlIntoActive } from '@/lib/curlActions'
+import { looksLikeCurl } from '@/lib/curl'
 import { SendButton } from '@/components/editor/SendButton'
 import { ProtocolSelector } from '@/components/editor/ProtocolSelector'
 import { WebSocketView } from '@/components/editor/WebSocketView'
@@ -229,6 +232,7 @@ export function RequestEditor() {
           />
         )}
         <UrlBar
+          onPasteText={(text) => (looksLikeCurl(text) ? importCurlIntoActive(text) : false)}
           value={editingRequest.url}
           onChange={(url) => updateField('url', url)}
           onSend={protocol === 'http' || protocol === 'graphql' ? sendRequest : undefined}
@@ -237,6 +241,7 @@ export function RequestEditor() {
         {(protocol === 'http' || protocol === 'graphql') && (
           <SendButton onClick={sendRequest} onCancel={cancelRequest} isLoading={isLoading} />
         )}
+        {(protocol === 'http' || protocol === 'graphql') && <CurlCopyMenu />}
         {breadcrumb?.sourceType !== 'backstage' && !isScratchId(editingRequest.id) && (
           <>
             <button

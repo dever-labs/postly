@@ -1,4 +1,4 @@
-import { ChevronRight, Command, Keyboard, Globe, Settings, RefreshCw, Plus, Check } from 'lucide-react'
+import { ChevronRight, Command, Keyboard, Globe, Settings, RefreshCw, Plus, Check, Terminal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
@@ -6,6 +6,7 @@ import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { usePaletteStore } from '@/store/palette'
 import { useRequestsStore } from '@/store/requests'
+import { useCurlImportStore } from '@/store/curlImport'
 import { useShortcutHelpStore } from '@/store/shortcutHelp'
 import { useUIStore } from '@/store/ui'
 import { useWorkingSetStore } from '@/store/workingSet'
@@ -25,7 +26,7 @@ function ItemIcon({ item }: { item: PaletteItem }) {
   if (item.kind === 'request') {
     return <Badge variant={METHOD_COLORS[item.method ?? ''] ?? 'grey'} className="w-14 shrink-0 justify-center font-mono text-[10px]">{item.method ?? 'GET'}</Badge>
   }
-  const Icon = item.id === 'open-settings' ? Settings : item.id === 'show-shortcuts' ? Keyboard : item.id === 'check-updates' ? RefreshCw : item.kind === 'environment' ? Globe : Plus
+  const Icon = item.id === 'open-settings' ? Settings : item.id === 'show-shortcuts' ? Keyboard : item.id === 'import-curl' ? Terminal : item.id === 'check-updates' ? RefreshCw : item.kind === 'environment' ? Globe : Plus
   return <span className="flex w-14 shrink-0 justify-center text-th-text-subtle"><Icon className="h-3.5 w-3.5" /></span>
 }
 
@@ -85,6 +86,8 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
       await window.api.updater.check()
     } else if (item.id === 'new-request') {
       await createRequestInContext()
+    } else if (item.id === 'import-curl') {
+      useCurlImportStore.getState().show()
     } else if (item.id === 'show-shortcuts') {
       useShortcutHelpStore.getState().show()
     }

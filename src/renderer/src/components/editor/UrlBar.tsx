@@ -6,6 +6,8 @@ interface UrlBarProps {
   onChange: (url: string) => void
   onSend?: () => void
   isLoading?: boolean
+  /** Called with pasted text; return true when it was consumed (e.g. a cURL command) so the default paste is skipped */
+  onPasteText?: (text: string) => boolean
 }
 
 /**
@@ -13,7 +15,7 @@ interface UrlBarProps {
  * Only this component (and EnvInput inside it) re-renders on every keystroke;
  * the parent RequestEditor re-renders only after the 100 ms debounce fires.
  */
-export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend, isLoading }: UrlBarProps) {
+export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend, isLoading, onPasteText }: UrlBarProps) {
   const [localUrl, setLocalUrl] = useState(value)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stable ref so handleChange/handleSend never need onChange in their dep array
@@ -53,6 +55,12 @@ export const UrlBar = React.memo(function UrlBar({ value, onChange, onSend, isLo
       value={localUrl}
       onChange={handleChange}
       onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
+      onPaste={(e) => {
+        // Only take over when it would not clobber a URL the user is editing: an empty field or a full selection
+        const input = e.currentTarget
+        const replacesAll = input.value.trim() === '' || (input.selectionStart === 0 && input.selectionEnd === input.value.length)
+        if (replacesAll && onPasteText?.(e.clipboardData.getData('text'))) e.preventDefault()
+      }}
       placeholder="https://api.example.com/endpoint"
       data-testid="url-input"
       spellCheck={false}
