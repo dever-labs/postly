@@ -38,3 +38,33 @@ test.describe('update banner and window controls', () => {
     expect(geometry.bannerRegion).toBe('drag')
   })
 })
+
+test.describe('drag area', () => {
+  test('the top strip is draggable over the sidebar and the editor alike', async ({ window }) => {
+    await window.reload()
+    await window.waitForSelector('[data-testid="sidebar-drag-strip"]')
+    const strip = await window.evaluate(() => {
+      const sidebarStrip = document.querySelector('[data-testid="sidebar-drag-strip"]')!
+      const sidebar = document.querySelector('[data-testid="sidebar"]')!
+      const tabs = document.querySelector('[data-testid="tab-apis"]')!
+      const editor = document.querySelector('[data-testid="app-root"] .drag-region.relative')!
+      const s = sidebarStrip.getBoundingClientRect()
+      const editorHeader = [...editor.querySelectorAll('.drag-region')].find((el) => el.getBoundingClientRect().top <= 1)
+      return {
+        region: getComputedStyle(sidebarStrip).getPropertyValue('-webkit-app-region'),
+        top: s.top,
+        height: s.height,
+        widthMatchesSidebar: Math.round(s.width) === Math.round(sidebar.getBoundingClientRect().width),
+        tabsBelowStrip: tabs.getBoundingClientRect().top >= s.bottom,
+        editorStripHeight: editorHeader ? parseFloat(getComputedStyle(editorHeader).paddingTop) : null,
+        editorRegion: getComputedStyle(editor).getPropertyValue('-webkit-app-region'),
+      }
+    })
+    expect(strip.region).toBe('drag')
+    expect(strip.top).toBe(0)
+    expect(strip.widthMatchesSidebar).toBe(true)
+    expect(strip.tabsBelowStrip).toBe(true)
+    expect(strip.editorRegion).toBe('drag')
+    expect(strip.height).toBe(strip.editorStripHeight)
+  })
+})
