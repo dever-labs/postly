@@ -25,6 +25,11 @@ describe('applyApiKey', () => {
   })
 })
 
+const must = <T>(v: T | null): T => {
+  if (v === null) throw new Error('expected a value')
+  return v
+}
+
 describe('Digest', () => {
   const header = 'Digest realm="testrealm@host.com", qop="auth,auth-int", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", opaque="5ccc069c403ebaf9f0171e9517f40e41"'
 
@@ -36,7 +41,7 @@ describe('Digest', () => {
   })
 
   it('reproduces the RFC 2617 example response', () => {
-    const challenge = parseDigestChallenge(header)!
+    const challenge = must(parseDigestChallenge(header))
     const out = buildDigestHeader({ challenge, username: 'Mufasa', password: 'Circle Of Life', method: 'GET', uri: '/dir/index.html', cnonce: '0a4f113b' })
     expect(out).toContain('response="6629fae49393a05397450978507c4ef1"')
     expect(out).toContain('qop=auth, nc=00000001, cnonce="0a4f113b"')
@@ -44,7 +49,7 @@ describe('Digest', () => {
   })
 
   it('works without qop and with SHA-256', () => {
-    const c = parseDigestChallenge('Digest realm="r", nonce="n", algorithm=SHA-256')!
+    const c = must(parseDigestChallenge('Digest realm="r", nonce="n", algorithm=SHA-256'))
     const out = buildDigestHeader({ challenge: c, username: 'u', password: 'p', method: 'GET', uri: '/' })
     expect(out).toContain('algorithm=SHA-256')
     expect(out).not.toContain('qop=')

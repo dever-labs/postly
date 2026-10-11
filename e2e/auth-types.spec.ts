@@ -6,9 +6,22 @@ test.describe('API key authentication', () => {
   let server: http.Server
   let base = ''
   const seen: Array<{ url: string; key?: string }> = []
+  let digestChallenges = 0
+  let digestAnswers = 0
 
   test.beforeAll(async () => {
     server = http.createServer((req, res) => {
+      if (req.url === '/digest') {
+        if (req.headers.authorization?.startsWith('Digest ') && /username="alice"/.test(req.headers.authorization)) {
+          digestAnswers++
+          res.end('digest ok')
+        } else {
+          digestChallenges++
+          res.writeHead(401, { 'WWW-Authenticate': 'Digest realm="r", nonce="n1", qop="auth"' })
+          res.end('challenge')
+        }
+        return
+      }
       seen.push({ url: req.url ?? '', key: req.headers['x-api-key'] as string | undefined })
       res.end('ok')
     })
@@ -67,5 +80,21 @@ test.describe('API key authentication', () => {
     await window.getByRole('tab', { name: /Console/ }).click()
     await expect(window.getByText('as a query parameter')).toBeVisible()
     await expect(window.getByText('super-secret-key')).toHaveCount(0)
+
+    // Digest: the 401 challenge is answered automatically
+    await urlInput.fill(`${base}/digest`)
+    await window.waitForTimeout(200)
+    await window.getByRole('tab', { name: 'Auth' }).click()
+    await window.getByRole('button', { name: 'Digest' }).click()
+    const digest = window.getByTestId('auth-digest')
+    await digest.getByPlaceholder('Username').fill('alice')
+    await digest.getByPlaceholder('Password').fill('wonderland-pass')
+    await window.getByTestId('send-button').click()
+    await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
+    expect(digestChallenges).toBe(1)
+    expect(digestAnswers).toBe(1)
+    await window.getByRole('tab', { name: /Console/ }).click()
+    await expect(window.getByText(/answering the challenge/)).toBeVisible()
+    await expect(window.getByText('wonderland-pass')).toHaveCount(0)
   })
 })

@@ -122,7 +122,7 @@ const IGNORED_FLAGS = new Set([
   's', 'silent', 'S', 'show-error', 'v', 'verbose', 'i', 'include', 'compressed', 'f', 'fail', 'g', 'globoff', 'N', 'no-buffer',
   'http1.0', 'http1.1', 'http2', 'http2-prior-knowledge', 'http3', 'tlsv1.2', 'tlsv1.3', 'path-as-is', 'ipv4', 'ipv6', '4', '6',
   'O', 'remote-name', 'J', 'remote-header-name', 'progress-bar', '#', 'no-keepalive', 'raw', 'tcp-nodelay', 'fail-with-body',
-  'tr-encoding', 'netrc', 'n', 'anyauth', 'basic', 'digest', 'ntlm', 'negotiate',
+  'tr-encoding', 'netrc', 'n', 'anyauth', 'basic', 'ntlm', 'negotiate',
 ])
 const SHORT_WITH_VALUE = new Set(['X', 'H', 'd', 'F', 'u', 'A', 'e', 'b', 'o', 'm', 'x', 'U', 'E', 'w', 'T', 'c', 'D', 'K'])
 const BODY_FLAGS = new Set(['d', 'data', 'data-raw', 'data-binary', 'data-ascii', 'data-urlencode', 'json'])
@@ -179,6 +179,7 @@ export function parseCurl(input: string): ParsedCurl | null {
   let insecure = false
   const creds: { basic: { username: string; password: string } | null } = { basic: null }
   let jsonFlag = false
+  let digest = false
 
   const addHeader = (raw: string) => {
     const idx = raw.indexOf(':')
@@ -220,6 +221,7 @@ export function parseCurl(input: string): ParsedCurl | null {
         creds.basic = idx === -1 ? { username: v, password: '' } : { username: v.slice(0, idx), password: v.slice(idx + 1) }
         break
       }
+      case 'digest': digest = true; break
       case 'k': case 'insecure': insecure = true; break
       case 'L': case 'location': case 'location-trusted':
         warnings.push('-L noted: Postly follows redirects according to the global setting, not per request')
@@ -274,7 +276,7 @@ export function parseCurl(input: string): ParsedCurl | null {
   let authType: AuthType = 'none'
   let authConfig: Record<string, string> = {}
   if (creds.basic) {
-    authType = 'basic'
+    authType = digest ? 'digest' : 'basic'
     authConfig = { username: creds.basic.username, password: creds.basic.password }
   } else {
     const idx = headers.findIndex((h) => h.key.toLowerCase() === 'authorization')

@@ -72,17 +72,17 @@ describe('code snippets', () => {
   })
 
   it('adds API keys as a header or query parameter and redacts them', () => {
-    const header = generateSnippet('curl', { ...base, authType: 'apikey', authConfig: { key: 'X-Api-Key', value: 'abc', in: 'header' } } as ExportableRequest, { includeSecrets: true })!
-    expect(header.code).toContain('X-Api-Key: abc')
-    const query = generateSnippet('curl', { ...base, authType: 'apikey', authConfig: { key: 'api_key', value: 'abc', in: 'query' } } as ExportableRequest, { includeSecrets: false })!
-    expect(query.code).toContain('api_key=<api-key>')
-    expect(query.code).not.toContain('abc')
+    const header = generateSnippet('curl', { ...base, authType: 'apikey', authConfig: { key: 'X-Api-Key', value: 'abc', in: 'header' } } as ExportableRequest, { includeSecrets: true })
+    expect(header?.code).toContain('X-Api-Key: abc')
+    const query = generateSnippet('curl', { ...base, authType: 'apikey', authConfig: { key: 'api_key', value: 'abc', in: 'query' } } as ExportableRequest, { includeSecrets: false })
+    expect(query?.code).toContain('api_key=<api-key>')
+    expect(query?.code).not.toContain('abc')
   })
 
   it('notes that Digest and AWS signing are not included', () => {
     for (const authType of ['digest', 'awsv4'] as const) {
-      const r = generateSnippet('curl', { ...base, authType, authConfig: {} } as ExportableRequest, { includeSecrets: true })!
-      expect(r.notes.join(' ')).toMatch(/not included/)
+      const r = generateSnippet('curl', { ...base, authType, authConfig: {} } as ExportableRequest, { includeSecrets: true })
+      expect(r?.notes.join(' ')).toMatch(/not included/)
     }
   })
 })

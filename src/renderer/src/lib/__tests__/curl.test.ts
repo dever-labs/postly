@@ -94,6 +94,12 @@ describe('parseCurl', () => {
     expect(r.sslVerification).toBe('disabled')
   })
 
+  it('maps --digest with -u to Digest auth', () => {
+    const r = must("curl --digest -u ann:secret https://api.test")
+    expect(r.authType).toBe('digest')
+    expect(r.authConfig).toEqual({ username: 'ann', password: 'secret' })
+  })
+
   it('turns Authorization headers into structured auth', () => {
     const b = must("curl https://api.test -H 'Authorization: Bearer abc.def'")
     expect(b.authType).toBe('bearer')
