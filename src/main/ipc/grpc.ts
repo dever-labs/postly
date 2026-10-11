@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { tlsSelectionFor } from './certificates'
 import { loadProtoContent, invokeGrpc } from '../services/grpc'
 
 export function registerGrpcHandlers(): void {
@@ -29,6 +30,7 @@ export function registerGrpcHandlers(): void {
         metadata: args.metadata ?? {},
         requestBody: args.requestBody,
         useTls: args.useTls ?? false,
+        tls: args.useTls ? tlsSelectionFor(`https://${args.serverUrl}`).options : undefined,
       })
       return result.error ? { error: result.error, duration: result.duration } : { data: result.data, duration: result.duration }
     } catch (err) {

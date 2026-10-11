@@ -1,5 +1,6 @@
 import type WebSocket from 'ws'
 import type { WebContents } from 'electron'
+import type { TlsOptions } from './certificates'
 
 interface WsConnection {
   ws: WebSocket
@@ -12,7 +13,8 @@ export async function connectWebSocket(
   connectionId: string,
   url: string,
   headers: Record<string, string>,
-  sender: WebContents
+  sender: WebContents,
+  tls: TlsOptions = {}
 ): Promise<void> {
   const { default: WebSocketCtor } = await import('ws')
   return new Promise((resolve, reject) => {
@@ -26,7 +28,7 @@ export async function connectWebSocket(
       connections.delete(connectionId)
     }
 
-    const ws = new WebSocketCtor(url, { headers })
+    const ws = new WebSocketCtor(url, { headers, ...tls })
     const forget = () => {
       if (connections.get(connectionId)?.ws === ws) connections.delete(connectionId)
     }

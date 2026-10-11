@@ -102,6 +102,11 @@ const api = {
     delete: (data: { name: string; domain: string; path: string }) => ipcRenderer.invoke('postly:cookies:delete', data),
     clear: (data?: { domain?: string }) => ipcRenderer.invoke('postly:cookies:clear', data),
   },
+  certificates: {
+    list: () => ipcRenderer.invoke('postly:certificates:list'),
+    add: (data: { kind: 'ca' | 'client'; name: string; host?: string; port?: number; certPem?: string; keyPem?: string; pfxBase64?: string; passphrase?: string }) => ipcRenderer.invoke('postly:certificates:add', data),
+    delete: (data: { id: string }) => ipcRenderer.invoke('postly:certificates:delete', data),
+  },
   history: {
     list: (data?: { search?: string; limit?: number; offset?: number }) => ipcRenderer.invoke('postly:history:list', data),
     get: (data: { id: string }) => ipcRenderer.invoke('postly:history:get', data),
