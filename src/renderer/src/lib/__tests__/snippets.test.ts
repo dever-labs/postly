@@ -79,10 +79,44 @@ describe('code snippets', () => {
     expect(query?.code).not.toContain('abc')
   })
 
-  it('notes that Digest and AWS signing are not included', () => {
-    for (const authType of ['digest', 'awsv4'] as const) {
-      const r = generateSnippet('curl', { ...base, authType, authConfig: {} } as ExportableRequest, { includeSecrets: true })
-      expect(r?.notes.join(' ')).toMatch(/not included/)
+  const digest = { authType: 'digest', authConfig: { username: 'ann', password: 'pw' } } as const
+  const aws = { authType: 'awsv4', authConfig: { accessKey: 'AKID', secretKey: 'SECRET', sessionToken: 'TOK', region: 'eu-west-1', service: 'execute-api' } } as const
+
+  it('renders Digest where the client can answer the challenge', () => {
+    expect(gen('curl', digest).code).toContain('--digest')
+    expect(gen('curl', digest).code).toContain("-u 'ann:pw'")
+    expect(gen('python', digest).code).toContain('from requests.auth import HTTPDigestAuth')
+    expect(gen('python', digest).code).toContain('auth=HTTPDigestAuth("ann", "pw")')
+    expect(gen('csharp', digest).code).toContain('Credentials = new NetworkCredential("ann", "pw")')
+    expect(gen('csharp', digest).code).toContain('using System.Net;')
+    expect(gen('curl', digest).notes.join(' ')).not.toMatch(/Digest/)
+  })
+
+  it('renders AWS Signature V4 for curl only', () => {
+    const curl = gen('curl', aws)
+    expect(curl.code).toContain("--aws-sigv4 'aws:amz:eu-west-1:execute-api'")
+    expect(curl.code).toContain("-u 'AKID:SECRET'")
+    expect(curl.code).toContain("x-amz-security-token: TOK")
+    const py = gen('python', aws)
+    expect(py.code).not.toContain('aws4auth')
+    expect(py.notes.join(' ')).toMatch(/AWS/)
+  })
+
+  it('redacts Digest and AWS secrets unless included', () => {
+    const d = gen('curl', digest, false)
+    expect(d.code).toContain('<password>')
+    expect(d.code).not.toContain('pw')
+    const a = gen('curl', aws, false).code
+    expect(a).toContain('<secret-key>')
+    expect(a).toContain('<session-token>')
+    expect(a).not.toContain('SECRET')
+  })
+
+  it('notes where a language cannot render Digest or AWS signing', () => {
+    for (const lang of ['fetch', 'axios', 'go'] as const) {
+      expect(gen(lang, digest).notes.join(' ')).toMatch(/Digest/)
+      expect(gen(lang, aws).notes.join(' ')).toMatch(/AWS Signature/)
     }
+    expect(gen('csharp', aws).notes.join(' ')).toMatch(/AWS Signature/)
   })
 })

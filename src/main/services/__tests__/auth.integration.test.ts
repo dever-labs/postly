@@ -1,13 +1,14 @@
 /** Real-server tests for API key, Digest and AWS Signature V4 authentication. */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import crypto from 'crypto'
 import http from 'http'
 import type { AddressInfo } from 'net'
-import { executeRequest, type HttpRequest, type LogEntry } from '../http-executor'
+import { clearDigestSessions, executeRequest, type HttpRequest, type LogEntry } from '../http-executor'
 
 let server: http.Server
 let base = ''
 const seen: Array<{ url: string; headers: http.IncomingHttpHeaders }> = []
+let nonce = 'abc123'
 const md5 = (s: string) => crypto.createHash('md5').update(s).digest('hex')
 
 beforeAll(async () => {
@@ -28,12 +29,12 @@ beforeAll(async () => {
       for (const m of (auth ?? '').matchAll(/(\w+)=(?:"([^"]*)"|([^,\s]+))/g)) p[m[1]] = m[2] ?? m[3]
       const ha1 = md5(`alice:realm:wonderland`)
       const ha2 = md5(`${req.method}:${p.uri}`)
-      const expected = md5(`${ha1}:abc123:${p.nc}:${p.cnonce}:auth:${ha2}`)
+      const expected = md5(`${ha1}:${nonce}:${p.nc}:${p.cnonce}:auth:${ha2}`)
       if (auth?.startsWith('Digest ') && p.response === expected && p.uri === req.url) {
         res.end('welcome alice')
         return
       }
-      res.writeHead(401, { 'WWW-Authenticate': 'Digest realm="realm", nonce="abc123", qop="auth", algorithm=MD5' })
+      res.writeHead(401, { 'WWW-Authenticate': `Digest realm="realm", nonce="${nonce}", qop="auth", algorithm=MD5` })
       res.end('denied')
     } else {
       res.end('ok')
@@ -67,6 +68,8 @@ describe('API key', () => {
 })
 
 describe('Digest', () => {
+  beforeEach(() => { clearDigestSessions(); nonce = 'abc123' })
+
   it('answers the 401 challenge and succeeds', async () => {
     seen.length = 0
     const logs: LogEntry[] = []
@@ -128,5 +131,26 @@ describe('unknown auth types', () => {
     const res = await executeRequest(req('/x', 'from-the-future', { token: 't' }))
     expect(res.status).toBe(200)
     expect(seen[0].headers.authorization).toBeUndefined()
+  })
+
+  it('reuses the challenge: the second request needs one round trip with a higher nc', async () => {
+    const r = () => req('/digest', 'digest', { username: 'alice', password: 'wonderland' })
+    await executeRequest(r())
+    seen.length = 0
+    const res = await executeRequest(r())
+    expect(res.status).toBe(200)
+    expect(seen).toHaveLength(1)
+    expect(seen[0].headers.authorization).toMatch(/nc=00000002/)
+  })
+
+  it('answers the new challenge when the nonce has gone stale', async () => {
+    const r = () => req('/digest', 'digest', { username: 'alice', password: 'wonderland' })
+    await executeRequest(r())
+    nonce = 'rotated'
+    seen.length = 0
+    const res = await executeRequest(r())
+    expect(res.status).toBe(200)
+    expect(seen).toHaveLength(2)
+    expect(seen[1].headers.authorization).toMatch(/nc=00000001/)
   })
 })

@@ -5,6 +5,12 @@ export function generatePython(req: ExportableRequest, options: SnippetOptions):
   const m = buildSnippetModel(req, options)
   if (!m) return null
   const args: string[] = [dq(m.method), dq(m.url)]
+  const imports = ['import requests']
+  const scheme = m.scheme
+  if (scheme?.kind === 'digest') {
+    imports.push('from requests.auth import HTTPDigestAuth')
+    args.push(`auth=HTTPDigestAuth(${dq(scheme.username)}, ${dq(scheme.password)})`)
+  }
 
   if (m.headers.length > 0) args.push(`headers={\n${m.headers.map((h) => `        ${dq(h.key)}: ${dq(h.value)},`).join('\n')}\n    }`)
   if (m.basic) args.push(`auth=(${dq(m.basic.username)}, ${dq(m.basic.password)})`)
@@ -18,10 +24,10 @@ export function generatePython(req: ExportableRequest, options: SnippetOptions):
   if (m.insecure) args.push('verify=False')
 
   const code = [
-    'import requests',
+    ...imports,
     '',
     `response = requests.request(\n    ${args.join(',\n    ')},\n)`,
     'print(response.status_code, response.text)',
   ].join('\n')
-  return { code, notes: snippetNotes(m, code, options) }
+  return { code, notes: snippetNotes(m, code, options, ['digest']) }
 }

@@ -5,7 +5,7 @@ import type { Readable } from 'stream'
 import { StringDecoder } from 'string_decoder'
 import { createNdjsonParser, createSseParser, streamKindOf, type StreamEvent, type StreamKind } from '../../shared/stream'
 import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
-import { applyApiKey, buildDigestHeader, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
+import { applyApiKey, buildDigestHeader, type DigestChallenge, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
 import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
 
@@ -86,7 +86,31 @@ export type ExecuteOptions = {
     onStream?: (message: StreamMessage) => void
 }
 
-/** Digest needs a challenge first: send without credentials, then answer a 401 once. */
+/** Challenges remembered per server and user, so later requests can answer before being asked (RFC 7616 §3.6). */
+const digestSessions = new Map<string, { challenge: DigestChallenge; nonceCount: number }>()
+const MAX_DIGEST_SESSIONS = 50
+
+export function clearDigestSessions(): void {
+  digestSessions.clear()
+}
+
+function rememberDigest(key: string, challenge: DigestChallenge): void {
+  digestSessions.delete(key)
+  digestSessions.set(key, { challenge, nonceCount: 1 })
+  if (digestSessions.size > MAX_DIGEST_SESSIONS) digestSessions.delete(digestSessions.keys().next().value as string)
+}
+
+const challengeOf = (res: HttpResponse): DigestChallenge | null => {
+  if (res.status !== 401) return null
+  const header = Object.entries(res.headers).find(([k]) => k.toLowerCase() === 'www-authenticate')?.[1]
+  return parseDigestChallenge(header)
+}
+
+/**
+ * Digest: the first request to a server goes out without credentials and a 401 challenge is answered once.
+ * The challenge is then reused (with a rising nonce count) so later requests skip the round trip;
+ * if the server has expired the nonce, the fresh challenge from its 401 is answered instead.
+ */
 export async function executeRequest(initialReq: HttpRequest, options: ExecuteOptions = {}): Promise<HttpResponse> {
   if (initialReq.authType !== 'digest') return runRequest(initialReq, options)
 
@@ -97,10 +121,34 @@ export async function executeRequest(initialReq: HttpRequest, options: ExecuteOp
     return runRequest({ ...initialReq, authType: 'none' }, options)
   }
   const url = appendQueryParams(initialReq.url, initialReq.params)
+  const target = new URL(url)
+  const uri = `${target.pathname}${target.search}`
+  const key = `${target.origin}\n${username}`
   const plain: HttpRequest = { ...initialReq, url, params: undefined, authType: 'none', authConfig: {} }
-  const first = await runRequest(plain, { ...options, onStream: undefined })
-  const wwwAuth = Object.entries(first.headers).find(([k]) => k.toLowerCase() === 'www-authenticate')?.[1]
-  const challenge = first.status === 401 ? parseDigestChallenge(wwwAuth) : null
+  const answer = (challenge: DigestChallenge, nonceCount: number) =>
+    runRequest({ ...plain, headers: { ...initialReq.headers, Authorization: buildDigestHeader({ challenge, username, password, method: initialReq.method, uri, nonceCount }) } }, options)
+  const describe = (c: DigestChallenge) => `realm "${c.realm}" (${c.algorithm}${c.qop.includes('auth') ? ', qop=auth' : ''}); password hidden`
+
+  let spent = 0
+  const session = digestSessions.get(key)
+  if (session && isSupportedDigestAlgorithm(session.challenge.algorithm)) {
+    session.nonceCount++
+    log('info', `Digest auth: reusing the earlier challenge for ${describe(session.challenge)}, no extra round trip`)
+    const res = await answer(session.challenge, session.nonceCount)
+    const fresh = challengeOf(res)
+    if (!fresh) {
+      if (res.status === 401) digestSessions.delete(key)
+      return res
+    }
+    log('info', 'Digest auth: the server asked again (stale nonce or wrong credentials), answering its new challenge')
+    spent = res.duration
+    rememberDigest(key, fresh)
+    const retry = await answer(fresh, 1)
+    return { ...retry, duration: spent + retry.duration }
+  }
+
+  const first = await runRequest(plain, options)
+  const challenge = challengeOf(first)
   if (!challenge) {
     log('info', first.status === 401
       ? 'Digest auth: the server answered 401 without a Digest challenge'
@@ -111,10 +159,9 @@ export async function executeRequest(initialReq: HttpRequest, options: ExecuteOp
     log('warn', `Digest auth: algorithm ${challenge.algorithm} is not supported`)
     return first
   }
-  const target = new URL(url)
-  const header = buildDigestHeader({ challenge, username, password, method: initialReq.method, uri: `${target.pathname}${target.search}` })
-  log('info', `Digest auth: answering the challenge for realm "${challenge.realm}" (${challenge.algorithm}${challenge.qop.includes('auth') ? ', qop=auth' : ''}); password hidden`)
-  const second = await runRequest({ ...plain, headers: { ...initialReq.headers, Authorization: header } }, options)
+  log('info', `Digest auth: answering the challenge for ${describe(challenge)}`)
+  rememberDigest(key, challenge)
+  const second = await answer(challenge, 1)
   return { ...second, duration: first.duration + second.duration }
 }
 
