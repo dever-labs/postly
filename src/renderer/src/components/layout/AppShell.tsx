@@ -14,6 +14,8 @@ import { ExportPage } from '@/components/export-import/ExportPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
 import { WindowControls } from '@/components/layout/WindowControls'
+import { useShortcutDispatcher } from '@/hooks/useShortcuts'
+import { useAppShortcuts } from '@/hooks/useAppShortcuts'
 import { useUIStore } from '@/store/ui'
 import { useCollectionsStore } from '@/store/collections'
 import type { AiContext } from '@/lib/aiContext'
@@ -107,8 +109,11 @@ function useDrag(direction: 'horizontal' | 'vertical', containerRef: React.RefOb
 }
 
 export function AppShell() {
+  useShortcutDispatcher()
+  useAppShortcuts()
   const sidebarTab = useUIStore((state) => state.sidebarTab)
   const selectedItem = useUIStore((state) => state.selectedItem)
+  const sidebarHidden = useUIStore((state) => state.sidebarHidden)
   const setSidebarWidth = useUIStore((state) => state.setSidebarWidth)
   const setEditorHeight = useUIStore((state) => state.setEditorHeight)
 
@@ -122,8 +127,10 @@ export function AppShell() {
     <div className="flex h-screen overflow-hidden bg-th-bg text-th-text-primary">
       <div
         ref={sidebarRef}
-        style={{ width: sidebarWidth ?? 280 }}
-        className="relative shrink-0 overflow-hidden border-r border-th-border backdrop-blur-md"
+        style={{ width: sidebarHidden ? 0 : (sidebarWidth ?? 280) }}
+        aria-hidden={sidebarHidden}
+        inert={sidebarHidden}
+        className={`relative shrink-0 overflow-hidden border-th-border backdrop-blur-md ${sidebarHidden ? "invisible" : "border-r"}`}
       >
         <CollectionsSidebar />
         <div

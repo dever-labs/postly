@@ -7,7 +7,7 @@ vi.mock('../requests', () => ({
   useRequestsStore: { subscribe: vi.fn() },
 }))
 
-import { buildWorkingSet, useWorkingSetStore, MAX_RECENT } from '../workingSet'
+import { buildWorkingSet, stepWorkingSet, useWorkingSetStore, MAX_RECENT } from '../workingSet'
 
 const all = () => true
 
@@ -40,5 +40,21 @@ describe('useWorkingSetStore', () => {
     expect(localStorage.setItem).toHaveBeenCalledWith('postly-pinned-requests', '["a"]')
     useWorkingSetStore.getState().togglePin('a')
     expect(useWorkingSetStore.getState().pinned).toEqual([])
+  })
+})
+
+describe('stepWorkingSet', () => {
+  const ids = ['a', 'b', 'c']
+  it('moves and wraps in both directions', () => {
+    expect(stepWorkingSet(ids, 'a', 1)).toBe('b')
+    expect(stepWorkingSet(ids, 'c', 1)).toBe('a')
+    expect(stepWorkingSet(ids, 'a', -1)).toBe('c')
+  })
+  it('starts at the first/last item when nothing in the set is active', () => {
+    expect(stepWorkingSet(ids, null, 1)).toBe('a')
+    expect(stepWorkingSet(ids, 'zzz', -1)).toBe('c')
+  })
+  it('returns null for an empty set', () => {
+    expect(stepWorkingSet([], 'a', 1)).toBeNull()
   })
 })

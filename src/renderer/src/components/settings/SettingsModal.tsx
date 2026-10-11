@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
 import { AiSettings } from '@/components/settings/tabs/AiSettings'
@@ -30,6 +30,13 @@ function TabContent({ tab }: { tab: string }) {
 export function SettingsModal() {
   const { settingsOpen, settingsTab, closeSettings } = useUIStore()
   const [activeTab, setActiveTab] = useState(settingsTab)
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSettings() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [settingsOpen, closeSettings])
 
   if (!settingsOpen) return null
 
