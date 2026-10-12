@@ -178,6 +178,19 @@ describe('postly:requests:update', () => {
     expect(sql).toContain('folder_id = ?')
   })
 
+  it('stores network overrides as validated JSON and clears them with null', async () => {
+    await handlers['postly:requests:update'](null, { id: 'r1', networkSettings: { timeout: 2500, followRedirects: false, bogus: 1 } })
+    let [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('network_settings = ?')
+    expect(params).toContain('{"timeout":2500,"followRedirects":false}')
+
+    mockRun.mockClear()
+    await handlers['postly:requests:update'](null, { id: 'r1', networkSettings: null });
+    [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('network_settings = ?')
+    expect(params).toContain(null)
+  })
+
   it('returns data:true with no db call when no fields provided', async () => {
     const result = await handlers['postly:requests:update'](null, { id: 'r1' }) as { data: unknown }
     expect(result.data).toBe(true)

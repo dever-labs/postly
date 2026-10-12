@@ -84,7 +84,7 @@ function setupDb({
       if (!folder) return []
       // Build a lineage array: [direct folder, ..., root collection]
       // If folder == collection (or collection is null), just one row as root
-      const rows: { id: string; name: string; parent_id: string | null; auth_type: string | null; auth_config: string | null; ssl_verification: string | null; integration_id: string | null }[] = []
+      const rows: { id: string; name: string; parent_id: string | null; auth_type: string | null; auth_config: string | null; ssl_verification: string | null; network_settings: string | null; integration_id: string | null }[] = []
       if (collection && collection.id !== folder.id) {
         rows.push({
           id: String(folder.id ?? 'f1'),
@@ -93,6 +93,7 @@ function setupDb({
           auth_type: (folder.auth_type as string | null) ?? null,
           auth_config: (folder.auth_config as string | null) ?? null,
           ssl_verification: (folder.ssl_verification as string | null) ?? null,
+          network_settings: (folder.network_settings as string | null) ?? null,
           integration_id: null,
         })
         rows.push({
@@ -102,6 +103,7 @@ function setupDb({
           auth_type: (collection.auth_type as string | null) ?? null,
           auth_config: (collection.auth_config as string | null) ?? null,
           ssl_verification: (collection.ssl_verification as string | null) ?? null,
+          network_settings: (collection.network_settings as string | null) ?? null,
           integration_id: (collection.integration_id as string | null) ?? null,
         })
       } else {
@@ -112,6 +114,7 @@ function setupDb({
           auth_type: ((folder.auth_type ?? collection?.auth_type) as string | null) ?? null,
           auth_config: ((folder.auth_config ?? collection?.auth_config) as string | null) ?? null,
           ssl_verification: ((folder.ssl_verification ?? collection?.ssl_verification) as string | null) ?? null,
+          network_settings: ((folder.network_settings ?? collection?.network_settings) as string | null) ?? null,
           integration_id: (collection?.integration_id as string | null) ?? null,
         })
       }
@@ -721,6 +724,47 @@ describe('http IPC handler', () => {
         expect.anything(),
         expect.objectContaining({ followRedirects: false })
       )
+    })
+
+    describe('per-entity overrides', () => {
+      const lineage = (folderNet: string | null, collectionNet: string | null) => [
+        { id: 'g1', name: 'Slow group', parent_id: 'c1', auth_type: null, auth_config: null, ssl_verification: null, network_settings: folderNet, integration_id: null },
+        { id: 'c1', name: 'Payments', parent_id: null, auth_type: null, auth_config: null, ssl_verification: null, network_settings: collectionNet, integration_id: null },
+      ]
+      const useLineage = (rows: unknown[]) => mockQA.mockImplementation((sql: string) => (sql.includes('WITH RECURSIVE lineage') ? rows : []) as never)
+
+      it('uses the request override over group, collection and global', async () => {
+        setupDb({ settings: '{"defaultTimeout":5000,"followRedirects":true}' })
+        useLineage(lineage('{"timeout":20000}', '{"timeout":30000}'))
+        const data = await invokeOk(baseReq({ folderId: 'g1', networkSettings: { timeout: 1500, followRedirects: false } }))
+        expect(mockExec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeout: 1500, followRedirects: false }))
+        expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Timeout: 1500ms (request)' }))
+        expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Following redirects: disabled (request)' }))
+      })
+
+      it('falls back to the nearest group, then the collection, then global, and says where each came from', async () => {
+        setupDb({ settings: '{"defaultTimeout":5000}' })
+        useLineage(lineage('{"timeout":20000}', '{"timeout":30000,"maxRedirects":2}'))
+        const data = await invokeOk(baseReq({ folderId: 'g1' }))
+        expect(mockExec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeout: 20000, followRedirects: true, maxRedirects: 2 }))
+        expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Timeout: 20000ms (folder "Slow group")' }))
+        expect(data.logs).toContainEqual(expect.objectContaining({ message: expect.stringContaining('limit: collection "Payments"') }))
+      })
+
+      it('keeps the global settings when nothing is overridden', async () => {
+        setupDb({ settings: '{"defaultTimeout":5000}' })
+        useLineage(lineage(null, '{}'))
+        const data = await invokeOk(baseReq({ folderId: 'g1' }))
+        expect(mockExec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeout: 5000, followRedirects: true, maxRedirects: 5 }))
+        expect(data.logs).toContainEqual(expect.objectContaining({ message: 'Timeout: 5000ms (global setting)' }))
+      })
+
+      it('ignores corrupt stored overrides instead of failing the request', async () => {
+        setupDb({ settings: '{"defaultTimeout":5000}' })
+        useLineage(lineage('{not json', '{"timeout":-5}'))
+        await invokeOk(baseReq({ folderId: 'g1' }))
+        expect(mockExec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeout: 5000 }))
+      })
     })
   })
 

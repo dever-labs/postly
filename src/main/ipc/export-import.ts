@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import crypto from 'crypto'
 import fs from 'fs'
 import { queryAll, run } from '../database'
+import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
 import { exportCollectionVariables, importCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
@@ -17,6 +18,8 @@ export interface ExportRequest {
   bodyContent: string
   auth: { type: string; config: Record<string, unknown> }
   ssl: string
+  /** Timeout / redirect overrides; omitted when everything is inherited. */
+  network?: NetworkSettings
   description: string
   protocolConfig: Record<string, unknown>
 }
@@ -26,6 +29,8 @@ export interface ExportFolder {
   description: string
   auth: { type: string; config: Record<string, unknown> }
   ssl: string
+  /** Timeout / redirect overrides; omitted when everything is inherited. */
+  network?: NetworkSettings
   requests: ExportRequest[]
   folders: ExportFolder[]
   /** @deprecated use folders — present in pre-v2 exports for backward compat */
@@ -38,6 +43,8 @@ export interface ExportCollection {
   source: string
   auth: { type: string; config: Record<string, unknown> }
   ssl: string
+  /** Timeout / redirect overrides; omitted when everything is inherited. */
+  network?: NetworkSettings
   /** Collection-scoped variables. Secret values are exported blank. */
   variables?: VariableRow[]
   requests: ExportRequest[]
@@ -61,6 +68,7 @@ interface DbFolderRow {
   auth_type: string | null
   auth_config: string | null
   ssl_verification: string | null
+  network_settings: string | null
   sort_order: number
 }
 
@@ -78,6 +86,7 @@ interface DbRequestRow {
   auth_type: string | null
   auth_config: string | null
   ssl_verification: string | null
+  network_settings: string | null
   description: string | null
   protocol_config: string | null
   sort_order: number
@@ -85,6 +94,12 @@ interface DbRequestRow {
 
 export function tryParse<T>(val: unknown, fallback: T): T {
   try { return val ? JSON.parse(String(val)) as T : fallback } catch { return fallback }
+}
+
+/** Spread into an export object so the key is only present when something is overridden. */
+export function networkField(raw: string | null | undefined): { network?: NetworkSettings } {
+  const network = parseNetworkSettings(raw)
+  return network ? { network } : {}
 }
 
 function mapRequest(row: DbRequestRow): ExportRequest {
@@ -99,6 +114,7 @@ function mapRequest(row: DbRequestRow): ExportRequest {
     bodyContent: String(row.body_content ?? ''),
     auth: { type: String(row.auth_type ?? 'none'), config: tryParse(row.auth_config, {}) },
     ssl: String(row.ssl_verification ?? 'inherit'),
+    ...networkField(row.network_settings),
     description: String(row.description ?? ''),
     protocolConfig: tryParse(row.protocol_config, {}),
   }
@@ -114,6 +130,7 @@ function mapFolderTree(
     description: String(folder.description ?? ''),
     auth: { type: String(folder.auth_type ?? 'none'), config: tryParse(folder.auth_config, {}) },
     ssl: String(folder.ssl_verification ?? 'inherit'),
+    ...networkField(folder.network_settings),
     requests: (folderRequests.get(folder.id) ?? []).map(mapRequest),
     folders: (childFolders.get(folder.id) ?? []).map((child) => mapFolderTree(child, childFolders, folderRequests)),
   }
@@ -172,6 +189,7 @@ export function buildExport(collectionIds?: string[]): PostlyExportFile {
     source: String(folder.source ?? 'local'),
     auth: { type: String(folder.auth_type ?? 'none'), config: tryParse(folder.auth_config, {}) },
     ssl: String(folder.ssl_verification ?? 'inherit'),
+    ...networkField(folder.network_settings),
     variables: exportCollectionVariables(folder.id),
     requests: (folderRequests.get(folder.id) ?? []).map(mapRequest),
     folders: (childFolders.get(folder.id) ?? []).map((child) => mapFolderTree(child, childFolders, folderRequests)),
@@ -187,8 +205,8 @@ function importRequests(requests: ExportRequest[], folderId: string, now: number
       `INSERT INTO requests
          (id, folder_id, name, method, url, params, headers, body_type, body_content,
           auth_type, auth_config, ssl_verification, protocol, protocol_config,
-          description, is_dirty, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+          description, network_settings, is_dirty, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
       [
         requestId,
         folderId,
@@ -205,6 +223,7 @@ function importRequests(requests: ExportRequest[], folderId: string, now: number
         request.protocol ?? 'http',
         JSON.stringify(request.protocolConfig ?? {}),
         request.description ?? '',
+        serializeNetworkSettings(request.network),
         index,
         now,
         now,
@@ -218,8 +237,8 @@ function importFolder(folder: ExportFolder, parentId: string, sortOrder: number,
   run(
     `INSERT INTO folders
       (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
-       ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, 0, 0, ?, ?, ?)`,
+       ssl_verification, network_settings, hidden, collapsed, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
     [
       folderId,
       parentId,
@@ -228,6 +247,7 @@ function importFolder(folder: ExportFolder, parentId: string, sortOrder: number,
       folder.auth?.type ?? 'none',
       JSON.stringify(folder.auth?.config ?? {}),
       folder.ssl ?? 'inherit',
+      serializeNetworkSettings(folder.network),
       sortOrder,
       now,
       now,
@@ -248,8 +268,8 @@ export function importData(data: PostlyExportFile): number {
     run(
       `INSERT INTO folders
         (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
-         ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, 0, 0, ?, ?, ?)`,
+         ssl_verification, network_settings, hidden, collapsed, sort_order, created_at, updated_at)
+       VALUES (?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
       [
         collectionId,
         collection.name,
@@ -258,6 +278,7 @@ export function importData(data: PostlyExportFile): number {
         collection.auth?.type ?? 'none',
         JSON.stringify(collection.auth?.config ?? {}),
         collection.ssl ?? 'inherit',
+        serializeNetworkSettings(collection.network),
         collectionIndex,
         now,
         now,

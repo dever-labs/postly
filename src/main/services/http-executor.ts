@@ -8,6 +8,7 @@ import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } fro
 import { applyApiKey, buildDigestHeader, type DigestChallenge, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
 import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
+import { trackConnect, type ConnectState } from './connect-tracking'
 
 type LogLevel = 'info' | 'warn' | 'error'
 export interface LogEntry { level: LogLevel; message: string; detail?: string }
@@ -30,6 +31,8 @@ export interface HttpRequest {
   authConfig: Record<string, string>
   folderId?: string
   sslVerification?: string
+  /** Per-request timeout / redirect overrides as saved on the request (JSON or object). */
+  networkSettings?: unknown
   /** Post-response rules; run by the IPC layer after the request completes. */
   extractRules?: ExtractRule[]
 }
@@ -76,6 +79,8 @@ export function appendQueryParams(url: string, params?: Record<string, string>):
 export type ExecuteOptions = {
     sslVerification?: boolean
     followRedirects?: boolean
+    /** Redirect limit when followRedirects is on. */
+    maxRedirects?: number
     timeout?: number
     signal?: AbortSignal
     onLog?: (entry: LogEntry) => void
@@ -169,7 +174,7 @@ async function runRequest(
   initialReq: HttpRequest,
   options: ExecuteOptions
 ): Promise<HttpResponse> {
-  const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor, onStream } = options
+  const { sslVerification = true, followRedirects = true, maxRedirects = 5, timeout = 30000, signal, onLog, cookieJar, tlsFor, onStream } = options
   const req: HttpRequest = { ...initialReq, url: appendQueryParams(initialReq.url, initialReq.params) }
   const log = (level: LogLevel, message: string, detail?: string) => onLog?.({ level, message, detail })
   const start = Date.now()
@@ -381,7 +386,7 @@ async function runRequest(
     data,
     timeout,
     signal,
-    maxRedirects: followRedirects ? 5 : 0,
+    maxRedirects: followRedirects ? maxRedirects : 0,
     validateStatus: () => true,
     beforeRedirect: (options, responseDetails, requestDetails) => {
       retargetTls(options as Parameters<typeof retargetTls>[0])
@@ -412,11 +417,12 @@ async function runRequest(
     config.httpsAgent = proxy.httpsAgent
   }
 
+  const connectState: ConnectState = { connecting: false }
   log('info', `→ ${req.method.toUpperCase()} ${displayUrl}`)
   log('info', proxy ? `Proxy: ${proxy.display}` : 'Proxy: none (direct)')
 
   try {
-    const response = await axios(config)
+    const response = await trackConnect(connectState, () => axios(config))
     const responseHeaders: Record<string, string> = {}
     for (const [k, v] of Object.entries(response.headers)) {
       responseHeaders[k] = Array.isArray(v) ? v.join(k.toLowerCase() === 'set-cookie' ? '\n' : ', ') : String(v ?? '')
@@ -452,7 +458,10 @@ async function runRequest(
     }
   } catch (err: unknown) {
     const duration = Date.now() - start
-    const message = err instanceof Error ? err.message : String(err)
+    const rawMessage = err instanceof Error ? err.message : String(err)
+    const code = (err as { code?: string } | null)?.code
+    const isTimeout = (code === 'ECONNABORTED' || code === 'ETIMEDOUT') && /timeout/i.test(rawMessage)
+    const message = isTimeout && connectState.connecting ? `connect timeout of ${timeout}ms exceeded (no connection to the server)` : rawMessage
     const shown = proxy ? describeProxyError(message, proxy) : message
     log('error', `Request failed: ${shown}`)
     return {

@@ -526,3 +526,37 @@ describe('importData', () => {
     })
   })
 })
+
+describe('timeout / redirect overrides', () => {
+  const req = (extra: Record<string, unknown> = {}) => ({ id: 'r1', folder_id: 'c1', name: 'Slow', method: 'GET', url: '/slow', protocol: 'http', params: '[]', headers: '[]', body_type: 'none', body_content: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', description: '', protocol_config: '{}', sort_order: 0, ...extra })
+  const col = (extra: Record<string, unknown> = {}) => ({ id: 'c1', parent_id: null, name: 'API', source: 'local', description: '', auth_type: 'none', auth_config: '{}', ssl_verification: 'inherit', sort_order: 0, ...extra })
+
+  it('exports overrides on collections, folders and requests, and omits the key when inherited', () => {
+    mockQueryAll
+      .mockReturnValueOnce([col({ network_settings: '{"timeout":9000}' }), { ...col({ id: 'f1', parent_id: 'c1', name: 'F', network_settings: '{"followRedirects":false}' }) }])
+      .mockReturnValueOnce([req({ folder_id: 'f1', network_settings: '{"maxRedirects":1}' }), req({ id: 'r2', network_settings: null })])
+    const c = buildExport().collections[0]
+    expect(c.network).toEqual({ timeout: 9000 })
+    expect(c.folders[0].network).toEqual({ followRedirects: false })
+    expect(c.folders[0].requests[0].network).toEqual({ maxRedirects: 1 })
+    expect('network' in c.requests[0]).toBe(false)
+  })
+
+  it('imports overrides, and stores NULL for files written before this field existed', () => {
+    const file: PostlyExportFile = {
+      $schema: 'postly/v1',
+      exportedAt: '',
+      collections: [{
+        name: 'API', description: '', source: 'local', auth: { type: 'none', config: {} }, ssl: 'inherit',
+        network: { timeout: 7000 },
+        requests: [{ name: 'Old', method: 'GET', url: '', protocol: 'http', params: [], headers: [], bodyType: 'none', bodyContent: '', auth: { type: 'none', config: {} }, ssl: 'inherit', description: '', protocolConfig: {} }],
+        folders: [],
+      }],
+    }
+    importData(file)
+    const folderInsert = mockRun.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO folders'))
+    expect(folderInsert?.[1]).toContain('{"timeout":7000}')
+    const requestInsert = mockRun.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO requests'))
+    expect(requestInsert?.[1]).toContain(null)
+  })
+})

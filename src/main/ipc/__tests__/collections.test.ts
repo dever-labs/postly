@@ -181,6 +181,19 @@ describe('postly:collections:update', () => {
     expect(sql).not.toContain('collapsed')
   })
 
+  it('persists network overrides and clears them when null', async () => {
+    await handlers['postly:collections:update'](null, { id: 'c1', networkSettings: { timeout: 45000, maxRedirects: 2 } })
+    let [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('network_settings = ?')
+    expect(params).toContain('{"timeout":45000,"maxRedirects":2}')
+
+    mockRun.mockClear()
+    await handlers['postly:collections:update'](null, { id: 'c1', networkSettings: null });
+    [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('network_settings = ?')
+    expect(params).toContain(null)
+  })
+
   it('returns data:true with no-op when no fields provided', async () => {
     const result = await handlers['postly:collections:update'](null, { id: 'c1' }) as { data: unknown }
     expect(result.data).toBe(true)

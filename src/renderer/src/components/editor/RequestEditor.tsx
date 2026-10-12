@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
 import { withShortcut } from '@/lib/shortcutHint'
 import React, { Suspense, lazy, useCallback, useMemo } from 'react'
-import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
+import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair, NetworkSettings } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
 import { CurlCopyMenu } from '@/components/editor/CurlCopyMenu'
@@ -18,6 +18,7 @@ import { AuthTab } from '@/components/editor/tabs/AuthTab'
 import { ExtractTab } from '@/components/editor/tabs/ExtractTab'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../../shared/extract'
 import { SslEditor } from '@/components/editor/SslEditor'
+import { NetworkEditor } from '@/components/editor/NetworkEditor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore, isScratchId } from '@/store/requests'
 import { useNavigationStore } from '@/store/navigation'
@@ -128,6 +129,7 @@ export function RequestEditor() {
   const onAuthTypeChange = useCallback((t: AuthType) => updateField('authType', t), [updateField])
   const onAuthConfigChange = useCallback((c: Record<string, string>) => updateField('authConfig', c), [updateField])
   const onSslChange = useCallback((v: SslVerification) => updateField('sslVerification', v), [updateField])
+  const onNetworkChange = useCallback((v: NetworkSettings | undefined) => updateField('networkSettings', v), [updateField])
 
   if (!editingRequest) {
     return (
@@ -395,6 +397,14 @@ export function RequestEditor() {
                   <SslEditor
                     value={(editingRequest.sslVerification as SslVerification) ?? 'inherit'}
                     onChange={onSslChange}
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Timeout &amp; Redirects</p>
+                  <NetworkEditor
+                    value={editingRequest.networkSettings}
+                    onChange={onNetworkChange}
+                    inheritsFrom="the folder, collection or global setting"
                   />
                 </div>
               </div>

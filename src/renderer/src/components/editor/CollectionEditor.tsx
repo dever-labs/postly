@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Download, FolderOpen, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
-import type { AuthType, SslVerification } from '@/types'
+import type { AuthType, NetworkSettings, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { CollectionVariables } from '@/components/editor/CollectionVariables'
 import { SslEditor } from '@/components/editor/SslEditor'
+import { NetworkEditor } from '@/components/editor/NetworkEditor'
+import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 import { useIntegrationsStore } from '@/store/integrations'
@@ -53,12 +55,13 @@ export function CollectionEditor({ collectionId }: Props) {
   const [authType, setAuthType] = useState<AuthType>('none')
   const [authConfig, setAuthConfig] = useState<Record<string, string>>({})
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
+  const [networkSettings, setNetworkSettings] = useState<NetworkSettings | undefined>(undefined)
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification } | null>(null)
+  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification; networkSettings?: NetworkSettings } | null>(null)
 
-  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
+  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification; networkSettings?: NetworkSettings }
   const undoStack = useRef<FormSnapshot[]>([])
   const lastUndoField = useRef<string | null>(null)
   const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -77,7 +80,7 @@ export function CollectionEditor({ collectionId }: Props) {
 
   const scheduleDraft = (fields: {
     name: string; description: string
-    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification
+    authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification; networkSettings?: NetworkSettings
   }) => {
     pendingDraftData.current = fields
     if (draftTimer.current) clearTimeout(draftTimer.current)
@@ -91,6 +94,7 @@ export function CollectionEditor({ collectionId }: Props) {
         authType: fields.authType,
         authConfig: JSON.stringify(fields.authConfig),
         sslVerification: fields.sslVerification,
+        networkSettings: JSON.stringify(fields.networkSettings ?? {}),
       })
     }, 500)
   }
@@ -107,6 +111,7 @@ export function CollectionEditor({ collectionId }: Props) {
         authType: collection.authType,
         authConfig: collection.authConfig,
         sslVerification: collection.sslVerification ?? 'inherit',
+        networkSettings: collection.networkSettings,
       }
       try {
         const { data } = await window.api.drafts.collection.get({ collectionId }) as { data: Record<string, unknown> | null }
@@ -116,6 +121,7 @@ export function CollectionEditor({ collectionId }: Props) {
           setAuthType(((data.auth_type as AuthType) ?? collection.authType))
           setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : collection.authConfig)
           setSslVerification(((data.ssl_verification as SslVerification) ?? collection.sslVerification ?? 'inherit'))
+          setNetworkSettings(data.network_settings != null ? normalizeNetworkSettings(data.network_settings) : collection.networkSettings)
           setIsDirty(true)
           setEditorDirty(collectionId, true)
           return
@@ -126,6 +132,7 @@ export function CollectionEditor({ collectionId }: Props) {
       setAuthType(collection.authType)
       setAuthConfig(collection.authConfig)
       setSslVerification(collection.sslVerification ?? 'inherit')
+    setNetworkSettings(collection.networkSettings)
       setIsDirty(false)
     }
     load()
@@ -136,7 +143,7 @@ export function CollectionEditor({ collectionId }: Props) {
         const pending = pendingDraftData.current
         if (pending) {
           pendingDraftData.current = null
-          window.api.drafts.collection.upsert({ collectionId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+          window.api.drafts.collection.upsert({ collectionId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification, networkSettings: JSON.stringify(pending.networkSettings ?? {}) })
         }
       }
       clearUndo()
@@ -164,6 +171,7 @@ export function CollectionEditor({ collectionId }: Props) {
     setAuthType(collection.authType)
     setAuthConfig(collection.authConfig)
     setSslVerification(collection.sslVerification ?? 'inherit')
+    setNetworkSettings(collection.networkSettings)
     setIsDirty(false)
     setEditorDirty(collectionId, false)
   }
@@ -173,7 +181,7 @@ export function CollectionEditor({ collectionId }: Props) {
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     clearUndo()
     setSaving(true)
-    await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await updateCollection(collectionId, { name: name.trim(), description, authType, authConfig, sslVerification, networkSettings: networkSettings ?? null })
     await window.api.drafts.collection.delete({ collectionId })
     setSaving(false)
     setIsDirty(false)
@@ -187,7 +195,7 @@ export function CollectionEditor({ collectionId }: Props) {
 
   const mark = (fields?: {
     name?: string; description?: string
-    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification
+    authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; networkSettings?: NetworkSettings
   }, changedField?: string) => {
     // Push undo snapshot when switching fields or after 1s on same field
     const currentSnapshot: FormSnapshot = {
@@ -196,6 +204,7 @@ export function CollectionEditor({ collectionId }: Props) {
       authType,
       authConfig,
       sslVerification,
+      networkSettings,
     }
     if (changedField !== lastUndoField.current) {
       if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
@@ -214,6 +223,7 @@ export function CollectionEditor({ collectionId }: Props) {
       authType: fields?.authType ?? authType,
       authConfig: fields?.authConfig ?? authConfig,
       sslVerification: fields?.sslVerification ?? sslVerification,
+      networkSettings: fields && 'networkSettings' in fields ? fields.networkSettings : networkSettings,
     }
     const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
@@ -239,6 +249,7 @@ export function CollectionEditor({ collectionId }: Props) {
     setAuthType(previous.authType)
     setAuthConfig(previous.authConfig)
     setSslVerification(previous.sslVerification)
+    setNetworkSettings(previous.networkSettings)
     // Dirty only if the restored snapshot differs from the originally saved state
     const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
@@ -328,6 +339,15 @@ export function CollectionEditor({ collectionId }: Props) {
             value={sslVerification}
             onChange={(v) => { setSslVerification(v); mark({ sslVerification: v }, 'ssl') }}
             canInherit={false}
+          />
+        </Section>
+
+        <Section title="Timeout & Redirects">
+          <p className="mb-3 text-xs text-th-text-faint">Default timeout and redirect behaviour for all requests in this collection. Can be overridden per group or request.</p>
+          <NetworkEditor
+            value={networkSettings}
+            onChange={(v) => { setNetworkSettings(v); mark({ networkSettings: v }, 'network') }}
+            inheritsFrom="the global setting"
           />
         </Section>
 

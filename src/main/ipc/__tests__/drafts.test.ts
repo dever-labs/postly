@@ -75,6 +75,18 @@ describe('postly:drafts:request:upsert', () => {
     expect(params[6]).toBe('{"name":"test"}')
   })
 
+  it('keeps an empty override as {} so it differs from an untouched draft', async () => {
+    await handlers['postly:drafts:request:upsert'](null, { requestId: 'r1', networkSettings: '{}' })
+    await handlers['postly:drafts:request:upsert'](null, { requestId: 'r1', networkSettings: '{"timeout":900,"x":1}' })
+    await handlers['postly:drafts:request:upsert'](null, { requestId: 'r1' })
+
+    const [sql] = mockRunDraft.mock.calls[0] as [string, unknown[]]
+    expect(sql).toContain('network_settings')
+    expect(mockRunDraft.mock.calls[0][1]).toContain('{}')
+    expect(mockRunDraft.mock.calls[1][1]).toContain('{"timeout":900}')
+    expect(mockRunDraft.mock.calls[2][1]).not.toContain('{}')
+  })
+
   it('uses null for omitted optional fields', async () => {
     await handlers['postly:drafts:request:upsert'](null, { requestId: 'r1', url: 'http://localhost' })
 
