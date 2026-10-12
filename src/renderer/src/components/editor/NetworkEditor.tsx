@@ -113,6 +113,9 @@ function LimitField({ n, onCommit }: { n: number; onCommit: (n: number) => void 
   )
 }
 
+const seedTimeout = (ms: number): number =>
+  Number.isInteger(ms) && ms > 0 && ms <= MAX_TIMEOUT_MS ? ms : 30_000
+
 export const GRID = 'grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] items-start gap-x-8 gap-y-5'
 const hint = 'text-xs text-th-text-faint'
 
@@ -138,7 +141,7 @@ export function NetworkEditor({ value, onChange, inherited, layout = 'grid' }: N
           label="Timeout"
           value={timeoutChoice}
           options={[{ value: 'inherit', label: 'Inherit' }, { value: 'custom', label: 'Custom' }]}
-          onChange={(c) => update({ timeout: c === 'custom' ? inherited.timeout.value : undefined })}
+          onChange={(c) => update({ timeout: c === 'custom' ? seedTimeout(inherited.timeout.value) : undefined })}
         />
         {timeoutChoice === 'custom' ? (
           <TimeoutField ms={current.timeout ?? inherited.timeout.value} onCommit={(n) => update({ timeout: n })} />
