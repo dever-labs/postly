@@ -59,3 +59,23 @@ describe('Postman test scripts', () => {
     expect(out.warnings).toHaveLength(1)
   })
 })
+
+describe('Postman auth mapping', () => {
+  const entries = (o: Record<string, string>) => Object.entries(o).map(([key, value]) => ({ key, value, type: 'string' }))
+  const authOf = (auth: unknown) => {
+    const out = parsePostmanCollection({
+      info: { name: 'C', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+      item: [{ name: 'R', request: { method: 'GET', url: 'https://x.test', auth } }],
+    })
+    return out.groups[0].requests[0].auth
+  }
+
+  it('maps API key, Digest and AWS Signature', () => {
+    expect(authOf({ type: 'apikey', apikey: entries({ key: 'X-Key', value: 'v', in: 'query' }) })).toEqual({ type: 'apikey', config: { key: 'X-Key', value: 'v', in: 'query' } })
+    expect(authOf({ type: 'apikey', apikey: entries({ key: 'X-Key', value: 'v' }) })).toMatchObject({ config: { in: 'header' } })
+    expect(authOf({ type: 'digest', digest: entries({ username: 'u', password: 'p', realm: 'r' }) })).toEqual({ type: 'digest', config: { username: 'u', password: 'p' } })
+    expect(authOf({ type: 'awsv4', awsv4: entries({ accessKey: 'A', secretKey: 'S', sessionToken: 'T', region: 'r', service: 's' }) })).toEqual({
+      type: 'awsv4', config: { accessKey: 'A', secretKey: 'S', sessionToken: 'T', region: 'r', service: 's' },
+    })
+  })
+})

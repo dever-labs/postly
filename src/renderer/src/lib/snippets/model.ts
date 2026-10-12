@@ -93,12 +93,18 @@ export type SnippetBody =
   | { kind: 'form'; rows: SnippetRow[] }
   | { kind: 'binary'; path: string }
 
+export type SnippetScheme =
+  | { kind: 'digest'; username: string; password: string }
+  | { kind: 'awsv4'; accessKey: string; secretKey: string; sessionToken: string; region: string; service: string }
+
 /** The request after variables, auth, params and redaction are applied. Every language generator renders this. */
 export interface SnippetModel {
   method: string
   url: string
   headers: { key: string; value: string }[]
   basic: { username: string; password: string } | null
+  /** Schemes that need more than a header: the client has to answer a challenge or sign the request. */
+  scheme: SnippetScheme | null
   body: SnippetBody
   insecure: boolean
   notes: string[]
@@ -177,6 +183,7 @@ export function buildSnippetModel(req: ExportableRequest, options: SnippetOption
   }
 
   let basic: SnippetModel['basic'] = null
+  let scheme: SnippetScheme | null = null
   switch (req.authType) {
     case 'basic':
       if (req.authConfig.username) basic = { username: sub(req.authConfig.username), password: secret(sub(req.authConfig.password ?? ''), '<password>') }
@@ -194,6 +201,30 @@ export function buildSnippetModel(req: ExportableRequest, options: SnippetOption
     case 'ntlm':
       notes.push('NTLM authentication is not included')
       break
+    case 'apikey': {
+      const { key, value, in: where } = req.authConfig
+      if (key && value) {
+        if (where === 'query') {
+          const shown = secret(sub(value), '<api-key>')
+          url = url + (url.includes('?') ? '&' : '?') + `${encodeURIComponent(sub(key))}=${options.includeSecrets ? encodeURIComponent(shown) : shown}`
+        }
+        else headers.push({ key, value: secret(sub(value), '<api-key>') })
+      }
+      break
+    }
+    case 'digest':
+      if (req.authConfig.username) scheme = { kind: 'digest', username: sub(req.authConfig.username), password: secret(sub(req.authConfig.password ?? ''), '<password>') }
+      break
+    case 'awsv4': {
+      const c = req.authConfig
+      if (c.accessKey && c.secretKey && c.region && c.service) {
+        scheme = {
+          kind: 'awsv4', accessKey: sub(c.accessKey), secretKey: secret(sub(c.secretKey), '<secret-key>'),
+          sessionToken: c.sessionToken ? secret(sub(c.sessionToken), '<session-token>') : '', region: sub(c.region), service: sub(c.service),
+        }
+      }
+      break
+    }
     case 'inherit':
       notes.push('Authentication inherited from the collection or folder is not included')
       break
@@ -217,12 +248,17 @@ export function buildSnippetModel(req: ExportableRequest, options: SnippetOption
     }
   }
 
-  return { method, url, headers, basic, body, insecure: req.sslVerification === 'disabled', notes, redacted }
+  return { method, url, headers, basic, scheme, body, insecure: req.sslVerification === 'disabled', notes, redacted }
 }
 
 /** Notes for a finished snippet: model notes, the redaction hint, and any {{VAR}} that is still unresolved. */
-export function snippetNotes(model: SnippetModel, code: string, options: SnippetOptions): string[] {
+export function snippetNotes(model: SnippetModel, code: string, options: SnippetOptions, supports: SnippetScheme['kind'][] = []): string[] {
   const notes = [...model.notes]
+  if (model.scheme && !supports.includes(model.scheme.kind)) {
+    notes.push(model.scheme.kind === 'digest'
+      ? 'Digest authentication needs a challenge round trip that this language\'s snippet does not perform, so no credentials are included'
+      : 'AWS Signature V4 signs the final request when sent and is not included in this language\'s snippet')
+  }
   if (model.redacted) notes.push('Credentials were replaced with placeholders. Enable "Include secrets" to export them.')
   if (options.variables) {
     // Built-ins such as {{$guid}} are meant to stay: they are generated each time the request is sent

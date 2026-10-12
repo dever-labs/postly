@@ -34,6 +34,9 @@ beforeAll(async () => {
     } else if (req.url === '/stall') {
       res.writeHead(200, { 'Content-Type': 'text/plain' })
       res.write('hi')
+    } else if (req.url === '/slow-stall') {
+      // Headers arrive late, so axios' own timeout (counted from the request) fires before the body idle timer
+      setTimeout(() => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.write('hi') }, 150)
     } else if (req.url === '/idle') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' })
       res.write('data: only\n\n')
@@ -115,6 +118,12 @@ describe('streaming responses', () => {
 
   it.each([true, false])('reports a stalled plain body as a timeout (followRedirects=%s)', async (followRedirects) => {
     const res = await executeRequest(req('/stall'), { timeout: 300, followRedirects, onStream: () => {} })
+    expect(res.status).toBe(0)
+    expect(res.statusText).toBe('timeout of 300ms exceeded')
+  })
+
+  it('reports a stall after late headers as a timeout, not an abort', async () => {
+    const res = await executeRequest(req('/slow-stall'), { timeout: 300, followRedirects: true, onStream: () => {} })
     expect(res.status).toBe(0)
     expect(res.statusText).toBe('timeout of 300ms exceeded')
   })

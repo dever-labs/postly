@@ -34,6 +34,9 @@ Configure auth once on a collection or group, and requests inherit it automatica
 | **JWT Bearer** | JWT token with configurable prefix |
 | **OAuth 2.0** | Authorization Code (PKCE) or Client Credentials — token auto-cached and refreshed |
 | **NTLM** | Windows authentication with domain/workstation |
+| **API Key** | A named key sent as a header or query parameter; the value supports `{{VAR}}` and is hidden in the Console and history |
+| **Digest** | Username + password; the request is re-sent with the answer after a `401` Digest challenge (MD5, SHA-256, `qop=auth`) |
+| **AWS Signature** | SigV4 with access key, secret, optional session token, region and service; signs the final request including query and body |
 | **Inherit** | Walk up to group → collection → integration |
 
 ### Source Integrations

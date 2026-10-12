@@ -21,8 +21,12 @@ export function generateCSharp(req: ExportableRequest, options: SnippetOptions):
   const m = buildSnippetModel(req, options)
   if (!m) return null
   const lines: string[] = ['using System.Net.Http;', 'using System.Net.Http.Headers;', 'using System.Text;', '']
-  lines.push(m.insecure
-    ? 'using var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator };\nusing var client = new HttpClient(handler);'
+  const handlerProps: string[] = []
+  if (m.scheme?.kind === 'digest') handlerProps.push(`Credentials = new NetworkCredential(${cs(m.scheme.username)}, ${cs(m.scheme.password)})`)
+  if (m.insecure) handlerProps.push('ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator')
+  if (m.scheme?.kind === 'digest') lines.splice(1, 0, 'using System.Net;')
+  lines.push(handlerProps.length > 0
+    ? `using var handler = new HttpClientHandler { ${handlerProps.join(', ')} };\nusing var client = new HttpClient(handler);`
     : 'using var client = new HttpClient();')
   lines.push(`using var request = new HttpRequestMessage(HttpMethod.${HTTP_METHODS[m.method] ?? 'Get'}, ${cs(m.url)});`)
 
@@ -58,5 +62,5 @@ export function generateCSharp(req: ExportableRequest, options: SnippetOptions):
 
   lines.push('', 'using var response = await client.SendAsync(request);', 'Console.WriteLine((int)response.StatusCode + " " + await response.Content.ReadAsStringAsync());')
   const code = lines.join('\n')
-  return { code, notes: snippetNotes(m, code, options) }
+  return { code, notes: snippetNotes(m, code, options, ['digest']) }
 }

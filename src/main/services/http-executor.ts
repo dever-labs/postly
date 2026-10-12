@@ -5,6 +5,7 @@ import type { Readable } from 'stream'
 import { StringDecoder } from 'string_decoder'
 import { createNdjsonParser, createSseParser, streamKindOf, type StreamEvent, type StreamKind } from '../../shared/stream'
 import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
+import { applyApiKey, buildDigestHeader, type DigestChallenge, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
 import type { TlsSelection } from './certificates'
 import { parseResponseCookies, type ResponseCookie } from './cookie-jar'
 
@@ -72,9 +73,7 @@ export function appendQueryParams(url: string, params?: Record<string, string>):
   return `${base}${joiner}${query}${hash}`
 }
 
-export async function executeRequest(
-  initialReq: HttpRequest,
-  options: {
+export type ExecuteOptions = {
     sslVerification?: boolean
     followRedirects?: boolean
     timeout?: number
@@ -85,7 +84,90 @@ export async function executeRequest(
     tlsFor?: (url: string) => TlsSelection
     /** Receives live events for Server-Sent Events and NDJSON responses. */
     onStream?: (message: StreamMessage) => void
-  } = {}
+}
+
+/** Challenges remembered per server and user, so later requests can answer before being asked (RFC 7616 §3.6). */
+const digestSessions = new Map<string, { challenge: DigestChallenge; nonceCount: number }>()
+const MAX_DIGEST_SESSIONS = 50
+
+export function clearDigestSessions(): void {
+  digestSessions.clear()
+}
+
+function rememberDigest(key: string, challenge: DigestChallenge): void {
+  digestSessions.delete(key)
+  digestSessions.set(key, { challenge, nonceCount: 1 })
+  if (digestSessions.size > MAX_DIGEST_SESSIONS) digestSessions.delete(digestSessions.keys().next().value as string)
+}
+
+const challengeOf = (res: HttpResponse): DigestChallenge | null => {
+  if (res.status !== 401) return null
+  const header = Object.entries(res.headers).find(([k]) => k.toLowerCase() === 'www-authenticate')?.[1]
+  return parseDigestChallenge(header)
+}
+
+/**
+ * Digest: the first request to a server goes out without credentials and a 401 challenge is answered once.
+ * The challenge is then reused (with a rising nonce count) so later requests skip the round trip;
+ * if the server has expired the nonce, the fresh challenge from its 401 is answered instead.
+ */
+export async function executeRequest(initialReq: HttpRequest, options: ExecuteOptions = {}): Promise<HttpResponse> {
+  if (initialReq.authType !== 'digest') return runRequest(initialReq, options)
+
+  const log = (level: LogLevel, message: string) => options.onLog?.({ level, message })
+  const { username = '', password = '' } = initialReq.authConfig
+  if (!username) {
+    log('warn', 'Digest auth: no username set, sending without credentials')
+    return runRequest({ ...initialReq, authType: 'none' }, options)
+  }
+  const url = appendQueryParams(initialReq.url, initialReq.params)
+  const target = new URL(url)
+  const uri = `${target.pathname}${target.search}`
+  const key = `${target.origin}\n${username}`
+  const plain: HttpRequest = { ...initialReq, url, params: undefined, authType: 'none', authConfig: {} }
+  const answer = (challenge: DigestChallenge, nonceCount: number) =>
+    runRequest({ ...plain, headers: { ...initialReq.headers, Authorization: buildDigestHeader({ challenge, username, password, method: initialReq.method, uri, nonceCount }) } }, options)
+  const describe = (c: DigestChallenge) => `realm "${c.realm}" (${c.algorithm}${c.qop.includes('auth') ? ', qop=auth' : ''}); password hidden`
+
+  let spent = 0
+  const session = digestSessions.get(key)
+  if (session && isSupportedDigestAlgorithm(session.challenge.algorithm)) {
+    session.nonceCount++
+    log('info', `Digest auth: reusing the earlier challenge for ${describe(session.challenge)}, no extra round trip`)
+    const res = await answer(session.challenge, session.nonceCount)
+    const fresh = challengeOf(res)
+    if (!fresh) {
+      if (res.status === 401) digestSessions.delete(key)
+      return res
+    }
+    log('info', 'Digest auth: the server asked again (stale nonce or wrong credentials), answering its new challenge')
+    spent = res.duration
+    rememberDigest(key, fresh)
+    const retry = await answer(fresh, 1)
+    return { ...retry, duration: spent + retry.duration }
+  }
+
+  const first = await runRequest(plain, options)
+  const challenge = challengeOf(first)
+  if (!challenge) {
+    log('info', first.status === 401
+      ? 'Digest auth: the server answered 401 without a Digest challenge'
+      : 'Digest auth: the server did not ask for credentials, so none were sent')
+    return first
+  }
+  if (!isSupportedDigestAlgorithm(challenge.algorithm)) {
+    log('warn', `Digest auth: algorithm ${challenge.algorithm} is not supported`)
+    return first
+  }
+  log('info', `Digest auth: answering the challenge for ${describe(challenge)}`)
+  rememberDigest(key, challenge)
+  const second = await answer(challenge, 1)
+  return { ...second, duration: first.duration + second.duration }
+}
+
+async function runRequest(
+  initialReq: HttpRequest,
+  options: ExecuteOptions
 ): Promise<HttpResponse> {
   const { sslVerification = true, followRedirects = true, timeout = 30000, signal, onLog, cookieJar, tlsFor, onStream } = options
   const req: HttpRequest = { ...initialReq, url: appendQueryParams(initialReq.url, initialReq.params) }
@@ -206,6 +288,43 @@ export async function executeRequest(
     } catch { /* skip */ }
   }
 
+  // Credentials that end up in the URL must not reach the Console.
+  const displayUrl = req.url
+  if (req.authType === 'apikey') {
+    const applied = applyApiKey(req.url, headers, req.authConfig)
+    if (applied) {
+      req.url = applied.url
+      Object.assign(headers, applied.headers)
+      log('info', `Auth: ${applied.description}`)
+    } else {
+      log('warn', 'Auth: API key needs both a name and a value, nothing was added')
+    }
+  } else if (req.authType === 'awsv4') {
+    const { accessKey = '', secretKey = '', sessionToken = '', region = '', service = '' } = req.authConfig
+    if (!accessKey || !secretKey || !region || !service) {
+      log('warn', 'Auth: AWS Signature V4 needs access key, secret key, region and service, so the request was not signed')
+    } else {
+      const unsignable = data instanceof FormData
+      if (!unsignable && data !== null && typeof data === 'object' && !Buffer.isBuffer(data)) data = JSON.stringify(data)
+      // axios re-processes string bodies sent as JSON (trimming, quoting), which would change the signed bytes; Buffers are sent as is.
+      if (typeof data === 'string') data = Buffer.from(data, 'utf8')
+      try {
+        const signed = signAwsV4({
+          method: req.method,
+          url: req.url,
+          headers,
+          body: unsignable ? null : (data as string | Buffer | undefined),
+          config: { accessKey, secretKey, sessionToken: sessionToken || undefined, region, service },
+        })
+        Object.assign(headers, signed.headers)
+        log('info', `Auth: AWS Signature V4 signed for ${service} in ${region} (access key ${maskTail(accessKey)}; signed headers: ${signed.signedHeaders}; secrets hidden)`)
+        if (unsignable) log('warn', 'AWS Signature V4: multipart bodies are sent as UNSIGNED-PAYLOAD')
+      } catch (err) {
+        log('error', `AWS Signature V4 signing failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+  }
+
   // Cookie values are never logged, only their names. A hand-written Cookie header wins over the jar.
   const manualCookie = findHeader(headers, 'cookie')
   const receivedCookies: ResponseCookie[] = []
@@ -293,7 +412,7 @@ export async function executeRequest(
     config.httpsAgent = proxy.httpsAgent
   }
 
-  log('info', `→ ${req.method.toUpperCase()} ${req.url}`)
+  log('info', `→ ${req.method.toUpperCase()} ${displayUrl}`)
   log('info', proxy ? `Proxy: ${proxy.display}` : 'Proxy: none (direct)')
 
   try {
@@ -405,7 +524,9 @@ async function readBody(
   // axios only guards the body while following redirects, so idle time is enforced here for every response.
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let timedOut = false
+  let lastActivity = Date.now()
   const armIdle = () => {
+    lastActivity = Date.now()
     if (idleTimer) clearTimeout(idleTimer)
     if (opts.idleTimeout > 0) idleTimer = setTimeout(() => { timedOut = true; data.destroy() }, opts.idleTimeout)
   }
@@ -435,7 +556,10 @@ async function readBody(
     parser?.end()
     if (timedOut && !cancelled) error = `timeout of ${opts.idleTimeout}ms exceeded`
   } catch (err) {
-    if (!cancelled) error = timedOut ? `timeout of ${opts.idleTimeout}ms exceeded` : err instanceof Error ? err.message : String(err)
+    const message = err instanceof Error ? err.message : String(err)
+    // With redirects on, axios' own socket timeout can fire a moment before the idle timer above and surfaces as "aborted"
+    const abortedWhileIdle = opts.idleTimeout > 0 && /aborted|premature close|socket hang up|ECONNRESET/i.test(message) && Date.now() - lastActivity >= opts.idleTimeout - 50
+    if (!cancelled) error = timedOut || abortedWhileIdle ? `timeout of ${opts.idleTimeout}ms exceeded` : message
   } finally {
     if (idleTimer) clearTimeout(idleTimer)
     opts.signal?.removeEventListener('abort', onAbort)

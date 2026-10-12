@@ -15,7 +15,7 @@ export type BodyType =
   | 'graphql'
   | 'json'  // legacy alias
   | 'raw'   // legacy alias
-export type AuthType = 'none' | 'inherit' | 'bearer' | 'basic' | 'jwt' | 'oauth2' | 'ntlm'
+export type AuthType = 'none' | 'inherit' | 'bearer' | 'basic' | 'jwt' | 'oauth2' | 'ntlm' | 'apikey' | 'digest' | 'awsv4'
 export type CollectionSource = 'local' | 'backstage' | 'github' | 'gitlab' | 'git'
 export type SslVerification = 'inherit' | 'enabled' | 'disabled'
 

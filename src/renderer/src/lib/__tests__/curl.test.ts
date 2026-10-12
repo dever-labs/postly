@@ -94,6 +94,19 @@ describe('parseCurl', () => {
     expect(r.sslVerification).toBe('disabled')
   })
 
+  it('maps --digest with -u to Digest auth', () => {
+    const r = must("curl --digest -u ann:secret https://api.test")
+    expect(r.authType).toBe('digest')
+    expect(r.authConfig).toEqual({ username: 'ann', password: 'secret' })
+  })
+
+  it('maps --aws-sigv4 with -u to AWS Signature auth and lifts the session token', () => {
+    const r = must("curl --aws-sigv4 'aws:amz:eu-west-1:execute-api' -u AKID:SECRET -H 'x-amz-security-token: TOK' https://api.test")
+    expect(r.authType).toBe('awsv4')
+    expect(r.authConfig).toEqual({ accessKey: 'AKID', secretKey: 'SECRET', sessionToken: 'TOK', region: 'eu-west-1', service: 'execute-api' })
+    expect(r.headers.some((h) => h.key.toLowerCase() === 'x-amz-security-token')).toBe(false)
+  })
+
   it('turns Authorization headers into structured auth', () => {
     const b = must("curl https://api.test -H 'Authorization: Bearer abc.def'")
     expect(b.authType).toBe('bearer')

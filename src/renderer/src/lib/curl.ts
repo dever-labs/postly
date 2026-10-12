@@ -122,7 +122,7 @@ const IGNORED_FLAGS = new Set([
   's', 'silent', 'S', 'show-error', 'v', 'verbose', 'i', 'include', 'compressed', 'f', 'fail', 'g', 'globoff', 'N', 'no-buffer',
   'http1.0', 'http1.1', 'http2', 'http2-prior-knowledge', 'http3', 'tlsv1.2', 'tlsv1.3', 'path-as-is', 'ipv4', 'ipv6', '4', '6',
   'O', 'remote-name', 'J', 'remote-header-name', 'progress-bar', '#', 'no-keepalive', 'raw', 'tcp-nodelay', 'fail-with-body',
-  'tr-encoding', 'netrc', 'n', 'anyauth', 'basic', 'digest', 'ntlm', 'negotiate',
+  'tr-encoding', 'netrc', 'n', 'anyauth', 'basic', 'ntlm', 'negotiate',
 ])
 const SHORT_WITH_VALUE = new Set(['X', 'H', 'd', 'F', 'u', 'A', 'e', 'b', 'o', 'm', 'x', 'U', 'E', 'w', 'T', 'c', 'D', 'K'])
 const BODY_FLAGS = new Set(['d', 'data', 'data-raw', 'data-binary', 'data-ascii', 'data-urlencode', 'json'])
@@ -179,6 +179,8 @@ export function parseCurl(input: string): ParsedCurl | null {
   let insecure = false
   const creds: { basic: { username: string; password: string } | null } = { basic: null }
   let jsonFlag = false
+  let digest = false
+  let sigv4 = null as { region: string; service: string } | null
 
   const addHeader = (raw: string) => {
     const idx = raw.indexOf(':')
@@ -220,6 +222,13 @@ export function parseCurl(input: string): ParsedCurl | null {
         creds.basic = idx === -1 ? { username: v, password: '' } : { username: v.slice(0, idx), password: v.slice(idx + 1) }
         break
       }
+      case 'digest': digest = true; break
+      case 'aws-sigv4': {
+        const [provider, , region, service] = (value ?? '').split(':')
+        if (provider === 'aws' && region && service) sigv4 = { region, service }
+        else warnings.push(`Ignored unsupported option --aws-sigv4 ${value ?? ''}`.trim())
+        break
+      }
       case 'k': case 'insecure': insecure = true; break
       case 'L': case 'location': case 'location-trusted':
         warnings.push('-L noted: Postly follows redirects according to the global setting, not per request')
@@ -244,7 +253,7 @@ export function parseCurl(input: string): ParsedCurl | null {
     if (t.startsWith('--') && t.length > 2) {
       const eq = t.indexOf('=')
       const name = eq === -1 ? t.slice(2) : t.slice(2, eq)
-      const takesValue = BODY_FLAGS.has(name) || ['request', 'header', 'form', 'form-string', 'user', 'user-agent', 'referer', 'cookie', 'url'].includes(name) || IGNORED_WITH_VALUE.has(name)
+      const takesValue = BODY_FLAGS.has(name) || ['request', 'header', 'form', 'form-string', 'user', 'user-agent', 'referer', 'cookie', 'url', 'aws-sigv4'].includes(name) || IGNORED_WITH_VALUE.has(name)
       if (!takesValue) { handle(name, undefined); continue }
       const value = eq !== -1 ? t.slice(eq + 1) : tokens[++i]
       if (IGNORED_WITH_VALUE.has(name) && !BODY_FLAGS.has(name)) { warnings.push(`Ignored unsupported option --${name} ${value ?? ''}`.trim()); continue }
@@ -273,8 +282,13 @@ export function parseCurl(input: string): ParsedCurl | null {
   // Authorization header → structured auth
   let authType: AuthType = 'none'
   let authConfig: Record<string, string> = {}
-  if (creds.basic) {
-    authType = 'basic'
+  const tokenIdx = headers.findIndex((h) => h.key.toLowerCase() === 'x-amz-security-token')
+  if (sigv4 && creds.basic) {
+    authType = 'awsv4'
+    authConfig = { accessKey: creds.basic.username, secretKey: creds.basic.password, sessionToken: tokenIdx === -1 ? '' : headers[tokenIdx].value, region: sigv4.region, service: sigv4.service }
+    if (tokenIdx !== -1) headers.splice(tokenIdx, 1)
+  } else if (creds.basic) {
+    authType = digest ? 'digest' : 'basic'
     authConfig = { username: creds.basic.username, password: creds.basic.password }
   } else {
     const idx = headers.findIndex((h) => h.key.toLowerCase() === 'authorization')
@@ -392,6 +406,12 @@ export function generateCurl(req: ExportableRequest, options: SnippetOptions): G
   const args = head ? '-I' : method !== 'GET' || body.kind !== 'none' ? `-X ${method}` : ''
   const lines: string[] = [`curl ${args}`.trimEnd() + ` ${shellQuote(model.url)}`]
   if (model.basic) lines.push(`-u ${shellQuote(`${model.basic.username}:${model.basic.password}`)}`)
+  const scheme = model.scheme
+  if (scheme?.kind === 'digest') lines.push('--digest', `-u ${shellQuote(`${scheme.username}:${scheme.password}`)}`)
+  if (scheme?.kind === 'awsv4') {
+    lines.push(`--aws-sigv4 ${shellQuote(`aws:amz:${scheme.region}:${scheme.service}`)}`, `-u ${shellQuote(`${scheme.accessKey}:${scheme.secretKey}`)}`)
+    if (scheme.sessionToken) lines.push(`-H ${shellQuote(`x-amz-security-token: ${scheme.sessionToken}`)}`)
+  }
   for (const h of model.headers) lines.push(`-H ${shellQuote(`${h.key}: ${h.value}`)}`)
   if (model.insecure) lines.push('-k')
   switch (body.kind) {
@@ -401,5 +421,7 @@ export function generateCurl(req: ExportableRequest, options: SnippetOptions): G
     case 'raw': lines.push(`--data-raw ${shellQuote(body.text)}`); break
   }
   const code = lines.join(' \\\n  ')
-  return { code, notes: snippetNotes(model, code, options) }
+  const notes = snippetNotes(model, code, options, ['digest', 'awsv4'])
+  if (scheme?.kind === 'awsv4') notes.push('--aws-sigv4 needs curl 7.75 or newer')
+  return { code, notes }
 }

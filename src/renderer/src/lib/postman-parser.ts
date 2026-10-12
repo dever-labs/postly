@@ -38,6 +38,7 @@ interface PostmanAuth {
   ntlm?: PostmanAuthEntry[]
   apikey?: PostmanAuthEntry[]
   digest?: PostmanAuthEntry[]
+  awsv4?: PostmanAuthEntry[]
 }
 
 interface PostmanRequest {
@@ -241,6 +242,28 @@ function parseAuth(auth?: PostmanAuth): { type: string; config: Record<string, s
       }
     case 'oauth2':
       return { type: 'oauth2', config: {} }
+    case 'apikey':
+      return {
+        type: 'apikey',
+        config: {
+          key: getAuthEntry(auth.apikey, 'key'),
+          value: getAuthEntry(auth.apikey, 'value'),
+          in: getAuthEntry(auth.apikey, 'in') === 'query' ? 'query' : 'header',
+        },
+      }
+    case 'digest':
+      return { type: 'digest', config: { username: getAuthEntry(auth.digest, 'username'), password: getAuthEntry(auth.digest, 'password') } }
+    case 'awsv4':
+      return {
+        type: 'awsv4',
+        config: {
+          accessKey: getAuthEntry(auth.awsv4, 'accessKey'),
+          secretKey: getAuthEntry(auth.awsv4, 'secretKey'),
+          sessionToken: getAuthEntry(auth.awsv4, 'sessionToken'),
+          region: getAuthEntry(auth.awsv4, 'region'),
+          service: getAuthEntry(auth.awsv4, 'service'),
+        },
+      }
     default:
       return { type: 'none', config: {} }
   }
