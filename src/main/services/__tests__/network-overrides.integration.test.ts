@@ -49,7 +49,7 @@ describe('timeout', () => {
     const res = await executeRequest({ ...req('/'), url: 'http://10.255.255.1:81/' }, { timeout: 300 })
     if (!/timeout/i.test(res.statusText)) ctx.skip()
     expect(res.status).toBe(0)
-    expect(res.statusText).toBe('connect timeout of 300ms exceeded (no connection to the server)')
+    expect(res.statusText).toBe('Connect timeout: no connection after 300ms')
   })
 })
 

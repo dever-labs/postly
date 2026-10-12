@@ -4,6 +4,7 @@ import type { AuthType, Folder as FolderType, NetworkSettings, SslVerification }
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { NetworkEditor } from '@/components/editor/NetworkEditor'
+import { useInheritedNetwork } from '@/components/editor/useInheritedNetwork'
 import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
@@ -52,6 +53,7 @@ export function GroupEditor({ folderId }: Props) {
   const folders = useCollectionsStore((state) => state.folders)
   const folder = useCollectionsStore((state) => state.groups.find((item) => item.id === folderId))
   const updateGroup = useCollectionsStore((state) => state.updateGroup)
+  const inheritedNetwork = useInheritedNetwork(folder?.parentId)
   const integrations = useIntegrationsStore((state) => state.integrations)
   const addToast = useUIStore((state) => state.addToast)
   const selectItem = useUIStore((state) => state.selectItem)
@@ -352,7 +354,7 @@ export function GroupEditor({ folderId }: Props) {
             <NetworkEditor
               value={networkSettings}
               onChange={(v) => { setNetworkSettings(v); mark({ networkSettings: v }, 'network') }}
-              inheritsFrom="the parent folder, collection or global setting"
+              inherited={inheritedNetwork}
             />
           </Section>
         </div>

@@ -461,7 +461,7 @@ async function runRequest(
     const rawMessage = err instanceof Error ? err.message : String(err)
     const code = (err as { code?: string } | null)?.code
     const isTimeout = (code === 'ECONNABORTED' || code === 'ETIMEDOUT') && /timeout/i.test(rawMessage)
-    const message = isTimeout && connectState.connecting ? `connect timeout of ${timeout}ms exceeded (no connection to the server)` : rawMessage
+    const message = isTimeout && connectState.connecting ? `Connect timeout: no connection after ${timeout}ms` : rawMessage
     const shown = proxy ? describeProxyError(message, proxy) : message
     log('error', `Request failed: ${shown}`)
     return {

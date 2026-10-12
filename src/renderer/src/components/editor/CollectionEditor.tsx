@@ -5,6 +5,7 @@ import { AuthEditor } from '@/components/editor/AuthEditor'
 import { CollectionVariables } from '@/components/editor/CollectionVariables'
 import { SslEditor } from '@/components/editor/SslEditor'
 import { NetworkEditor } from '@/components/editor/NetworkEditor'
+import { useInheritedNetwork } from '@/components/editor/useInheritedNetwork'
 import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
@@ -44,6 +45,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function CollectionEditor({ collectionId }: Props) {
   const collection = useCollectionsStore((s) => s.collections.find((c) => c.id === collectionId))
   const updateCollection = useCollectionsStore((s) => s.updateCollection)
+  const inheritedNetwork = useInheritedNetwork(undefined)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const addToast = useUIStore((s) => s.addToast)
   const selectUIItem = useUIStore((s) => s.selectItem)
@@ -347,7 +349,7 @@ export function CollectionEditor({ collectionId }: Props) {
           <NetworkEditor
             value={networkSettings}
             onChange={(v) => { setNetworkSettings(v); mark({ networkSettings: v }, 'network') }}
-            inheritsFrom="the global setting"
+            inherited={inheritedNetwork}
           />
         </Section>
 

@@ -54,14 +54,15 @@ test.describe('Timeout & redirect overrides', () => {
     await window.getByText(colName).first().click()
     const editor = window.getByTestId('network-editor')
     await editor.waitFor({ state: 'visible' })
+    await expect(editor.getByTestId('timeout-inherited')).toContainText('30 s from the global setting')
     await editor.getByTestId('timeout-mode-custom').click()
-    await editor.getByTestId('timeout-value').fill('150')
+    await editor.getByTestId('timeout-value').fill('0.15')
     await window.getByTestId('collection-save-button').click()
     await expect(window.getByTestId('collection-dirty-dot')).not.toBeVisible()
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
     await window.getByText(colName).first().click()
-    await expect(window.getByTestId('timeout-value')).toHaveValue('150')
+    await expect(window.getByTestId('timeout-value')).toHaveValue('0.15')
 
     // A request in the folder inherits it, so the slow endpoint times out and the Console names the source
     const sendSlow = async () => {
@@ -73,6 +74,7 @@ test.describe('Timeout & redirect overrides', () => {
       await window.getByTestId('send-button').click()
     }
     await window.getByText(grpName).first().click()
+    await expect(window.getByTestId('timeout-inherited')).toContainText(`150 ms from collection "${colName}"`)
     await window.getByText(reqName).first().click()
     await sendSlow()
     await expect(window.getByTestId('response-status')).toContainText('timeout of 150ms exceeded', { timeout: 10_000 })
@@ -84,7 +86,7 @@ test.describe('Timeout & redirect overrides', () => {
     const folderEditor = window.getByTestId('network-editor')
     await folderEditor.waitFor({ state: 'visible' })
     await folderEditor.getByTestId('timeout-mode-custom').click()
-    await folderEditor.getByTestId('timeout-value').fill('5000')
+    await folderEditor.getByTestId('timeout-value').fill('5')
     await window.getByTestId('group-save-button').click()
     await expect(window.getByTestId('group-save-button')).not.toHaveClass(/bg-blue-600/)
     await window.getByText(reqName).first().click()
@@ -97,7 +99,7 @@ test.describe('Timeout & redirect overrides', () => {
     await window.getByRole('tab', { name: 'Settings' }).click()
     const requestEditor = window.getByTestId('network-editor')
     await requestEditor.getByTestId('timeout-mode-custom').click()
-    await requestEditor.getByTestId('timeout-value').fill('100')
+    await requestEditor.getByTestId('timeout-value').fill('0.1')
     await window.getByTestId('send-button').click()
     await expect(window.getByTestId('response-status')).toContainText('timeout of 100ms exceeded', { timeout: 10_000 })
     await window.getByRole('tab', { name: /Console/ }).click()
