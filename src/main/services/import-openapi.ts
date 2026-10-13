@@ -78,7 +78,27 @@ function serverUrl(server: Obj): string {
   })
 }
 
-function mapScheme(name: string, scheme: unknown, warnings: string[]): Auth | null {
+const GRANT_ORDER = ['authorization_code', 'client_credentials', 'password', 'implicit'] as const
+type Grant = (typeof GRANT_ORDER)[number]
+
+/** OAuth 2 flows by grant type, from either the OpenAPI 3 `flows` object or the single Swagger 2 `flow`. */
+function oauthFlows(scheme: Obj): Partial<Record<Grant, Obj>> {
+  const out: Partial<Record<Grant, Obj>> = {}
+  if (isObj(scheme.flows)) {
+    const f = scheme.flows
+    if (isObj(f.authorizationCode)) out.authorization_code = f.authorizationCode
+    if (isObj(f.clientCredentials)) out.client_credentials = f.clientCredentials
+    if (isObj(f.password)) out.password = f.password
+    if (isObj(f.implicit)) out.implicit = f.implicit
+  } else {
+    const grant: Record<string, Grant> = { accessCode: 'authorization_code', application: 'client_credentials', password: 'password', implicit: 'implicit' }
+    const g = grant[str(scheme.flow)]
+    if (g) out[g] = scheme
+  }
+  return out
+}
+
+function mapScheme(name: string, scheme: unknown, scopes: string[], warnings: string[]): Auth | null {
   if (!isObj(scheme)) return null
   const type = str(scheme.type).toLowerCase()
   const httpScheme = str(scheme.scheme).toLowerCase()
@@ -88,6 +108,34 @@ function mapScheme(name: string, scheme: unknown, warnings: string[]): Auth | nu
   if (type === 'apikey') {
     if (scheme.in === 'header' || scheme.in === 'query') return { type: 'apikey', config: { key: str(scheme.name), value: '', in: scheme.in } }
     warnings.push(`Security scheme "${name}": API keys sent in cookies are not supported; set the Cookie header manually.`)
+    return null
+  }
+  if (type === 'oauth2') {
+    const flows = oauthFlows(scheme)
+    const grant = GRANT_ORDER.find((g) => flows[g])
+    if (!grant) {
+      warnings.push(`Security scheme "${name}" (oauth2) defines no usable flow; configure authentication manually.`)
+      return null
+    }
+    const flow = flows[grant] as Obj
+    const unused = GRANT_ORDER.filter((g) => flows[g] && g !== grant)
+    if (unused.length > 0) warnings.push(`Security scheme "${name}" offers several OAuth 2 flows; ${grant} was mapped (also available: ${unused.join(', ')}).`)
+    const declared = isObj(flow.scopes) ? Object.keys(flow.scopes) : []
+    return {
+      type: 'oauth2',
+      config: {
+        grantType: grant,
+        clientId: '',
+        clientSecret: '',
+        authUrl: str(flow.authorizationUrl),
+        tokenUrl: str(flow.tokenUrl),
+        scopes: (scopes.length > 0 ? scopes : declared).join(' '),
+        redirectUri: '',
+      },
+    }
+  }
+  if (type === 'openidconnect') {
+    warnings.push(`Security scheme "${name}" uses OpenID Connect discovery (${str(scheme.openIdConnectUrl)}); the endpoints are not fetched during import, so enter them in the OAuth 2.0 auth settings.`)
     return null
   }
   warnings.push(`Security scheme "${name}" (${type}${httpScheme ? ` ${httpScheme}` : ''}) is not mapped; configure authentication manually.`)
@@ -128,15 +176,16 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
     ? (isObj(doc.components) && isObj(doc.components.securitySchemes) ? doc.components.securitySchemes : {})
     : (isObj(doc.securityDefinitions) ? doc.securityDefinitions : {})
   const authCache = new Map<string, Auth | null>()
-  const schemeAuth = (name: string): Auth | null => {
-    if (!authCache.has(name)) authCache.set(name, mapScheme(name, schemes[name], warnings))
-    return authCache.get(name) ?? null
+  const schemeAuth = (name: string, scopes: string[]): Auth | null => {
+    const cacheKey = `${name}|${scopes.join(' ')}`
+    if (!authCache.has(cacheKey)) authCache.set(cacheKey, mapScheme(name, schemes[name], scopes, warnings))
+    return authCache.get(cacheKey) ?? null
   }
   const authFor = (security: unknown): Auth => {
     const requirement = Array.isArray(security) ? security.find((r) => isObj(r) && Object.keys(r).length > 0) : undefined
     if (!isObj(requirement)) return NO_AUTH
     const names = Object.keys(requirement)
-    const mapped = names.map(schemeAuth).find((a): a is Auth => a !== null)
+    const mapped = names.map((n) => schemeAuth(n, Array.isArray(requirement[n]) ? (requirement[n] as unknown[]).map(String) : [])).find((a): a is Auth => a !== null)
     if (mapped && names.length > 1) warnings.push(`A security requirement combines ${names.join(' + ')}; only ${mapped.type} was mapped.`)
     return mapped ?? NO_AUTH
   }
@@ -150,6 +199,10 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   for (const tag of Array.isArray(doc.tags) ? doc.tags : []) if (isObj(tag) && str(tag.name)) tagDescriptions.set(str(tag.name), str(tag.description))
 
   const paths = isObj(doc.paths) ? doc.paths : {}
+  // Documents that do not use tags at all (Stripe, Kubernetes) are grouped by resource instead of one long flat list
+  const usesTags = Object.values(paths).some((item) => isObj(item) && METHODS.some((m) => isObj(item[m]) && Array.isArray((item[m] as Obj).tags) && ((item[m] as Obj).tags as unknown[]).length > 0))
+  const resourceOf = (path: string): string =>
+    path.split('/').find((segment) => segment && !/^v\d+(\.\d+)*$/i.test(segment) && segment.toLowerCase() !== 'api' && !segment.startsWith('{')) ?? ''
   let count = 0
   for (const [path, rawItem] of Object.entries(paths)) {
     if (!isObj(rawItem)) continue
@@ -263,7 +316,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
         protocolConfig: {},
       }
 
-      const tag = Array.isArray(op.tags) ? str(op.tags[0]) : ''
+      const tag = Array.isArray(op.tags) ? str(op.tags[0]) : usesTags ? '' : resourceOf(path)
       if (!tag) { rootRequests.push(request); continue }
       let folder = folders.get(tag)
       if (!folder) {

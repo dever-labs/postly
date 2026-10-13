@@ -68,7 +68,15 @@ describe('OpenAPI 3 import', () => {
     const { warnings } = await previewImport(fixture('petstore-oas3.yaml'))
     expect(warnings.some((w) => w.includes('cookie parameters'))).toBe(true)
     expect(warnings.some((w) => w.includes('callbacks'))).toBe(true)
-    expect(warnings.some((w) => w.includes('"oauth"') && w.includes('not mapped'))).toBe(true)
+  })
+
+  it('maps OAuth 2 flows to the OAuth 2.0 auth type with the requested scopes', async () => {
+    const { collections } = await previewImport(fixture('petstore-oas3.yaml'))
+    const login = collections[0].collection.requests[1]
+    expect(login.auth).toEqual({
+      type: 'oauth2',
+      config: { grantType: 'implicit', clientId: '', clientSecret: '', authUrl: 'https://example.com/auth', tokenUrl: '', scopes: 'read', redirectUri: '' },
+    })
   })
 })
 
@@ -198,5 +206,58 @@ paths:
     const rows = JSON.parse(walk(preview.collections[0].collection)[0].bodyContent) as Array<{ key: string; value: string; enabled: boolean }>
     expect(rows.map((r) => [r.key, r.enabled])).toEqual([['must', true], ['opt', false], ['nested', false]])
     expect(rows[2].value).toBe('')
+  })
+})
+
+describe('OAuth 2 and OpenID Connect', () => {
+  const doc = (schemes: object, security: object[]) => JSON.stringify({
+    openapi: '3.0.0', info: { title: 'A', version: '1' }, servers: [{ url: 'https://a.test' }],
+    components: { securitySchemes: schemes }, security,
+    paths: { '/x': { get: { responses: {} } } },
+  })
+
+  it('prefers authorization code over other flows and says what else was offered', async () => {
+    const preview = await previewImport(doc({
+      o: { type: 'oauth2', flows: {
+        clientCredentials: { tokenUrl: 'https://a.test/token', scopes: { s: '' } },
+        authorizationCode: { authorizationUrl: 'https://a.test/auth', tokenUrl: 'https://a.test/token', scopes: { a: '', b: '' } },
+      } },
+    }, [{ o: [] }]))
+    expect(preview.collections[0].collection.auth.config).toMatchObject({ grantType: 'authorization_code', authUrl: 'https://a.test/auth', tokenUrl: 'https://a.test/token', scopes: 'a b' })
+    expect(preview.warnings.some((w) => w.includes('also available: client_credentials'))).toBe(true)
+  })
+
+  it('maps the Swagger 2 application flow to client credentials', async () => {
+    const preview = await previewImport(JSON.stringify({
+      swagger: '2.0', info: { title: 'S', version: '1' }, host: 'a.test',
+      securityDefinitions: { o: { type: 'oauth2', flow: 'application', tokenUrl: 'https://a.test/token', scopes: { r: '' } } },
+      security: [{ o: ['r'] }],
+      paths: { '/x': { get: { responses: {} } } },
+    }))
+    expect(preview.collections[0].collection.auth.config).toMatchObject({ grantType: 'client_credentials', tokenUrl: 'https://a.test/token', scopes: 'r' })
+  })
+
+  it('explains that OpenID Connect discovery is not fetched', async () => {
+    const preview = await previewImport(doc({ oidc: { type: 'openIdConnect', openIdConnectUrl: 'https://a.test/.well-known/openid-configuration' } }, [{ oidc: [] }]))
+    expect(preview.collections[0].collection.auth.type).toBe('none')
+    expect(preview.warnings.some((w) => w.includes('OpenID Connect') && w.includes('.well-known'))).toBe(true)
+  })
+})
+
+describe('documents without tags', () => {
+  it('groups by resource, skipping version and api prefixes', async () => {
+    const op = { get: { responses: {} } }
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0', info: { title: 'N', version: '1' }, servers: [{ url: 'https://a.test' }],
+      paths: { '/v1/customers': op, '/v1/customers/{id}': op, '/api/v2/charges': op, '/': op },
+    }))
+    const col = preview.collections[0].collection
+    expect(col.folders.map((f) => [f.name, f.requests.length])).toEqual([['customers', 2], ['charges', 1]])
+    expect(col.requests).toHaveLength(1)
+  })
+
+  it('keeps untagged operations at the root when the document does use tags', async () => {
+    const preview = await previewImport(fixture('petstore-oas3.yaml'))
+    expect(preview.collections[0].collection.folders.map((f) => f.name)).toEqual(['pets'])
   })
 })
