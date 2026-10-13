@@ -385,10 +385,10 @@ export function registerExportImportHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:import:parse', async (_event, args: { text?: string }) => {
+  ipcMain.handle('postly:import:parse', async (_event, args: { text?: string; sourceUrl?: string }) => {
     try {
       if (typeof args?.text !== 'string') return { error: 'No file content provided.' }
-      return { data: await previewImport(args.text) }
+      return { data: await previewImport(args.text, { sourceUrl: typeof args.sourceUrl === 'string' ? args.sourceUrl : undefined }) }
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) }
     }

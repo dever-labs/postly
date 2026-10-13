@@ -23,6 +23,7 @@ export function isOpenApiDocument(doc: unknown): boolean {
 export function sampleValue(schema: unknown, depth = 0): unknown {
   if (!isObj(schema) || depth > 5) return null
   if (schema.example !== undefined) return schema.example
+  if (Array.isArray(schema.examples) && schema.examples.length > 0) return schema.examples[0]
   if (schema.default !== undefined) return schema.default
   if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0]
   const composed = (schema.allOf ?? schema.oneOf ?? schema.anyOf) as unknown
@@ -32,7 +33,9 @@ export function sampleValue(schema: unknown, depth = 0): unknown {
     }
     return sampleValue(composed[0], depth + 1)
   }
-  const type = schema.type ?? (schema.properties ? 'object' : undefined)
+  // OpenAPI 3.1 allows type: [string, 'null']
+  const declared = Array.isArray(schema.type) ? schema.type.find((t) => t !== 'null') : schema.type
+  const type = declared ?? (schema.properties ? 'object' : undefined)
   switch (type) {
     case 'object': {
       const out: Obj = {}
@@ -92,7 +95,7 @@ function mapScheme(name: string, scheme: unknown, warnings: string[]): Auth | nu
 }
 
 /** Converts an already dereferenced OpenAPI 3.x or Swagger 2 document into a Postly collection. */
-export function convertOpenApi(doc: Obj): ImportResult {
+export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   const warnings: string[] = []
   const isV3 = str(doc.openapi).startsWith('3')
   const info = isObj(doc.info) ? doc.info : {}
@@ -108,6 +111,16 @@ export function convertOpenApi(doc: Obj): ImportResult {
     const schemes = Array.isArray(doc.schemes) ? doc.schemes : []
     baseUrl = host ? `${str(schemes[0]) || 'https'}://${host}${str(doc.basePath)}` : str(doc.basePath)
   }
+  if (baseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrl)) {
+    const relative = baseUrl
+    try {
+      if (!sourceUrl) throw new Error('no source')
+      baseUrl = new URL(relative, sourceUrl).href
+    } catch {
+      warnings.push(`The server URL "${relative}" is relative; set {{baseUrl}} to the full address (for example https://host${relative.startsWith('/') ? '' : '/'}${relative}).`)
+    }
+  }
+  baseUrl = baseUrl.replace(/\/+$/, '')
   if (baseUrl) variables.set('baseUrl', baseUrl)
   else warnings.push('No server URL found; set {{baseUrl}} in the collection variables.')
 
@@ -190,10 +203,16 @@ export function convertOpenApi(doc: Obj): ImportResult {
             bodyType = form ? 'x-www-form-urlencoded' : 'form-data'
             const schema = media((form ?? multipart) as string).schema
             const props = isObj(schema) && isObj(schema.properties) ? schema.properties : {}
-            bodyContent = JSON.stringify(Object.entries(props).map(([k, v]) => ({
-              ...kv(k, isObj(v) && v.format === 'binary' ? '' : sampleValue(v), true),
-              ...(isObj(v) && v.format === 'binary' ? { fieldType: 'file' } : {}),
-            })))
+            const required = isObj(schema) && Array.isArray(schema.required) ? schema.required.map(String) : []
+            // Optional fields stay listed but disabled so a send does not submit invented values
+            bodyContent = JSON.stringify(Object.entries(props).map(([k, v]) => {
+              const binary = isObj(v) && v.format === 'binary'
+              const sample = binary ? '' : sampleValue(v)
+              return {
+                ...kv(k, typeof sample === 'object' ? '' : sample, required.includes(k)),
+                ...(binary ? { fieldType: 'file' } : {}),
+              }
+            }))
           } else if (xml) {
             bodyType = 'raw-xml'
             const example = media(xml).example
@@ -274,9 +293,9 @@ export function convertOpenApi(doc: Obj): ImportResult {
 }
 
 /** Resolves $refs inside the document only; remote and file references are never followed. */
-export async function parseOpenApi(doc: Obj): Promise<ImportResult> {
+export async function parseOpenApi(doc: Obj, sourceUrl?: string): Promise<ImportResult> {
   const SwaggerParser = (await import('@apidevtools/swagger-parser')).default
   const dereference = SwaggerParser.dereference as unknown as (api: object, options: object) => Promise<Obj>
   const dereferenced = await dereference(structuredClone(doc), { resolve: { external: false } })
-  return convertOpenApi(dereferenced)
+  return convertOpenApi(dereferenced, sourceUrl)
 }

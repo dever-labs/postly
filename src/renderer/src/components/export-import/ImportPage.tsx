@@ -83,8 +83,8 @@ export function ImportPage() {
     setSourceOverrides(overrides)
   }
 
-  const parseText = async (name: string, text: string) => {
-    const { data, error } = await window.api.exportImport.parse({ text }) as { data?: ParsedFile; error?: string }
+  const parseText = async (name: string, text: string, sourceUrl?: string) => {
+    const { data, error } = await window.api.exportImport.parse({ text, sourceUrl }) as { data?: ParsedFile; error?: string }
     if (error || !data) {
       setParseError(error ?? 'Could not read the file.')
       setParsedFile(null)
@@ -115,7 +115,7 @@ export function ImportPage() {
       setParseError(error ?? 'Could not fetch the document.')
       return
     }
-    await parseText(target, data.text)
+    await parseText(target, data.text, target)
     setFetching(false)
   }
 

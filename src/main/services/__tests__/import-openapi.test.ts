@@ -137,3 +137,66 @@ describe('sampleValue', () => {
     expect(sampleValue({ type: 'string', enum: ['x', 'y'] })).toBe('x')
   })
 })
+
+const walk = (c: { requests: unknown[]; folders?: unknown[] }, out: Array<Record<string, string>> = []): Array<Record<string, string>> => {
+  out.push(...(c.requests as Array<Record<string, string>>))
+  for (const f of (c.folders ?? []) as Array<{ requests: unknown[]; folders?: unknown[] }>) walk(f, out)
+  return out
+}
+
+describe('documents published by real tools and vendors', () => {
+  // Swagger Petstore (v2 and v3), OpenAPI Initiative examples (3.0 and 3.1), USPTO
+  it.each(['real-petstore3.json', 'real-petstore2.json', 'real-tictactoe-oas31.yaml', 'real-uspto.yaml', 'real-link-example.yaml'])('%s converts to usable requests', async (name) => {
+    const { collections } = await previewImport(fixture(name))
+    const requests = walk(collections[0].collection)
+    expect(requests.length).toBeGreaterThan(0)
+    for (const r of requests) {
+      expect(r.url, r.name).toMatch(/^\{\{baseUrl\}\}\//)
+      expect(r.url.replace(/\{\{[^}]+\}\}/g, ''), r.name).not.toMatch(/[{}]/)
+      if (r.bodyType === 'raw-json') expect(() => JSON.parse(r.bodyContent), r.name).not.toThrow()
+    }
+  })
+
+  it('resolves a relative server URL against the address the document was fetched from', async () => {
+    const text = fixture('real-petstore3.json')
+    const fetched = await previewImport(text, { sourceUrl: 'https://petstore3.swagger.io/api/v3/openapi.json' })
+    expect(fetched.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://petstore3.swagger.io/api/v3', isSecret: false })
+    const local = await previewImport(text)
+    expect(local.warnings.some((w) => w.includes('is relative'))).toBe(true)
+  })
+
+  it('does not produce a double slash when the server URL ends with one', async () => {
+    const { collections } = await previewImport(fixture('real-uspto.yaml'))
+    expect(collections[0].collection.variables?.find((v) => v.key === 'baseUrl')?.value).toBe('https://developer.uspto.gov/ds-api')
+  })
+
+  it('handles OpenAPI 3.1 nullable types and schema examples', () => {
+    expect(sampleValue({ type: ['null', 'integer'] })).toBe(0)
+    expect(sampleValue({ type: 'string', examples: ['first', 'second'] })).toBe('first')
+  })
+
+  it('expands YAML anchors and merge keys', async () => {
+    const preview = await previewImport(`
+openapi: 3.0.0
+info: { title: Anchors, version: '1' }
+servers: [{ url: 'https://a.test' }]
+x-common: &common
+  summary: Shared
+paths:
+  /a:
+    get:
+      <<: *common
+`)
+    expect(walk(preview.collections[0].collection)[0].name).toBe('Shared')
+  })
+
+  it('lists optional form fields disabled so a send does not submit invented values', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0', info: { title: 'F', version: '1' }, servers: [{ url: 'https://a.test' }],
+      paths: { '/f': { post: { requestBody: { content: { 'application/x-www-form-urlencoded': { schema: { type: 'object', required: ['must'], properties: { must: { type: 'string' }, opt: { type: 'integer' }, nested: { type: 'object', properties: { a: { type: 'string' } } } } } } } } } } },
+    }))
+    const rows = JSON.parse(walk(preview.collections[0].collection)[0].bodyContent) as Array<{ key: string; value: string; enabled: boolean }>
+    expect(rows.map((r) => [r.key, r.enabled])).toEqual([['must', true], ['opt', false], ['nested', false]])
+    expect(rows[2].value).toBe('')
+  })
+})

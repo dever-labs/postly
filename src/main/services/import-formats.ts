@@ -1,4 +1,4 @@
-import { load as yamlLoad } from 'js-yaml'
+import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import type { ExportCollection, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
 
@@ -41,7 +41,7 @@ function parseText(text: string): unknown {
   } catch (jsonError) {
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) throw new Error(`Invalid JSON: ${(jsonError as Error).message}`, { cause: jsonError })
     try {
-      return yamlLoad(trimmed)
+      return yamlLoad(trimmed, { schema: CORE_SCHEMA.withTags(mergeTag) })
     } catch (yamlError) {
       throw new Error(`Could not read the file as JSON or YAML: ${(yamlError as Error).message}`, { cause: yamlError })
     }
@@ -49,7 +49,7 @@ function parseText(text: string): unknown {
 }
 
 /** Detects the format of an import file and converts it to Postly collections without touching the database. */
-export async function previewImport(text: string): Promise<ImportPreview> {
+export async function previewImport(text: string, options: { sourceUrl?: string } = {}): Promise<ImportPreview> {
   if (text.length > MAX_IMPORT_BYTES) throw new Error('The file is larger than 20 MB.')
   const doc = parseText(text)
   if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) throw new Error('Unrecognised file: expected a JSON or YAML object.')
@@ -61,7 +61,7 @@ export async function previewImport(text: string): Promise<ImportPreview> {
   if (isOpenApiDocument(obj)) {
     let result
     try {
-      result = await parseOpenApi(obj)
+      result = await parseOpenApi(obj, options.sourceUrl)
     } catch (err) {
       throw new Error(`Invalid OpenAPI document: ${(err as Error).message}`, { cause: err })
     }
