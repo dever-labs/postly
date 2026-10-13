@@ -17,7 +17,13 @@ export function RowMenu({ label, onClose, className, children }: RowMenuProps) {
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
     ref.current?.querySelector<HTMLElement>(ITEMS)?.focus()
-    return () => { if (opener && opener.isConnected) opener.focus() }
+    const menu = ref.current
+    return () => {
+      // Skip when an action deliberately moved focus elsewhere (e.g. an inline rename input)
+      const active = document.activeElement
+      const focusLost = !active || active === document.body || (menu?.contains(active) ?? false)
+      if (focusLost && opener && opener.isConnected) opener.focus()
+    }
   }, [])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {

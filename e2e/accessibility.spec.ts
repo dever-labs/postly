@@ -126,6 +126,13 @@ test.describe('Keyboard navigation', () => {
     await window.keyboard.press('Escape')
     await expect(window.getByRole('menu')).toHaveCount(0)
     await expect(request).toBeFocused()
+
+    await window.keyboard.press('Shift+F10')
+    await window.getByRole('menuitem', { name: 'Rename' }).click()
+    const input = request.locator('input')
+    await expect(input).toBeFocused()
+    await window.waitForTimeout(300)
+    await expect(input).toBeFocused()
   })
 
   test('settings dialog traps focus and restores it on close', async ({ window }) => {
