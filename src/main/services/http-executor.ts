@@ -4,6 +4,7 @@ import https from 'https'
 import type { Readable } from 'stream'
 import { StringDecoder } from 'string_decoder'
 import { createNdjsonParser, createSseParser, streamKindOf, type StreamEvent, type StreamKind } from '../../shared/stream'
+import { isBinaryContentType, looksBinary } from '../../shared/response-file'
 import { resolveProxy, describeProxyError, tlsIdentity, type ResolvedProxy } from './proxy'
 import { applyApiKey, buildDigestHeader, type DigestChallenge, isSupportedDigestAlgorithm, maskTail, parseDigestChallenge, signAwsV4 } from './auth'
 import type { TlsSelection } from './certificates'
@@ -43,6 +44,16 @@ export interface HttpResponse {
   size: number
   /** Cookies set by the response, including any redirect hops. */
   cookies?: ResponseCookie[]
+  /** Binary payloads are not decoded into `body`; Save writes them from `raw`. */
+  binary?: boolean
+  /** `body` holds only the first part of a large response. */
+  bodyTruncated?: boolean
+  /** The response exceeded the in-memory limit, so `raw` is not available. */
+  bodyTooLarge?: boolean
+  /** Exact bytes received. Consumed by the IPC layer and never sent to the renderer. */
+  raw?: Buffer
+  /** Final URL after redirects. Consumed by the IPC layer. */
+  finalUrl?: string
 }
 
 /** Lets the caller decide which cookies are sent and where received cookies are kept. */
@@ -426,6 +437,7 @@ async function runRequest(
 
     const kind = streamKindOf(responseHeaders[findHeader(responseHeaders, 'content-type') ?? ''])
     const received = await readBody(response.data, {
+      contentType: responseHeaders[findHeader(responseHeaders, 'content-type') ?? ''],
       kind: onStream ? kind : null,
       idleTimeout: timeout,
       signal,
@@ -448,7 +460,11 @@ async function runRequest(
       body,
       duration,
       size,
-      cookies: receivedCookies
+      cookies: receivedCookies,
+      ...(received.binary ? { binary: true } : {}),
+      ...(received.truncated ? { bodyTruncated: true } : {}),
+      ...(received.rawTruncated ? { bodyTooLarge: true } : { raw: received.raw }),
+      finalUrl
     }
   } catch (err: unknown) {
     const duration = Date.now() - start
@@ -470,11 +486,13 @@ export type StreamMessage =
   | { type: 'start'; kind: StreamKind; status: number; statusText: string; headers: Record<string, string> }
   | { type: 'events'; events: StreamEvent[] }
 
-/** Raw stream bodies are kept up to this size; the live event list is unaffected. */
-const MAX_STREAM_BODY_BYTES = 5 * 1024 * 1024
+/** Response text shown in the viewer is kept up to this size; the live event list and Save are unaffected. */
+const MAX_DISPLAY_BODY_BYTES = 5 * 1024 * 1024
+/** Exact bytes kept for Save. */
+const MAX_RAW_BODY_BYTES = 100 * 1024 * 1024
 const EVENT_BATCH_MS = 50
 
-interface ReadResult { body: string; size: number; cancelled?: boolean; error?: string }
+interface ReadResult { body: string; size: number; cancelled?: boolean; error?: string; raw?: Buffer; binary?: boolean; truncated?: boolean; rawTruncated?: boolean }
 
 /** Matches how axios presents buffered bodies: JSON is pretty-printed, anything else is returned as text. */
 function formatBuffered(text: string): string {
@@ -486,7 +504,7 @@ const isReadable = (v: unknown): v is Readable => !!v && typeof (v as Readable).
 
 async function readBody(
   data: unknown,
-  opts: { kind: StreamKind | null; idleTimeout: number; signal?: AbortSignal; onStream?: (m: StreamMessage) => void; onLog: (level: LogLevel, message: string) => void; start: () => void }
+  opts: { contentType?: string; kind: StreamKind | null; idleTimeout: number; signal?: AbortSignal; onStream?: (m: StreamMessage) => void; onLog: (level: LogLevel, message: string) => void; start: () => void }
 ): Promise<ReadResult> {
   if (!isReadable(data)) {
     const body = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
@@ -518,6 +536,11 @@ async function readBody(
   let size = 0
   let kept = 0
   let truncated = false
+  const rawChunks: Buffer[] = []
+  let rawKept = 0
+  let rawTruncated = false
+  let binary = isBinaryContentType(opts.contentType)
+  let sniffed = binary
   let cancelled = false
   let error: string | undefined
 
@@ -541,18 +564,19 @@ async function readBody(
       armIdle()
       const buf = chunk as Buffer
       size += buf.length
+      if (!sniffed) { sniffed = true; binary = looksBinary(buf) }
+      if (rawKept + buf.length <= MAX_RAW_BODY_BYTES) { rawChunks.push(buf); rawKept += buf.length } else rawTruncated = true
+      if (binary) continue
+      if (kept >= MAX_DISPLAY_BODY_BYTES && !parser) { truncated = true; continue }
       const text = decoder.write(buf)
       parser?.push(text)
-      if (kept < MAX_STREAM_BODY_BYTES || !opts.kind) {
+      if (kept < MAX_DISPLAY_BODY_BYTES) {
         chunks.push(text)
         kept += buf.length
-      } else if (!truncated) {
-        truncated = true
-        opts.onLog('warn', `Stream body exceeded ${formatBytes(MAX_STREAM_BODY_BYTES)}; later data is shown in the Stream tab only`)
-      }
+      } else truncated = true
     }
-    const tail = decoder.end()
-    if (tail) { parser?.push(tail); chunks.push(tail) }
+    const tail = binary ? '' : decoder.end()
+    if (tail) { parser?.push(tail); if (!truncated) chunks.push(tail) }
     parser?.end()
     if (timedOut && !cancelled) error = `timeout of ${opts.idleTimeout}ms exceeded`
   } catch (err) {
@@ -569,8 +593,15 @@ async function readBody(
   // Cancelling a plain (non-streamed) request should still report as a cancellation.
   if (cancelled && !opts.kind) throw new Error('canceled')
   if (error && !opts.kind) throw new Error(error)
+  if (truncated) opts.onLog('warn', `Response body is ${formatBytes(size)}; showing the first ${formatBytes(MAX_DISPLAY_BODY_BYTES)} (Save writes the full body)`)
+  if (rawTruncated) opts.onLog('warn', `Response body exceeded ${formatBytes(MAX_RAW_BODY_BYTES)} and cannot be saved`)
+  if (binary) opts.onLog('info', `Binary response (${opts.contentType || 'unknown type'}); use Save to write it to a file`)
   const text = chunks.join('')
-  return { body: opts.kind ? text : formatBuffered(text), size, cancelled, error }
+  return {
+    body: opts.kind || truncated ? text : formatBuffered(text),
+    size, cancelled, error, binary, truncated, rawTruncated,
+    raw: rawTruncated ? undefined : Buffer.concat(rawChunks)
+  }
 }
 
 async function executeNtlmRequest(

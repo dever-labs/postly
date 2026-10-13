@@ -33,6 +33,10 @@ const api = {
     delete: (data: { id: string }) => ipcRenderer.invoke('postly:requests:delete', data),
     markDirty: (data: { id: string; isDirty: boolean }) => ipcRenderer.invoke('postly:requests:mark-dirty', data),
   },
+  response: {
+    save: (data: { bodyId: string }) => ipcRenderer.invoke('postly:response:save', data),
+    preview: (data: { bodyId: string }) => ipcRenderer.invoke('postly:response:preview', data),
+  },
   http: {
     execute: (request: unknown) => ipcRenderer.invoke('postly:http:execute', request),
     cancel: () => ipcRenderer.invoke('postly:http:cancel'),
