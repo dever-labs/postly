@@ -12,7 +12,7 @@ export function CookiesTab({ cookies }: { cookies: ResponseCookie[] }) {
     return (
       <div data-testid="cookies-empty" className="flex h-full flex-col items-center justify-center gap-2 text-sm text-th-text-faint">
         This response did not set any cookies
-        <button onClick={() => openSettings('cookies')} className="text-xs text-blue-400 hover:underline">Manage cookies</button>
+        <button onClick={() => openSettings('cookies')} className="text-xs text-blue-400 light:text-blue-800 hover:underline">Manage cookies</button>
       </div>
     )
   }
@@ -24,7 +24,7 @@ export function CookiesTab({ cookies }: { cookies: ResponseCookie[] }) {
           {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           {reveal ? 'Hide values' : 'Show values'}
         </button>
-        <button onClick={() => openSettings('cookies')} className="text-blue-400 hover:underline">Manage cookies</button>
+        <button onClick={() => openSettings('cookies')} className="text-blue-400 light:text-blue-800 hover:underline">Manage cookies</button>
       </div>
       <table data-testid="cookies-table" className="w-full text-xs">
         <thead>
@@ -42,8 +42,8 @@ export function CookiesTab({ cookies }: { cookies: ResponseCookie[] }) {
             <tr key={`${c.name}-${c.domain}-${c.path}-${i}`} className="border-b border-th-surface hover:bg-th-surface/50">
               <td className="px-4 py-1.5 font-mono text-th-text-muted">
                 {c.name}
-                {c.deleted && <span className="ml-2 rounded-sm bg-amber-900/40 px-1 text-[9px] uppercase text-amber-400">removed</span>}
-                {c.rejected && <span className="ml-2 rounded-sm bg-rose-900/40 px-1 text-[9px] uppercase text-rose-400">not stored</span>}
+                {c.deleted && <span className="ml-2 rounded-sm bg-amber-900/40 px-1 text-[9px] uppercase text-amber-400 light:text-amber-800">removed</span>}
+                {c.rejected && <span className="ml-2 rounded-sm bg-rose-900/40 px-1 text-[9px] uppercase text-rose-400 light:text-rose-800">not stored</span>}
               </td>
               <td className="max-w-64 break-all px-4 py-1.5 font-mono text-th-text-secondary">{reveal ? c.value : maskValue(c.value)}</td>
               <td className="px-4 py-1.5 text-th-text-secondary">{c.domain}</td>

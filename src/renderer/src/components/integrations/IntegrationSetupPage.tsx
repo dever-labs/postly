@@ -33,7 +33,7 @@ function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v
           className={[
             'flex flex-1 flex-col items-center gap-1 rounded-sm border px-2 py-2 text-[10px] font-medium transition-colors focus:outline-hidden',
             value === p.value
-              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+              ? 'border-blue-500 bg-blue-500/10 text-blue-400 light:text-blue-800'
               : 'border-th-border text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary',
           ].join(' ')}
         >
@@ -243,8 +243,8 @@ export function IntegrationSetupPage() {
           {mode === 'git' && phase === 'url' && (
             <div className="flex flex-col gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
-                <Input
+                <label htmlFor="integrationsetup-repository-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
+                <Input id="integrationsetup-repository-url"
                   autoFocus
                   placeholder="https://github.com/org/repo.git"
                   value={repoUrl}
@@ -256,7 +256,7 @@ export function IntegrationSetupPage() {
                 </p>
               </div>
 
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={() => { setMode(null); setError(null) }}>Back</Button>
@@ -325,7 +325,7 @@ export function IntegrationSetupPage() {
                 </div>
               )}
 
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={() => { setPhase('url'); setError(null) }}>Back</Button>
@@ -352,7 +352,7 @@ export function IntegrationSetupPage() {
           {/* ── Done ───────────────────────────────────────────────────── */}
           {phase === 'done' && (
             <div className="flex flex-col items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400 light:text-green-800">
                 <Check className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium text-th-text-primary">
@@ -374,12 +374,12 @@ export function IntegrationSetupPage() {
           {mode === 'backstage' && phase === 'url' && (
             <div className="flex flex-col gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
-                <Input placeholder="http://localhost:7007" value={bsUrl} onChange={(e) => setBsUrl(e.target.value)} />
+                <label htmlFor="integrationsetup-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
+                <Input id="integrationsetup-base-url" placeholder="http://localhost:7007" value={bsUrl} onChange={(e) => setBsUrl(e.target.value)} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label>
-                <Input placeholder="Backstage" value={bsName} onChange={(e) => setBsName(e.target.value)} />
+                <label htmlFor="integrationsetup-name" className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label>
+                <Input id="integrationsetup-name" placeholder="Backstage" value={bsName} onChange={(e) => setBsName(e.target.value)} />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
@@ -387,8 +387,8 @@ export function IntegrationSetupPage() {
               </div>
               {bsProvider === 'token' && (
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
-                  <Input type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
+                  <label htmlFor="integrationsetup-token" className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
+                  <Input id="integrationsetup-token" type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
                 </div>
               )}
               {bsProvider !== 'token' && bsProvider !== 'guest' && (
@@ -405,7 +405,7 @@ export function IntegrationSetupPage() {
                 <span className="text-sm text-th-text-secondary">Skip SSL verification</span>
               </label>
 
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={() => { setMode(null); setError(null) }}>Back</Button>

@@ -178,38 +178,38 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       </div>
 
       <div>
-        <label className="mb-1 block text-xs text-th-text-subtle">Client ID</label>
-        <Input placeholder="Client ID" value={authConfig.clientId ?? ''} onChange={(e) => set('clientId', e.target.value)} />
+        <label htmlFor="oauthpanel-client-id" className="mb-1 block text-xs text-th-text-subtle">Client ID</label>
+        <Input id="oauthpanel-client-id" placeholder="Client ID" value={authConfig.clientId ?? ''} onChange={(e) => set('clientId', e.target.value)} />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-th-text-subtle">Client Secret</label>
-        <Input type="password" placeholder="Client Secret" value={authConfig.clientSecret ?? ''} onChange={(e) => set('clientSecret', e.target.value)} />
+        <label htmlFor="oauthpanel-client-secret" className="mb-1 block text-xs text-th-text-subtle">Client Secret</label>
+        <Input id="oauthpanel-client-secret" type="password" placeholder="Client Secret" value={authConfig.clientSecret ?? ''} onChange={(e) => set('clientSecret', e.target.value)} />
       </div>
 
       {grantType === 'authorization_code' && (
         <>
           <div>
-            <label className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
-              Auth URL <span className="text-rose-400">*</span>
+            <label htmlFor="oauthpanel-auth-url" className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
+              Auth URL <span className="text-rose-400 light:text-rose-800">*</span>
             </label>
-            <Input placeholder="https://..." value={authConfig.authUrl ?? ''} onChange={(e) => set('authUrl', e.target.value)} />
+            <Input id="oauthpanel-auth-url" placeholder="https://..." value={authConfig.authUrl ?? ''} onChange={(e) => set('authUrl', e.target.value)} />
           </div>
           <div>
-            <label className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
-              Redirect URI <span className="text-rose-400">*</span>
+            <label htmlFor="oauthpanel-redirect-uri" className="mb-1 flex items-center gap-1 text-xs text-th-text-subtle">
+              Redirect URI <span className="text-rose-400 light:text-rose-800">*</span>
             </label>
-            <Input placeholder="https://..." value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
+            <Input id="oauthpanel-redirect-uri" placeholder="https://..." value={authConfig.redirectUri ?? ''} onChange={(e) => set('redirectUri', e.target.value)} />
           </div>
         </>
       )}
 
       <div>
-        <label className="mb-1 block text-xs text-th-text-subtle">Token URL</label>
-        <Input placeholder="https://..." value={authConfig.tokenUrl ?? ''} onChange={(e) => set('tokenUrl', e.target.value)} />
+        <label htmlFor="oauthpanel-token-url" className="mb-1 block text-xs text-th-text-subtle">Token URL</label>
+        <Input id="oauthpanel-token-url" placeholder="https://..." value={authConfig.tokenUrl ?? ''} onChange={(e) => set('tokenUrl', e.target.value)} />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-th-text-subtle">Scopes</label>
-        <Input placeholder="openid profile email (space-separated, required)" value={authConfig.scopes ?? ''} onChange={(e) => set('scopes', e.target.value)} />
+        <label htmlFor="oauthpanel-scopes" className="mb-1 block text-xs text-th-text-subtle">Scopes</label>
+        <Input id="oauthpanel-scopes" placeholder="openid profile email (space-separated, required)" value={authConfig.scopes ?? ''} onChange={(e) => set('scopes', e.target.value)} />
       </div>
 
       <div>
@@ -265,7 +265,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
       </div>
 
       {authError && (
-        <p className="rounded-sm border border-rose-700/40 bg-rose-900/10 px-3 py-2 text-xs text-rose-400">
+        <p className="rounded-sm border border-rose-700/40 bg-rose-900/10 px-3 py-2 text-xs text-rose-400 light:text-rose-800">
           {authError}
         </p>
       )}
@@ -277,7 +277,7 @@ export function OAuthPanel({ authConfig, onConfigChange }: OAuthPanelProps) {
             ? 'border-rose-700/40 bg-rose-900/10'
             : 'border-emerald-700/40 bg-emerald-900/10'
         )}>
-          <div className={cn('font-medium', isExpired ? 'text-rose-400' : 'text-emerald-400')}>
+          <div className={cn('font-medium', isExpired ? 'text-rose-400 light:text-rose-800' : 'text-emerald-400 light:text-emerald-800')}>
             {isExpired ? '⚠ Token expired' : '✓ Token active'}
             {token.expiresAt && (
               <span className="ml-2 font-normal opacity-70">

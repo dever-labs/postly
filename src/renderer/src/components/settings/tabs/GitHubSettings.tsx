@@ -90,8 +90,8 @@ export function GitHubSettings() {
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
-          <Input
+          <label htmlFor="github-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
+          <Input id="github-base-url"
             placeholder="https://github.com"
             value={settings.baseUrl}
             onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
@@ -100,8 +100,8 @@ export function GitHubSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Client ID</label>
-          <Input
+          <label htmlFor="github-client-id" className="mb-1.5 block text-xs font-medium text-th-text-muted">Client ID</label>
+          <Input id="github-client-id"
             placeholder="Oauth App Client ID"
             value={settings.clientId}
             onChange={(e) => setSettings({ ...settings, clientId: e.target.value })}
@@ -112,7 +112,7 @@ export function GitHubSettings() {
               href="https://github.com/settings/applications/new"
               target="_blank"
               rel="noreferrer"
-              className="text-blue-400 hover:underline"
+              className="text-blue-400 light:text-blue-800 hover:underline"
             >
               Register an OAuth App on GitHub
             </a>
@@ -122,8 +122,8 @@ export function GitHubSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Client Secret</label>
-          <Input
+          <label htmlFor="github-client-secret" className="mb-1.5 block text-xs font-medium text-th-text-muted">Client Secret</label>
+          <Input id="github-client-secret"
             type="password"
             placeholder="Client secret"
             value={settings.clientSecret}
@@ -148,17 +148,17 @@ export function GitHubSettings() {
                 <div className="text-sm font-medium text-th-text-primary">{settings.connectedUser?.name}</div>
                 <div className="text-xs text-th-text-muted">@{settings.connectedUser?.login}</div>
               </div>
-              <span className="mr-2 text-xs text-green-400">✓ Connected</span>
+              <span className="mr-2 text-xs text-green-400 light:text-green-800">✓ Connected</span>
               <Button variant="outline" size="sm" onClick={disconnect}>
                 Disconnect
               </Button>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-th-text-muted">
+              <label htmlFor="github-repository-owner-repo" className="mb-1.5 block text-xs font-medium text-th-text-muted">
                 Repository (owner/repo)
               </label>
-              <Input
+              <Input id="github-repository-owner-repo"
                 placeholder="owner/repo"
                 value={settings.repo}
                 onChange={(e) => setSettings({ ...settings, repo: e.target.value })}

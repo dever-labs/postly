@@ -39,7 +39,7 @@ function VarRow({
         className={cn(
           'flex h-9 w-9 items-center justify-center rounded-md border transition-colors focus:outline-hidden',
           varItem.isSecret
-            ? 'border-amber-700/50 bg-amber-900/20 text-amber-400 hover:bg-amber-900/40'
+            ? 'border-amber-700/50 bg-amber-900/20 text-amber-400 light:text-amber-800 hover:bg-amber-900/40'
             : 'border-th-border bg-th-surface text-th-text-faint hover:text-th-text-muted'
         )}
       >
@@ -339,7 +339,7 @@ export function EnvironmentEditor() {
             className={cn(
               'flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-sm transition-colors focus:outline-hidden',
               saved
-                ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400'
+                ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400 light:text-emerald-800'
                 : 'border-th-border-strong text-th-text-muted hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-blue-400'
             )}
           >

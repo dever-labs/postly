@@ -160,7 +160,7 @@ export function ImportPage() {
               <span className="shrink-0 text-xs text-th-text-subtle">Change file</span>
             </button>
           )}
-          {parseError && <p className="mt-2 text-xs text-red-400">{parseError}</p>}
+          {parseError && <p className="mt-2 text-xs text-red-400 light:text-red-800">{parseError}</p>}
         </div>
 
         {parsedFile && (

@@ -34,7 +34,7 @@ export function VarTooltip({ varKey, x }: Props) {
 
       {/* Variable value */}
       <div className="flex items-baseline gap-2 px-3 py-2 text-xs">
-        <span className="shrink-0 font-mono text-amber-400">{`{{${varKey}}}`}</span>
+        <span className="shrink-0 font-mono text-amber-400 light:text-amber-800">{`{{${varKey}}}`}</span>
         {envVar?.scope === 'dynamic' ? (
           <span className="text-th-text-secondary">{DYNAMIC_VARIABLES.find((d) => d.name === varKey)?.description ?? 'Generated on send'}</span>
         ) : envVar ? (
@@ -46,7 +46,7 @@ export function VarTooltip({ varKey, x }: Props) {
             </span>
           )
         ) : (
-          <span className="italic text-red-400">not defined</span>
+          <span className="italic text-red-400 light:text-red-800">not defined</span>
         )}
       </div>
 

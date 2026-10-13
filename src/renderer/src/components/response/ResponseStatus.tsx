@@ -12,11 +12,11 @@ export function ResponseStatus({ response }: ResponseStatusProps) {
 
   const statusVariant =
     status >= 200 && status < 300
-      ? 'bg-emerald-900/50 text-emerald-400'
+      ? 'bg-emerald-900/50 text-emerald-400 light:bg-emerald-100 light:text-emerald-800'
       : status >= 300 && status < 400
-      ? 'bg-amber-900/50 text-amber-400'
+      ? 'bg-amber-900/50 text-amber-400 light:bg-amber-100 light:text-amber-900'
       : status >= 400
-      ? 'bg-rose-900/50 text-rose-400'
+      ? 'bg-rose-900/50 text-rose-400 light:bg-rose-100 light:text-rose-800'
       : 'bg-th-surface-raised text-th-text-muted'
 
   return (

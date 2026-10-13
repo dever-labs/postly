@@ -8,8 +8,8 @@ interface ConsoleTabProps {
 
 const levelStyles: Record<LogEntry['level'], { badge: string; text: string; row: string }> = {
   info:  { badge: 'bg-th-surface text-th-text-muted',          text: 'text-th-text-secondary', row: '' },
-  warn:  { badge: 'bg-amber-900/40 text-amber-400',            text: 'text-amber-300',         row: 'bg-amber-900/5' },
-  error: { badge: 'bg-rose-900/40 text-rose-400',              text: 'text-rose-300',          row: 'bg-rose-900/10' },
+  warn:  { badge: 'bg-amber-900/40 text-amber-400 light:text-amber-800',            text: 'text-amber-300',         row: 'bg-amber-900/5' },
+  error: { badge: 'bg-rose-900/40 text-rose-400 light:text-rose-800',              text: 'text-rose-300',          row: 'bg-rose-900/10' },
 }
 
 export function ConsoleTab({ logs }: ConsoleTabProps) {

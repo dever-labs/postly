@@ -68,7 +68,7 @@ export function EnvironmentsSettings() {
               className={`flex-1 text-left text-sm ${selectedEnvId === env.id ? 'text-th-text-primary' : 'text-th-text-muted hover:text-th-text-primary'}`}
             >
               {env.name}
-              {env.isActive && <span className="ml-2 text-xs text-emerald-400">active</span>}
+              {env.isActive && <span className="ml-2 text-xs text-emerald-400 light:text-emerald-800">active</span>}
             </button>
             <button
               onClick={() => deleteEnvironment(env.id)}
@@ -124,7 +124,7 @@ export function EnvironmentsSettings() {
                 />
                 <button
                   onClick={() => upsertVar(v.envId, v.key, v.value, !v.isSecret, v.id)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-sm hover:bg-th-surface-raised focus:outline-hidden ${v.isSecret ? 'text-amber-400' : 'text-th-text-faint'}`}
+                  className={`flex h-8 w-8 items-center justify-center rounded-sm hover:bg-th-surface-raised focus:outline-hidden ${v.isSecret ? 'text-amber-400 light:text-amber-800' : 'text-th-text-faint'}`}
                   title={v.isSecret ? 'Secret (click to reveal)' : 'Not secret'}
                 >
                   {v.isSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}

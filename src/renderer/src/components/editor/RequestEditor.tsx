@@ -256,7 +256,7 @@ export function RequestEditor() {
                 triggerGitSave()
               }}
               data-testid="request-save-button"
-              className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
+              className={`rounded-sm p-1.5 hover:bg-th-surface-raised focus:outline-hidden ${editingRequest.isDirty ? 'text-amber-400 light:text-amber-800 hover:text-amber-300' : 'text-th-text-subtle hover:text-th-text-secondary'}`}
               title={withShortcut(editingRequest.isDirty ? 'Unsaved changes — click to save' : 'Save', 'save')}
             >
               <Save className="h-4 w-4" />

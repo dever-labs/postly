@@ -48,7 +48,7 @@ export function AiSettings() {
               onClick={() => { setProvider(p); setModel('') }}
               className={`flex-1 rounded-md border px-4 py-2 text-sm transition-colors focus:outline-hidden ${
                 provider === p
-                  ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-400 light:text-blue-800'
                   : 'border-th-border text-th-text-muted hover:border-th-border-strong hover:text-th-text-primary'
               }`}
             >
@@ -71,7 +71,7 @@ export function AiSettings() {
             placeholder={`Enter your ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} API key`}
             className="w-full rounded-md border border-th-border bg-th-surface px-3 py-2 pr-10 text-sm text-th-text-primary placeholder:text-th-text-faint focus:border-th-border-strong focus:outline-hidden"
           />
-          <button
+          <button aria-label={showKey ? 'Hide API key' : 'Show API key'}
             onClick={() => setShowKey(!showKey)}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-th-text-subtle hover:text-th-text-secondary focus:outline-hidden"
           >
@@ -83,8 +83,8 @@ export function AiSettings() {
 
       {/* Model */}
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-th-text-secondary">Model <span className="text-th-text-faint font-normal">(optional — leave blank for default)</span></label>
-        <select
+        <label htmlFor="ai-model-optional-leave-blank-for" className="text-sm font-medium text-th-text-secondary">Model <span className="text-th-text-faint font-normal">(optional — leave blank for default)</span></label>
+        <select id="ai-model-optional-leave-blank-for"
           value={model}
           onChange={(e) => setModel(e.target.value)}
           className="w-full rounded-md border border-th-border bg-th-surface px-3 py-2 text-sm text-th-text-primary focus:border-th-border-strong focus:outline-hidden"

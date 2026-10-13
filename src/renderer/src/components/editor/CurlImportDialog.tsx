@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import { parseCurl } from '@/lib/curl'
 import { importCurlAsNewRequest } from '@/lib/curlActions'
 import { useCurlImportStore } from '@/store/curlImport'
@@ -14,6 +15,8 @@ function Dialog() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef)
   const parsed = useMemo(() => (text.trim() ? parseCurl(text) : null), [text])
 
   useEffect(() => { areaRef.current?.focus() }, [])
@@ -36,7 +39,7 @@ function Dialog() {
       className="fixed inset-0 z-[300] flex items-start justify-center bg-black/50 pt-[10vh] backdrop-blur-xs"
       onMouseDown={(e) => { if (e.target === e.currentTarget) hide() }}
     >
-      <div role="dialog" aria-modal="true" aria-label="Import from cURL" data-testid="curl-import-dialog" className="w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Import from cURL" tabIndex={-1} data-testid="curl-import-dialog" className="w-[640px] max-w-[92vw] overflow-hidden rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
         <div className="flex items-center justify-between border-b border-th-border px-4 py-3">
           <h2 className="text-sm font-semibold text-th-text-primary">Import from cURL</h2>
           <button onClick={hide} aria-label="Close" className="rounded-sm p-1 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-primary"><X className="h-4 w-4" /></button>
@@ -53,11 +56,11 @@ function Dialog() {
           />
           <div data-testid="curl-import-status" className="min-h-[2.5rem] text-xs text-th-text-subtle">
             {!text.trim() && 'Paste a cURL command (bash, cmd or PowerShell). Chrome and Firefox "Copy as cURL" work.'}
-            {text.trim() && !parsed && <span className="text-red-400">Not a valid cURL command.</span>}
+            {text.trim() && !parsed && <span className="text-red-400 light:text-red-800">Not a valid cURL command.</span>}
             {parsed && (
               <>
                 <div className="text-th-text-secondary"><span className="font-mono">{parsed.method}</span> {parsed.url}</div>
-                {parsed.warnings.map((w) => <div key={w} className="text-amber-400">• {w}</div>)}
+                {parsed.warnings.map((w) => <div key={w} className="text-amber-400 light:text-amber-800">• {w}</div>)}
               </>
             )}
           </div>

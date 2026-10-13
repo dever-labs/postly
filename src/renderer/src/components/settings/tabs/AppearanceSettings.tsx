@@ -51,7 +51,7 @@ export function AppearanceSettings() {
                   : 'border-th-border bg-th-surface-raised text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary'
               )}
             >
-              <span className={cn(activeId === id ? 'text-blue-400' : '')}>{icon}</span>
+              <span className={cn(activeId === id ? 'text-blue-400 light:text-blue-800' : '')}>{icon}</span>
               <div>
                 <div className="text-sm font-medium">{label}</div>
                 <div className="mt-0.5 text-xs text-th-text-subtle">{description}</div>

@@ -57,8 +57,8 @@ export function AuthConfigEditor({ authType, authConfig, onChange, inheritedFrom
 
       {authType === 'bearer' && (
         <div>
-          <label className="mb-1 block text-xs text-th-text-subtle">Token</label>
-          <input
+          <label htmlFor="authconfig-token" className="mb-1 block text-xs text-th-text-subtle">Token</label>
+          <input id="authconfig-token"
             type="text"
             placeholder="Bearer token… (supports {{ENV_VAR}})"
             value={authConfig.token ?? ''}

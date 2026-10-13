@@ -97,8 +97,8 @@ export function BackstageSettings() {
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
-          <Input
+          <label htmlFor="backstage-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
+          <Input id="backstage-base-url"
             placeholder="https://backstage.example.com"
             value={settings.baseUrl}
             onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
@@ -106,8 +106,8 @@ export function BackstageSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
-          <select
+          <label htmlFor="backstage-authentication" className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
+          <select id="backstage-authentication"
             className="w-full rounded-sm border border-th-border bg-th-bg-secondary px-2 py-1.5 text-sm text-th-text-primary focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             value={settings.authProvider ?? 'token'}
             onChange={(e) => setSettings({ ...settings, authProvider: e.target.value as BackstageSettings['authProvider'], connectedUser: undefined, token: '' })}
@@ -120,8 +120,8 @@ export function BackstageSettings() {
 
         {!useOAuth && (
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
-            <Input
+            <label htmlFor="backstage-token" className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
+            <Input id="backstage-token"
               type="password"
               placeholder="Token..."
               value={settings.token}

@@ -30,7 +30,7 @@ export function StreamTab({ stream, onResume }: StreamTabProps) {
         )}
       </div>
       {stream.dropped > 0 && (
-        <div data-testid="stream-truncated" className="border-b border-th-border bg-amber-900/10 px-4 py-1 text-xs text-amber-400">
+        <div data-testid="stream-truncated" className="border-b border-th-border bg-amber-900/10 px-4 py-1 text-xs text-amber-400 light:text-amber-800">
           Showing the latest {MAX_STREAM_EVENTS.toLocaleString()} of {(stream.dropped + stream.events.length).toLocaleString()} events; {stream.dropped.toLocaleString()} earlier events were dropped.
         </div>
       )}

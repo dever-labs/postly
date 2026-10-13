@@ -15,9 +15,11 @@
   --color-border-strong:  #374151;
   --color-text-primary:   #f9fafb;
   --color-text-secondary: #d1d5db;
-  --color-text-muted:     #9ca3af;
-  --color-text-subtle:    #8b949e;
-  --color-text-faint:     #6b7280;
+  /* muted/subtle/faint all keep 4.5:1 on the surface colours they are used on (WCAG AA) */
+  --color-text-muted:     #a9b1bd;
+  --color-text-subtle:    #9aa3b0;
+  --color-text-faint:     #8a94a3;
+  --color-focus:          #60a5fa;
 }
 
 html.light {
@@ -31,9 +33,10 @@ html.light {
   --color-border-strong:  #d1d5db;
   --color-text-primary:   #111827;
   --color-text-secondary: #374151;
-  --color-text-muted:     #4b5563;
-  --color-text-subtle:    #6b7280;
-  --color-text-faint:     #9ca3af;
+  --color-text-muted:     #444d5b;
+  --color-text-subtle:    #505967;
+  --color-text-faint:     #5d6573;
+  --color-focus:          #1d4ed8;
 }
 
 html, body {
@@ -48,6 +51,12 @@ html, body {
 .drag-region    { -webkit-app-region: drag; }
 .no-drag        { -webkit-app-region: no-drag; }
 
+
+/* Visible keyboard focus everywhere; components that hide the default outline still get this ring. Monaco draws its own. */
+:focus-visible:not(.monaco-editor *) {
+  outline: 2px solid var(--color-focus) !important;
+  outline-offset: -2px;
+}
 
 #root {
   min-height: 100vh;

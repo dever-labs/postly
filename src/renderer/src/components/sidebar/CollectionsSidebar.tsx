@@ -8,6 +8,7 @@ import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
 import { GroupSection } from '@/components/sidebar/GroupSection'
 import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Badge } from '@/components/ui/Badge'
+import { Tree } from '@/components/ui/Tree'
 import { useCollectionsStore } from '@/store/collections'
 import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
@@ -24,6 +25,12 @@ const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orang
   HEAD: 'purple',
   OPTIONS: 'grey',
 }
+
+const SIDEBAR_TABS = [
+  { id: 'apis', label: 'APIs', Icon: Layers },
+  { id: 'environments', label: 'Environments', Icon: Globe },
+  { id: 'history', label: 'History', Icon: History },
+] as const
 
 function DragOverlayContent({ id }: { id: string }) {
   const [type, itemId] = id.split(':')
@@ -131,46 +138,40 @@ export function CollectionsSidebar() {
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
       {/* Same height as the drag strip above the editor pages (pt-8), so the window can be dragged from edge to edge */}
       <div data-testid="sidebar-drag-strip" className="drag-region h-8 shrink-0" />
-      <div className="flex shrink-0 border-b border-th-border">
-        <button
-          data-testid="tab-apis"
-          onClick={() => setSidebarTab('apis')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
-            sidebarTab === 'apis'
-              ? 'border-b-2 border-blue-500 text-th-text-primary'
-              : 'text-th-text-subtle hover:text-th-text-secondary'
-          )}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          APIs
-        </button>
-        <button
-          data-testid="tab-environments"
-          onClick={() => setSidebarTab('environments')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
-            sidebarTab === 'environments'
-              ? 'border-b-2 border-blue-500 text-th-text-primary'
-              : 'text-th-text-subtle hover:text-th-text-secondary'
-          )}
-        >
-          <Globe className="h-3.5 w-3.5" />
-          Environments
-        </button>
-        <button
-          data-testid="tab-history"
-          onClick={() => setSidebarTab('history')}
-          className={cn(
-            'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
-            sidebarTab === 'history'
-              ? 'border-b-2 border-blue-500 text-th-text-primary'
-              : 'text-th-text-subtle hover:text-th-text-secondary'
-          )}
-        >
-          <History className="h-3.5 w-3.5" />
-          History
-        </button>
+      <div
+        role="tablist"
+        aria-label="Sidebar view"
+        className="flex shrink-0 border-b border-th-border"
+        onKeyDown={(e) => {
+          const order = SIDEBAR_TABS.map((t) => t.id)
+          const i = order.indexOf(sidebarTab)
+          const next = e.key === 'ArrowRight' ? order[(i + 1) % order.length] : e.key === 'ArrowLeft' ? order[(i - 1 + order.length) % order.length] : e.key === 'Home' ? order[0] : e.key === 'End' ? order[order.length - 1] : null
+          if (!next) return
+          e.preventDefault()
+          setSidebarTab(next)
+          requestAnimationFrame(() => document.getElementById(`sidebar-tab-${next}`)?.focus())
+        }}
+      >
+        {SIDEBAR_TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            id={`sidebar-tab-${id}`}
+            role="tab"
+            aria-selected={sidebarTab === id}
+            tabIndex={sidebarTab === id ? 0 : -1}
+            data-testid={`tab-${id === 'apis' ? 'apis' : id}`}
+            onClick={() => setSidebarTab(id)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 py-3.5 text-xs font-medium transition-colors focus:outline-hidden',
+              sidebarTab === id
+                ? 'border-b-2 border-blue-500 text-th-text-primary'
+                : 'text-th-text-subtle hover:text-th-text-secondary'
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            {label}
+          </button>
+        ))}
       </div>
 
       {sidebarTab === 'apis' && (
@@ -189,6 +190,7 @@ export function CollectionsSidebar() {
             </div>
 
             <div className="flex-1 overflow-y-auto py-1">
+              <Tree label="Collections">
               <GroupSection
                 source="local"
                 integration={null}
@@ -211,6 +213,7 @@ export function CollectionsSidebar() {
                   dragOverId={dragOverId}
                 />
               ))}
+              </Tree>
 
               <div className="mx-2 mb-1 mt-2">
                 <button

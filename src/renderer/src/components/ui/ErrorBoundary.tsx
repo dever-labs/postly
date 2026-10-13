@@ -21,7 +21,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
     if (this.state.error) {
       return (
         <div className="no-drag flex h-full flex-1 flex-col items-center justify-center gap-3 bg-th-bg p-8 text-th-text-faint">
-          <AlertCircle className="h-10 w-10 text-rose-400" />
+          <AlertCircle className="h-10 w-10 text-rose-400 light:text-rose-800" />
           <p className="text-sm font-medium text-th-text-primary">Something went wrong</p>
           <p className="max-w-sm text-center text-xs text-th-text-muted">{this.state.error.message}</p>
           <button

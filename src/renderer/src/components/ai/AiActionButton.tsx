@@ -25,12 +25,13 @@ export function AiActionButton({ onClick, label = 'Build with AI', className, va
   const button =
     variant === 'menu-item' ? (
       <button
+        role="menuitem"
         disabled={!configured}
         onClick={handleClick}
         className={cn(
           'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors',
           configured
-            ? 'text-blue-400 hover:bg-th-surface-hover cursor-pointer'
+            ? 'text-blue-400 light:text-blue-800 hover:bg-th-surface-hover cursor-pointer'
             : 'text-blue-400/40 cursor-not-allowed',
           className
         )}
@@ -45,7 +46,7 @@ export function AiActionButton({ onClick, label = 'Build with AI', className, va
         className={cn(
           'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors',
           configured
-            ? 'text-blue-400 hover:bg-th-surface-hover cursor-pointer'
+            ? 'text-blue-400 light:text-blue-800 hover:bg-th-surface-hover cursor-pointer'
             : 'text-blue-400/40 cursor-not-allowed',
           className
         )}

@@ -145,7 +145,7 @@ export function MqttView({
         <span className="text-xs text-th-text-subtle">
           {connected ? 'Connected' : connecting ? 'Connecting…' : 'Disconnected'}
         </span>
-        {error && <span className="flex-1 truncate text-xs text-rose-400">{error}</span>}
+        {error && <span className="flex-1 truncate text-xs text-rose-400 light:text-rose-800">{error}</span>}
         <div className="ml-auto">
           {connected ? (
             <button onClick={disconnect} className="flex items-center gap-1.5 rounded-sm bg-rose-600/80 px-3 py-1 text-xs font-medium text-white hover:bg-rose-600 focus:outline-hidden">
@@ -301,7 +301,7 @@ export function MqttView({
                 <div key={m.id} className={cn('mb-1 rounded-sm px-2 py-1', m.direction === 'out' ? 'bg-amber-500/5' : 'bg-blue-500/5')}>
                   <div className="flex items-center gap-2">
                     <span className="text-th-text-faint">{new Date(m.timestamp).toLocaleTimeString()}</span>
-                    <span className={cn('font-bold', m.direction === 'out' ? 'text-amber-400' : 'text-blue-400')}>
+                    <span className={cn('font-bold', m.direction === 'out' ? 'text-amber-400 light:text-amber-800' : 'text-blue-400 light:text-blue-800')}>
                       {m.direction === 'out' ? '↑' : '↓'}
                     </span>
                     <span className="font-semibold text-th-text-subtle">{m.topic}</span>

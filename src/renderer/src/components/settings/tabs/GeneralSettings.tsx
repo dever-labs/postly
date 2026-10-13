@@ -34,8 +34,8 @@ export function GeneralSettings() {
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Default Timeout (ms)</label>
-          <Input
+          <label htmlFor="general-default-timeout-ms" className="mb-1.5 block text-xs font-medium text-th-text-muted">Default Timeout (ms)</label>
+          <Input id="general-default-timeout-ms"
             type="number"
             className="w-48"
             value={settings.defaultTimeout}
@@ -88,8 +88,8 @@ export function GeneralSettings() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">History limit (entries, max 5000)</label>
-          <Input
+          <label htmlFor="general-history-limit-entries-max-5000" className="mb-1.5 block text-xs font-medium text-th-text-muted">History limit (entries, max 5000)</label>
+          <Input id="general-history-limit-entries-max-5000"
             type="number"
             min={1}
             max={5000}

@@ -80,8 +80,8 @@ export function ResponseViewer() {
                 <span className={cn(
                   'rounded-sm px-1 py-0.5 text-[9px] font-bold',
                   logs.some((e) => e.level === 'error')
-                    ? 'bg-rose-900/50 text-rose-400'
-                    : 'bg-amber-900/50 text-amber-400'
+                    ? 'bg-rose-900/50 text-rose-400 light:text-rose-800'
+                    : 'bg-amber-900/50 text-amber-400 light:text-amber-800'
                 )}>
                   {alertCount}
                 </span>

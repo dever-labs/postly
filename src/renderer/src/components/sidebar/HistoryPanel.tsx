@@ -21,9 +21,9 @@ function dayLabel(ts: number): string {
 }
 
 function statusClass(status: number): string {
-  if (status >= 200 && status < 300) return 'text-green-400'
-  if (status >= 300 && status < 400) return 'text-blue-400'
-  if (status >= 400) return 'text-red-400'
+  if (status >= 200 && status < 300) return 'text-green-400 light:text-green-800'
+  if (status >= 300 && status < 400) return 'text-blue-400 light:text-blue-800'
+  if (status >= 400) return 'text-red-400 light:text-red-800'
   return 'text-th-text-subtle'
 }
 
@@ -105,7 +105,7 @@ export function HistoryPanel() {
                 >
                   <Badge variant={METHOD_COLORS[e.method] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{e.method}</Badge>
                   <span className="min-w-0 flex-1 truncate text-xs text-th-text-secondary">{e.url}</span>
-                  <span className={cn('shrink-0 font-mono text-[10px]', e.status ? statusClass(e.status) : 'text-red-400')}>{e.status || 'ERR'}</span>
+                  <span className={cn('shrink-0 font-mono text-[10px]', e.status ? statusClass(e.status) : 'text-red-400 light:text-red-800')}>{e.status || 'ERR'}</span>
                 </button>
                 <button
                   onClick={() => void remove(e.id)}

@@ -127,7 +127,7 @@ export function CertificateSettings() {
               <label className="text-xs text-th-text-muted">Passphrase (if encrypted)<Input data-testid="cert-passphrase" type="password" autoComplete="off" value={draft.passphrase} onChange={(e) => set('passphrase', e.target.value)} /></label>
             </>
           )}
-          {error && <p role="alert" data-testid="cert-error" className="col-span-2 text-xs text-rose-400">{error}</p>}
+          {error && <p role="alert" data-testid="cert-error" className="col-span-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
           <div className="col-span-2 flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
             <Button size="sm" data-testid="cert-save" onClick={() => void save()}>Save certificate</Button>
@@ -157,7 +157,7 @@ function CertTable({ rows, onDelete }: { rows: CertificateRow[]; onDelete: (id: 
               <td className="px-3 py-1.5 text-th-text-secondary">{r.name}</td>
               <td className="px-3 py-1.5 font-mono text-th-text-muted">{r.kind === 'client' ? `${r.host}${r.port ? `:${r.port}` : ''}` : r.subject}</td>
               <td className="px-3 py-1.5 text-th-text-subtle">{r.format.toUpperCase()}{r.hasPassphrase ? ' · passphrase' : ''}</td>
-              <td className={r.problem || (r.validTo !== null && r.validTo < Date.now()) ? 'px-3 py-1.5 text-rose-400' : 'px-3 py-1.5 text-th-text-subtle'}>{r.problem ?? expiry(r.validTo)}</td>
+              <td className={r.problem || (r.validTo !== null && r.validTo < Date.now()) ? 'px-3 py-1.5 text-rose-400 light:text-rose-800' : 'px-3 py-1.5 text-th-text-subtle'}>{r.problem ?? expiry(r.validTo)}</td>
               <td className="px-3 py-1.5 text-right">
                 <button aria-label={`Delete ${r.name}`} onClick={() => void onDelete(r.id)} className="text-th-text-subtle hover:text-rose-400"><Trash2 className="h-3.5 w-3.5" /></button>
               </td>

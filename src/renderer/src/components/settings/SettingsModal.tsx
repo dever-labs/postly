@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import { AppearanceSettings } from '@/components/settings/tabs/AppearanceSettings'
 import { GeneralSettings } from '@/components/settings/tabs/GeneralSettings'
 import { VariablesSettings } from '@/components/settings/tabs/VariablesSettings'
@@ -38,6 +39,8 @@ function TabContent({ tab }: { tab: string }) {
 
 export function SettingsModal() {
   const { settingsOpen, settingsTab, closeSettings } = useUIStore()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef, { active: settingsOpen })
   const [activeTab, setActiveTab] = useState(settingsTab)
 
   useEffect(() => {
@@ -51,11 +54,11 @@ export function SettingsModal() {
 
   return (
     <div data-testid="settings-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-      <div className="fixed left-1/2 top-1/2 flex h-[600px] max-h-[90vh] w-[800px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-th-border bg-th-surface shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-title" tabIndex={-1} className="fixed left-1/2 top-1/2 flex h-[600px] max-h-[90vh] w-[800px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-th-border bg-th-surface shadow-2xl">
         {/* Left sidebar */}
         <div className="flex w-48 shrink-0 flex-col border-r border-th-border">
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm font-semibold text-th-text-primary">Settings</span>
+            <h2 id="settings-title" className="text-sm font-semibold text-th-text-primary">Settings</h2>
           </div>
           <nav className="flex flex-col gap-0.5 px-2">
             {TABS.map((tab) => (
