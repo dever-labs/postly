@@ -193,6 +193,22 @@ describe('packaged mode', () => {
       expect(mockSend).toHaveBeenCalledWith('postly:updater:event', { type: 'downloaded', version: '2.0.0' })
     })
 
+    it('offers a manual download when macOS rejects the update signature', () => {
+      fireAuEvent('update-available', { version: '0.9.1' })
+      fireAuEvent('error', new Error('Code signature at URL file:///x/Postly.app/ did not pass validation: code failed to satisfy specified code requirement(s)'))
+      expect(mockSend).toHaveBeenLastCalledWith('postly:updater:event', expect.objectContaining({
+        type: 'error',
+        manualInstall: true,
+        version: '0.9.1',
+        url: 'https://github.com/dever-labs/postly/releases/tag/v0.9.1',
+      }))
+    })
+
+    it('recognises the localised macOS signature error too', () => {
+      fireAuEvent('error', new Error('did not pass validation: kode opfyldte ikke specifikke kodekrav'))
+      expect(mockSend).toHaveBeenLastCalledWith('postly:updater:event', expect.objectContaining({ manualInstall: true }))
+    })
+
     it('forwards error → { type: "error", error: message }', () => {
       fireAuEvent('error', new Error('network timeout'))
       expect(mockSend).toHaveBeenCalledWith('postly:updater:event', { type: 'error', error: 'network timeout' })

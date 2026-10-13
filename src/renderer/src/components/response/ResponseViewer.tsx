@@ -1,6 +1,8 @@
-import { Copy, SendHorizonal } from 'lucide-react'
-import React, { Suspense, lazy, useState } from 'react'
+import { SendHorizonal } from 'lucide-react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import { ResponseStatus } from '@/components/response/ResponseStatus'
+import { ResponseActions } from '@/components/response/ResponseActions'
+import { ResponseNotice } from '@/components/response/ResponseNotice'
 import { RawTab } from '@/components/response/tabs/RawTab'
 import { PreviewTab } from '@/components/response/tabs/PreviewTab'
 import { CookiesTab } from '@/components/response/tabs/CookiesTab'
@@ -8,6 +10,7 @@ import { StreamTab } from '@/components/response/tabs/StreamTab'
 import { ConsoleTab } from '@/components/response/tabs/ConsoleTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore } from '@/store/requests'
+import { prettyBody } from '@/lib/responseBody'
 import { cn } from '@/lib/utils'
 
 // Monaco-backed tab is loaded on demand so the editor bundle stays out of startup.
@@ -15,14 +18,9 @@ const PrettyTab = lazy(() => import('@/components/response/tabs/PrettyTab').then
 
 export function ResponseViewer() {
   const { response, isLoading, stream, resumeStream } = useRequestsStore()
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = async () => {
-    if (!response) return
-    await navigator.clipboard.writeText(response.body)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const streaming = !!stream
+  const [tab, setTab] = useState(streaming ? 'stream' : 'pretty')
+  useEffect(() => { setTab(streaming ? 'stream' : 'pretty') }, [streaming])
 
   if (isLoading && !stream) {
     return (
@@ -52,23 +50,18 @@ export function ResponseViewer() {
       {/* Status bar */}
       <div data-testid="response-status" className="flex items-center justify-between border-b border-th-border px-4 py-2">
         <ResponseStatus response={response} />
-        <button
-          onClick={handleCopy}
-          className={cn(
-            'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors focus:outline-hidden',
-            copied
-              ? 'text-emerald-400 light:text-emerald-800'
-              : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'
-          )}
-        >
-          <Copy className="h-3.5 w-3.5" />
-          {copied ? 'Copied!' : 'Copy'}
-        </button>
+        <ResponseActions
+          copyText={response.binary ? null : tab === 'raw' ? response.body : prettyBody(response.body, contentType)}
+          bodyId={response.bodyId}
+          canSave={!!response.bodyId || !!response.bodyTooLarge}
+        />
       </div>
+
+      <ResponseNotice response={response} contentType={contentType} />
 
       {/* Tabs */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Tabs key={stream ? 'stream' : 'plain'} defaultValue={stream ? 'stream' : 'pretty'} className="flex h-full flex-col">
+        <Tabs key={stream ? 'stream' : 'plain'} value={tab} onValueChange={setTab} className="flex h-full flex-col">
           <TabsList className="px-3">
             {stream && <TabsTrigger value="stream" data-testid="stream-tab-trigger">Stream</TabsTrigger>}
             <TabsTrigger value="pretty">Pretty</TabsTrigger>
@@ -113,7 +106,7 @@ export function ResponseViewer() {
           </TabsContent>
 
           <TabsContent value="preview" className="flex-1 overflow-hidden">
-            <PreviewTab body={response.body} />
+            <PreviewTab body={response.body} contentType={contentType} bodyId={response.bodyId} binary={response.binary} />
           </TabsContent>
 
           <TabsContent value="headers" className="flex-1 overflow-auto">

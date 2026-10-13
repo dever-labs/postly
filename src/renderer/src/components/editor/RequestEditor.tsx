@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Save, ChevronRight, HardDrive, GitFork, GitBranch, Box, FolderOpen, Folder } from 'lucide-react'
 import { withShortcut } from '@/lib/shortcutHint'
 import React, { Suspense, lazy, useCallback, useMemo } from 'react'
-import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair } from '@/types'
+import type { HttpMethod, BodyType, AuthType, SslVerification, ProtocolType, KeyValuePair, NetworkSettings } from '@/types'
 import { MethodSelector } from '@/components/editor/MethodSelector'
 import { UrlBar } from '@/components/editor/UrlBar'
 import { CurlCopyMenu } from '@/components/editor/CurlCopyMenu'
@@ -18,6 +18,8 @@ import { AuthTab } from '@/components/editor/tabs/AuthTab'
 import { ExtractTab } from '@/components/editor/tabs/ExtractTab'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../../shared/extract'
 import { SslEditor } from '@/components/editor/SslEditor'
+import { GRID, NetworkEditor } from '@/components/editor/NetworkEditor'
+import { useInheritedNetwork } from '@/components/editor/useInheritedNetwork'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs'
 import { useRequestsStore, isScratchId } from '@/store/requests'
 import { useNavigationStore } from '@/store/navigation'
@@ -63,6 +65,7 @@ function pcGet(config: Record<string, string>, key: string): string {
 export function RequestEditor() {
   const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft } = useRequestsStore()
   const folders = useCollectionsStore((s) => s.folders)
+  const inheritedNetwork = useInheritedNetwork(editingRequest?.folderId)
   const integrations = useIntegrationsStore((s) => s.integrations)
   const { selectItem } = useUIStore()
   const openGitAction = useUIStore((s) => s.openGitAction)
@@ -128,6 +131,7 @@ export function RequestEditor() {
   const onAuthTypeChange = useCallback((t: AuthType) => updateField('authType', t), [updateField])
   const onAuthConfigChange = useCallback((c: Record<string, string>) => updateField('authConfig', c), [updateField])
   const onSslChange = useCallback((v: SslVerification) => updateField('sslVerification', v), [updateField])
+  const onNetworkChange = useCallback((v: NetworkSettings | undefined) => updateField('networkSettings', v), [updateField])
 
   if (!editingRequest) {
     return (
@@ -389,14 +393,20 @@ export function RequestEditor() {
               <ExtractTab value={pc[EXTRACT_RULES_KEY]} onChange={(v) => updatePc(EXTRACT_RULES_KEY, v)} />
             </TabsContent>
             <TabsContent value="settings">
-              <div className="flex flex-col gap-4 p-3">
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-th-text-subtle">SSL Verification</p>
+              <div className={`${GRID} p-3`}>
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium text-th-text-secondary">SSL verification</p>
                   <SslEditor
                     value={(editingRequest.sslVerification as SslVerification) ?? 'inherit'}
                     onChange={onSslChange}
                   />
                 </div>
+                <NetworkEditor
+                  layout="inline"
+                  value={editingRequest.networkSettings}
+                  onChange={onNetworkChange}
+                  inherited={inheritedNetwork}
+                />
               </div>
             </TabsContent>
           </Tabs>

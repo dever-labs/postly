@@ -1,5 +1,9 @@
 import { ipcMain } from 'electron'
 import { queryOne, run, runDraft } from '../database'
+import { serializeNetworkSettings } from '../services/network-settings'
+
+/** Drafts keep '{}' for "all inherited" so it stays distinguishable from "not edited" (NULL). */
+const draftNetwork = (v: string | undefined): string | null => (v == null ? null : serializeNetworkSettings(v) ?? '{}')
 
 export function registerDraftHandlers(): void {
   // ── Request drafts ────────────────────────────────────────────────────────
@@ -15,21 +19,21 @@ export function registerDraftHandlers(): void {
     method?: string; url?: string; params?: string; headers?: string
     bodyType?: string; bodyContent?: string
     authType?: string; authConfig?: string
-    sslVerification?: string; protocol?: string; protocolConfig?: string
+    sslVerification?: string; protocol?: string; protocolConfig?: string; networkSettings?: string
   }) => {
     try {
       runDraft(
         `INSERT OR REPLACE INTO request_drafts
           (request_id, method, url, params, headers, body_type, body_content,
-           auth_type, auth_config, ssl_verification, protocol, protocol_config, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           auth_type, auth_config, ssl_verification, protocol, protocol_config, network_settings, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           args.requestId, args.method ?? null, args.url ?? null,
           args.params ?? null, args.headers ?? null,
           args.bodyType ?? null, args.bodyContent ?? null,
           args.authType ?? null, args.authConfig ?? null,
           args.sslVerification ?? null, args.protocol ?? null,
-          args.protocolConfig ?? null, Date.now(),
+          args.protocolConfig ?? null, draftNetwork(args.networkSettings), Date.now(),
         ]
       )
       return { data: true }
@@ -54,17 +58,17 @@ export function registerDraftHandlers(): void {
   ipcMain.handle('postly:drafts:collection:upsert', (_, args: {
     collectionId: string
     name?: string; description?: string
-    authType?: string; authConfig?: string; sslVerification?: string
+    authType?: string; authConfig?: string; sslVerification?: string; networkSettings?: string
   }) => {
     try {
       runDraft(
         `INSERT OR REPLACE INTO collection_drafts
-          (collection_id, name, description, auth_type, auth_config, ssl_verification, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (collection_id, name, description, auth_type, auth_config, ssl_verification, network_settings, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           args.collectionId, args.name ?? null, args.description ?? null,
           args.authType ?? null, args.authConfig ?? null,
-          args.sslVerification ?? null, Date.now(),
+          args.sslVerification ?? null, draftNetwork(args.networkSettings), Date.now(),
         ]
       )
       return { data: true }
@@ -89,17 +93,17 @@ export function registerDraftHandlers(): void {
   ipcMain.handle('postly:drafts:group:upsert', (_, args: {
     groupId: string
     name?: string; description?: string
-    authType?: string; authConfig?: string; sslVerification?: string
+    authType?: string; authConfig?: string; sslVerification?: string; networkSettings?: string
   }) => {
     try {
       runDraft(
         `INSERT OR REPLACE INTO group_drafts
-          (group_id, name, description, auth_type, auth_config, ssl_verification, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (group_id, name, description, auth_type, auth_config, ssl_verification, network_settings, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           args.groupId, args.name ?? null, args.description ?? null,
           args.authType ?? null, args.authConfig ?? null,
-          args.sslVerification ?? null, Date.now(),
+          args.sslVerification ?? null, draftNetwork(args.networkSettings), Date.now(),
         ]
       )
       return { data: true }

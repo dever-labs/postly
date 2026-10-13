@@ -136,10 +136,12 @@ export function CollectionsSidebar() {
 
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
+      {/* Same height as the drag strip above the editor pages (pt-8), so the window can be dragged from edge to edge */}
+      <div data-testid="sidebar-drag-strip" className="drag-region h-8 shrink-0" />
       <div
         role="tablist"
         aria-label="Sidebar view"
-        className={cn('flex shrink-0 border-b border-th-border', window.api.platform === 'darwin' && 'pt-8')}
+        className="flex shrink-0 border-b border-th-border"
         onKeyDown={(e) => {
           const order = SIDEBAR_TABS.map((t) => t.id)
           const i = order.indexOf(sidebarTab)

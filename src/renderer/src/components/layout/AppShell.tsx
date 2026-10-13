@@ -13,7 +13,6 @@ import { GitSourceView } from '@/components/git/GitSourceView'
 import { ExportPage } from '@/components/export-import/ExportPage'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { ImportPage } from '@/components/export-import/ImportPage'
-import { WindowControls } from '@/components/layout/WindowControls'
 import { useShortcutDispatcher } from '@/hooks/useShortcuts'
 import { useAppShortcuts } from '@/hooks/useAppShortcuts'
 import { useUIStore } from '@/store/ui'
@@ -203,7 +202,6 @@ export function AppShell() {
             </div>
           )}
         </ErrorBoundary>
-        {window.api.platform !== 'darwin' && <WindowControls />}
       </div>
     </div>
   )

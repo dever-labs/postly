@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
+import { serializeNetworkSettings } from '../services/network-settings'
 
 const CAMEL_TO_SNAKE: Record<string, string> = {
   name: 'name',
@@ -67,6 +68,7 @@ export function registerRequestHandlers(): void {
       for (const [camel, snake] of Object.entries(CAMEL_TO_SNAKE)) {
         if (args[camel] !== undefined) { fields.push(`${snake} = ?`); values.push(args[camel]) }
       }
+      if (args['networkSettings'] !== undefined) { fields.push('network_settings = ?'); values.push(serializeNetworkSettings(args['networkSettings'])) }
       if (fields.length === 0) return { data: true }
 
       fields.push('updated_at = ?')

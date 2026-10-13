@@ -1,4 +1,5 @@
 import type { Folder, KeyValuePair, Request } from '@/types'
+import { normalizeNetworkSettings } from './networkSettings'
 
 export function parseJsonField<T>(value: unknown, fallback: T): T {
   if (typeof value === 'string') {
@@ -26,6 +27,7 @@ export function normalizeRequest(raw: Record<string, unknown>): Request {
     authType: (raw.authType ?? raw.auth_type ?? 'none') as Request['authType'],
     authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
     sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Request['sslVerification'],
+    networkSettings: normalizeNetworkSettings(raw.networkSettings ?? raw.network_settings),
     protocol: (raw.protocol ?? 'http') as Request['protocol'],
     protocolConfig: parseJsonField<Record<string, string>>(raw.protocolConfig ?? raw.protocol_config, {}),
     description: raw.description as string | undefined,
@@ -48,6 +50,7 @@ export function normalizeFolder(raw: Record<string, unknown>): Folder {
     authType: (raw.authType ?? raw.auth_type ?? 'none') as Folder['authType'],
     authConfig: parseJsonField<Record<string, string>>(raw.authConfig ?? raw.auth_config, {}),
     sslVerification: (raw.sslVerification ?? raw.ssl_verification ?? 'inherit') as Folder['sslVerification'],
+    networkSettings: normalizeNetworkSettings(raw.networkSettings ?? raw.network_settings),
     hidden: Boolean(raw.hidden ?? false),
     collapsed: Boolean(raw.collapsed ?? false),
     sortOrder: (raw.sortOrder ?? raw.sort_order ?? 0) as number,
@@ -75,5 +78,7 @@ export function serializeRequest(req: Request): Record<string, unknown> {
     headers: JSON.stringify(req.headers),
     authConfig: JSON.stringify(req.authConfig),
     protocolConfig: JSON.stringify(req.protocolConfig),
+    // null (not undefined) so clearing an override is actually written
+    networkSettings: req.networkSettings ?? null,
   }
 }

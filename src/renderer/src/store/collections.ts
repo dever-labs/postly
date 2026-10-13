@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AuthType, Collection, CollectionSource, Folder, Group, Request, SslVerification } from '../types'
+import type { AuthType, Collection, CollectionSource, Folder, Group, NetworkSettings, Request, SslVerification } from '../types'
 import { normalizeFolder, normalizeRequest } from '@/lib/normalizers'
 
 interface CollectionsState {
@@ -26,8 +26,8 @@ interface CollectionsState {
   markDirty: (requestId: string) => void
   syncRequest: (request: Request) => void
   clearDirtyForCollection: (collectionId: string) => void
-  updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; collapsed?: boolean }) => Promise<void>
-  updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; collapsed?: boolean }) => Promise<void>
+  updateCollection: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; networkSettings?: NetworkSettings | null; collapsed?: boolean }) => Promise<void>
+  updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; networkSettings?: NetworkSettings | null; collapsed?: boolean }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
   renameGroup: (id: string, name: string) => Promise<void>
   createLocalRequest: (folderId: string) => Promise<void>
@@ -236,7 +236,9 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       return
     }
     set((state) => {
-      const folders = state.folders.map((folder) => folder.id === id ? { ...folder, ...updates } : folder)
+      const { networkSettings, ...rest } = updates
+      const patch = networkSettings === undefined ? rest : { ...rest, networkSettings: networkSettings ?? undefined }
+      const folders = state.folders.map((folder) => folder.id === id ? { ...folder, ...patch } : folder)
       return deriveFoldersState(folders)
     })
   },
@@ -248,7 +250,9 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       return
     }
     set((state) => {
-      const folders = state.folders.map((folder) => folder.id === id ? { ...folder, ...updates } : folder)
+      const { networkSettings, ...rest } = updates
+      const patch = networkSettings === undefined ? rest : { ...rest, networkSettings: networkSettings ?? undefined }
+      const folders = state.folders.map((folder) => folder.id === id ? { ...folder, ...patch } : folder)
       return deriveFoldersState(folders)
     })
   },

@@ -1,11 +1,7 @@
 import React from 'react'
 import type { HttpResponse } from '@/types'
 import { cn } from '@/lib/utils'
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  return `${(bytes / 1024).toFixed(1)} KB`
-}
+import { formatSize } from '@/lib/responseBody'
 
 interface ResponseStatusProps {
   response: HttpResponse
