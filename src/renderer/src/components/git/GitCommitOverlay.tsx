@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GitBranch, GitCommit, Sparkles } from 'lucide-react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import { Button } from '@/components/ui/Button'
 import { useCollectionsStore } from '@/store/collections'
 import { useRequestsStore } from '@/store/requests'
@@ -28,6 +29,8 @@ export function GitCommitOverlay() {
   const [generating, setGenerating] = useState(false)
   const streamingRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef, { active: !!action })
 
   const collection = action ? collections.find((c) => c.id === action.collectionId) ?? null : null
   const integration = collection?.integrationId
@@ -129,12 +132,12 @@ export function GitCommitOverlay() {
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xs"
       onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
     >
-      <div className="relative w-full max-w-lg rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="git-commit-title" tabIndex={-1} className="relative w-full max-w-lg rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-2.5 border-b border-th-border px-4 py-3">
           <GitCommit className="h-4 w-4 shrink-0 text-th-text-secondary" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-th-text-primary truncate">{action.title}</div>
+            <h2 id="git-commit-title" className="text-sm font-semibold text-th-text-primary truncate">{action.title}</h2>
             {action.subtitle && (
               <div className="text-xs text-th-text-muted truncate">{action.subtitle}</div>
             )}

@@ -72,17 +72,17 @@ export function NetworkSettings() {
       {mode === 'manual' && (
         <div className="flex flex-col gap-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Proxy URL</label>
-            <Input placeholder="http://proxy.example.com:8080 or socks5://host:1080" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <label htmlFor="network-proxy-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Proxy URL</label>
+            <Input id="network-proxy-url" placeholder="http://proxy.example.com:8080 or socks5://host:1080" value={url} onChange={(e) => setUrl(e.target.value)} />
           </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Username <span className="text-th-text-faint">(optional)</span></label>
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+              <label htmlFor="network-username-optional" className="mb-1.5 block text-xs font-medium text-th-text-muted">Username <span className="text-th-text-faint">(optional)</span></label>
+              <Input id="network-username-optional" value={username} onChange={(e) => setUsername(e.target.value)} />
             </div>
             <div className="flex-1">
-              <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Password</label>
-              <Input
+              <label htmlFor="network-password" className="mb-1.5 block text-xs font-medium text-th-text-muted">Password</label>
+              <Input id="network-password"
                 type="password"
                 value={password}
                 placeholder={hasPassword ? 'Saved — leave blank to keep' : ''}
@@ -98,16 +98,16 @@ export function NetworkSettings() {
 
       {mode !== 'none' && (
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Bypass list</label>
-          <Input placeholder="localhost, 127.0.0.1, .internal.example.com" value={bypass} onChange={(e) => setBypass(e.target.value)} />
+          <label htmlFor="network-bypass-list" className="mb-1.5 block text-xs font-medium text-th-text-muted">Bypass list</label>
+          <Input id="network-bypass-list" placeholder="localhost, 127.0.0.1, .internal.example.com" value={bypass} onChange={(e) => setBypass(e.target.value)} />
           <p className="mt-1 text-[11px] text-th-text-faint">Comma-separated hosts that skip the proxy. A leading dot matches subdomains; * bypasses everything.{mode === 'system' ? ' NO_PROXY is also honored.' : ''}</p>
         </div>
       )}
 
       <div className="flex items-end gap-3">
         <div className="flex-1">
-          <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Test URL</label>
-          <Input value={testUrl} onChange={(e) => setTestUrl(e.target.value)} />
+          <label htmlFor="network-test-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Test URL</label>
+          <Input id="network-test-url" value={testUrl} onChange={(e) => setTestUrl(e.target.value)} />
         </div>
         <Button variant="outline" onClick={test}>Check route</Button>
         <Button onClick={save}>Save</Button>

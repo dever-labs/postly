@@ -57,7 +57,7 @@ export function ResponseViewer() {
           className={cn(
             'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors focus:outline-hidden',
             copied
-              ? 'text-emerald-400'
+              ? 'text-emerald-400 light:text-emerald-800'
               : 'text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary'
           )}
         >
@@ -87,8 +87,8 @@ export function ResponseViewer() {
                 <span className={cn(
                   'rounded-sm px-1 py-0.5 text-[9px] font-bold',
                   logs.some((e) => e.level === 'error')
-                    ? 'bg-rose-900/50 text-rose-400'
-                    : 'bg-amber-900/50 text-amber-400'
+                    ? 'bg-rose-900/50 text-rose-400 light:text-rose-800'
+                    : 'bg-amber-900/50 text-amber-400 light:text-amber-800'
                 )}>
                   {alertCount}
                 </span>

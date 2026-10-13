@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 
@@ -13,6 +14,8 @@ export function DeleteCollectionOverlay() {
 
   const collection = collectionId ? collections.find((c) => c.id === collectionId) ?? null : null
   const isGit = collection?.source === 'git'
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef, { active: !!collection })
 
   useEffect(() => {
     if (collectionId) setCommitMessage('')
@@ -40,9 +43,9 @@ export function DeleteCollectionOverlay() {
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xs"
       onClick={(e) => { if (e.target === e.currentTarget) closeDeleteCollection() }}
     >
-      <div className="w-full max-w-sm rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
+      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="delete-collection-title" tabIndex={-1} className="w-full max-w-sm rounded-lg border border-th-border-strong bg-th-surface shadow-2xl">
         <div className="border-b border-th-border px-4 py-3">
-          <div className="text-sm font-semibold text-th-text-primary">Delete collection</div>
+          <h2 id="delete-collection-title" className="text-sm font-semibold text-th-text-primary">Delete collection</h2>
           <div className="mt-0.5 truncate text-xs text-th-text-muted">{collection.name}</div>
         </div>
 

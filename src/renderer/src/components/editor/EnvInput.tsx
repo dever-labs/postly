@@ -208,7 +208,7 @@ export function EnvInput({ value, onChange, onKeyDown, wrapperClassName, classNa
                   'rounded-sm',
                   seg.isDefined
                     ? 'bg-amber-400/20 text-amber-300'
-                    : 'bg-red-500/20 text-red-400',
+                    : 'bg-red-500/20 text-red-400 light:text-red-800',
                 )}
               >
                 {seg.raw}

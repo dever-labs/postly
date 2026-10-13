@@ -76,8 +76,8 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
 
       {authType === 'bearer' && (
         <div>
-          <label className="mb-1 block text-xs text-th-text-subtle">Token</label>
-          <Input
+          <label htmlFor="auth-token" className="mb-1 block text-xs text-th-text-subtle">Token</label>
+          <Input id="auth-token"
             type="password"
             placeholder="Bearer token… (supports {{ENV_VAR}})"
             value={authConfig.token ?? ''}
@@ -89,16 +89,16 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
       {authType === 'basic' && (
         <div className="flex flex-col gap-2">
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Username</label>
-            <Input
+            <label htmlFor="auth-username" className="mb-1 block text-xs text-th-text-subtle">Username</label>
+            <Input id="auth-username"
               placeholder="Username"
               value={authConfig.username ?? ''}
               onChange={(e) => set('username', e.target.value)}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Password</label>
-            <Input
+            <label htmlFor="auth-password" className="mb-1 block text-xs text-th-text-subtle">Password</label>
+            <Input id="auth-password"
               type="password"
               placeholder="Password"
               value={authConfig.password ?? ''}
@@ -111,8 +111,8 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
       {authType === 'jwt' && (
         <div className="flex flex-col gap-2">
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Token</label>
-            <Input
+            <label htmlFor="auth-token" className="mb-1 block text-xs text-th-text-subtle">Token</label>
+            <Input id="auth-token"
               type="password"
               placeholder="JWT token…"
               value={authConfig.token ?? ''}
@@ -120,8 +120,8 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Prefix</label>
-            <Input
+            <label htmlFor="auth-prefix" className="mb-1 block text-xs text-th-text-subtle">Prefix</label>
+            <Input id="auth-prefix"
               placeholder="Bearer"
               value={authConfig.prefix ?? ''}
               onChange={(e) => set('prefix', e.target.value)}
@@ -141,16 +141,16 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
       {authType === 'ntlm' && (
         <div className="flex flex-col gap-2">
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Username</label>
-            <Input
+            <label htmlFor="auth-username" className="mb-1 block text-xs text-th-text-subtle">Username</label>
+            <Input id="auth-username"
               placeholder="Username"
               value={authConfig.username ?? ''}
               onChange={(e) => set('username', e.target.value)}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Password</label>
-            <Input
+            <label htmlFor="auth-password" className="mb-1 block text-xs text-th-text-subtle">Password</label>
+            <Input id="auth-password"
               type="password"
               placeholder="Password"
               value={authConfig.password ?? ''}
@@ -158,16 +158,16 @@ export function AuthEditor({ authType, authConfig, onChange, canInherit = true, 
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Domain</label>
-            <Input
+            <label htmlFor="auth-domain" className="mb-1 block text-xs text-th-text-subtle">Domain</label>
+            <Input id="auth-domain"
               placeholder="DOMAIN (optional)"
               value={authConfig.domain ?? ''}
               onChange={(e) => set('domain', e.target.value)}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-th-text-subtle">Workstation</label>
-            <Input
+            <label htmlFor="auth-workstation" className="mb-1 block text-xs text-th-text-subtle">Workstation</label>
+            <Input id="auth-workstation"
               placeholder="Workstation (optional)"
               value={authConfig.workstation ?? ''}
               onChange={(e) => set('workstation', e.target.value)}

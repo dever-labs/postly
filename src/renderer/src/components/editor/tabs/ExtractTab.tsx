@@ -94,7 +94,7 @@ export const ExtractTab = React.memo(function ExtractTab({ value, onChange }: Ex
               </button>
             </div>
             {error && rule.enabled && (rule.expression || rule.variable) && (
-              <p role="alert" data-testid="extract-error" className="pl-7 text-xs text-rose-400">{error}</p>
+              <p role="alert" data-testid="extract-error" className="pl-7 text-xs text-rose-400 light:text-rose-800">{error}</p>
             )}
           </div>
         )

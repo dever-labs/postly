@@ -122,7 +122,7 @@ export function GrpcView({
               onChange={(e) => onProtoChange(e.target.value)}
               spellCheck={false}
             />
-            {protoError && <p className="mt-1 text-xs text-rose-400">{protoError}</p>}
+            {protoError && <p className="mt-1 text-xs text-rose-400 light:text-rose-800">{protoError}</p>}
           </div>
 
           {/* Service / Method selectors */}
@@ -224,7 +224,7 @@ export function GrpcView({
                 Invoke a method to see the response
               </div>
             ) : response.error ? (
-              <pre className="font-mono text-xs text-rose-400 whitespace-pre-wrap">{response.error}</pre>
+              <pre className="font-mono text-xs text-rose-400 light:text-rose-800 whitespace-pre-wrap">{response.error}</pre>
             ) : (
               <pre className="font-mono text-xs text-th-text-primary whitespace-pre-wrap">
                 {JSON.stringify(response.data, null, 2)}

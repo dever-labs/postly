@@ -29,7 +29,7 @@ function BsProviderPicker({ value, onChange }: { value: BsProvider; onChange: (v
           className={[
             'flex flex-1 flex-col items-center gap-1 rounded-sm border px-2 py-2 text-[10px] font-medium transition-colors focus:outline-hidden',
             value === p.value
-              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+              ? 'border-blue-500 bg-blue-500/10 text-blue-400 light:text-blue-800'
               : 'border-th-border text-th-text-muted hover:border-th-border-strong hover:text-th-text-secondary',
           ].join(' ')}
         >
@@ -210,19 +210,19 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <label htmlFor="integrationedit-name" className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label>
+                <Input id="integrationedit-name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
 
               {isGit && (
                 <>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
-                    <Input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} className="font-mono" placeholder="https://github.com/org/repo" />
+                    <label htmlFor="integrationedit-repository-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
+                    <Input id="integrationedit-repository-url" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} className="font-mono" placeholder="https://github.com/org/repo" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Default branch</label>
-                    <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                    <label htmlFor="integrationedit-default-branch" className="mb-1.5 block text-xs font-medium text-th-text-muted">Default branch</label>
+                    <Input id="integrationedit-default-branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
                   </div>
                 </>
               )}
@@ -230,8 +230,8 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
               {type === 'backstage' && (
                 <>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
-                    <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+                    <label htmlFor="integrationedit-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
+                    <Input id="integrationedit-base-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Authentication</label>
@@ -242,8 +242,8 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                   </div>
                   {(clientId === 'token' || (!clientId)) && (
                     <div>
-                      <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
-                      <Input
+                      <label htmlFor="integrationedit-token-optional" className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label>
+                      <Input id="integrationedit-token-optional"
                         type="password"
                         value={token}
                         placeholder={integration?.hasToken ? 'Saved — leave blank to keep' : ''}
@@ -269,25 +269,25 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
               {(type === 'github' || type === 'gitlab') && (
                 <>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
-                    <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+                    <label htmlFor="integrationedit-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label>
+                    <Input id="integrationedit-base-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Client ID</label>
-                    <Input value={clientId} onChange={(e) => setClientId(e.target.value)} />
+                    <label htmlFor="integrationedit-client-id" className="mb-1.5 block text-xs font-medium text-th-text-muted">Client ID</label>
+                    <Input id="integrationedit-client-id" value={clientId} onChange={(e) => setClientId(e.target.value)} />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository</label>
-                    <Input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="owner/repo" />
+                    <label htmlFor="integrationedit-repository" className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository</label>
+                    <Input id="integrationedit-repository" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="owner/repo" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Branch</label>
-                    <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                    <label htmlFor="integrationedit-branch" className="mb-1.5 block text-xs font-medium text-th-text-muted">Branch</label>
+                    <Input id="integrationedit-branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
                   </div>
                 </>
               )}
 
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
 
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" size="sm" onClick={clearSelectedItem}>Cancel</Button>
@@ -328,27 +328,27 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                   {deviceCode ? (
                     <div className="flex w-full flex-col items-center gap-3 rounded-lg border border-th-border-strong bg-th-surface-raised/50 px-5 py-5">
                       <p className="text-xs text-th-text-subtle">Enter this code at</p>
-                      <a href={deviceCode.verificationUri} target="_blank" rel="noreferrer" className="text-sm text-blue-400 hover:underline">{deviceCode.verificationUri}</a>
+                      <a href={deviceCode.verificationUri} target="_blank" rel="noreferrer" className="text-sm text-blue-400 light:text-blue-800 hover:underline">{deviceCode.verificationUri}</a>
                       <div className="mt-1 rounded-md border border-th-border-strong bg-th-surface px-6 py-3">
                         <span className="font-mono text-2xl font-bold tracking-[0.25em] text-th-text-primary">{deviceCode.userCode}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-th-text-muted"><Loader2 className="h-4 w-4 animate-spin" />Waiting for you to approve…</div>
                     </div>
                   ) : (
-                    <><Loader2 className="h-8 w-8 animate-spin text-blue-400" /><p className="text-sm text-th-text-secondary">Reconnecting…</p></>
+                    <><Loader2 className="h-8 w-8 animate-spin text-blue-400 light:text-blue-800" /><p className="text-sm text-th-text-secondary">Reconnecting…</p></>
                   )}
                 </>
               )}
               {connectedUser && (
                 <div className="flex flex-col items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400"><Check className="h-5 w-5" /></div>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400 light:text-green-800"><Check className="h-5 w-5" /></div>
                   <p className="text-sm font-medium text-th-text-primary">Reconnected!</p>
                   <Button size="sm" className="mt-2 w-full" onClick={clearSelectedItem}>Done</Button>
                 </div>
               )}
               {error && (
                 <div className="flex w-full flex-col gap-3">
-                  <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>
+                  <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>
                   <Button variant="outline" size="sm" onClick={() => { setError(null); setStep('form') }}>Back</Button>
                 </div>
               )}

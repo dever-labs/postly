@@ -1,5 +1,6 @@
 import { ChevronRight, Command, Keyboard, Globe, Settings, RefreshCw, Plus, Check, Terminal } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
 import { useEnvironmentsStore } from '@/store/environments'
@@ -47,7 +48,8 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const previouslyFocused = useRef<Element | null>(document.activeElement)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef)
 
   // The index is built here, so nothing is computed until the palette is first opened.
   const items = useMemo(() => {
@@ -63,7 +65,6 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   }, [items, query])
 
   useEffect(() => { inputRef.current?.focus() }, [])
-  useEffect(() => () => { if (previouslyFocused.current instanceof HTMLElement) previouslyFocused.current.focus() }, [])
   useEffect(() => { setIndex(0) }, [query])
   useEffect(() => { listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }) }, [index, results])
 
@@ -106,9 +107,11 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        tabIndex={-1}
         data-testid="command-palette"
         className="w-[600px] max-w-[90vw] overflow-hidden rounded-lg border border-th-border-strong bg-th-surface shadow-2xl"
         onKeyDown={onKeyDown}
@@ -147,7 +150,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-sm text-th-text-primary">
                   <span className="truncate">{item.title}</span>
-                  {item.active && <Check className="h-3 w-3 shrink-0 text-green-400" aria-label="Active" />}
+                  {item.active && <Check className="h-3 w-3 shrink-0 text-green-400 light:text-green-800" aria-label="Active" />}
                 </div>
                 {item.kind === 'request' && (
                   <div className="flex items-center gap-1 truncate text-[11px] text-th-text-subtle">

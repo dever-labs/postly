@@ -104,7 +104,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
         <span className="text-xs text-th-text-subtle">
           {connected ? 'Connected' : connecting ? 'Connecting…' : 'Disconnected'}
         </span>
-        {error && <span className="flex-1 truncate text-xs text-rose-400">{error}</span>}
+        {error && <span className="flex-1 truncate text-xs text-rose-400 light:text-rose-800">{error}</span>}
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={() => setMessages([])}
@@ -150,7 +150,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
               <span className="shrink-0 select-none text-th-text-faint">
                 {new Date(m.timestamp).toLocaleTimeString()}
               </span>
-              <span className={cn('shrink-0 font-bold', m.direction === 'in' ? 'text-blue-400' : 'text-emerald-400')}>
+              <span className={cn('shrink-0 font-bold', m.direction === 'in' ? 'text-blue-400 light:text-blue-800' : 'text-emerald-400 light:text-emerald-800')}>
                 {m.direction === 'in' ? '↓' : '↑'}
               </span>
               <span className="flex-1 break-all whitespace-pre-wrap text-th-text-primary">{m.data}</span>

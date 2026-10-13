@@ -45,7 +45,7 @@ export function SslEditor({ value, onChange, canInherit = true, inheritedFrom }:
         </p>
       )}
       {value === 'disabled' && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-amber-400 light:text-amber-800">
           SSL verification is disabled — use only for development/testing.
         </p>
       )}

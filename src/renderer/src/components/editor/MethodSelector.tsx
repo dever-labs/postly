@@ -23,7 +23,7 @@ interface MethodSelectorProps {
 export function MethodSelector({ value, onChange }: MethodSelectorProps) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as HttpMethod)}>
-      <SelectTrigger className="w-[110px] shrink-0">
+      <SelectTrigger aria-label="HTTP method" className="w-[110px] shrink-0">
         <Badge variant={METHOD_BADGE_VARIANTS[value]} className="font-mono text-[11px]">
           {value}
         </Badge>

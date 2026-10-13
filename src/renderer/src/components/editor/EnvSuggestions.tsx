@@ -30,13 +30,13 @@ export function EnvSuggestions({ filtered, selectedIndex, onSelect, onHover }: E
               : 'text-th-text-secondary hover:bg-th-surface-hover'
           )}
         >
-          <span className="font-mono text-xs text-amber-400 shrink-0">{`{{`}</span>
+          <span className="font-mono text-xs text-amber-400 light:text-amber-800 shrink-0">{`{{`}</span>
           <span className="flex-1 truncate font-mono text-xs font-medium text-th-text-primary">{v.key}</span>
           <span className="shrink-0 truncate max-w-[80px] font-mono text-[11px] text-th-text-faint">
             {v.scope === 'dynamic' ? '' : v.isSecret ? '••••••' : v.value}
           </span>
           <span className="shrink-0 rounded-sm bg-th-surface px-1 text-[9px] uppercase tracking-wide text-th-text-subtle">{SCOPE_LABELS[v.scope]}</span>
-          <span className="font-mono text-xs text-amber-400 shrink-0">{`}}`}</span>
+          <span className="font-mono text-xs text-amber-400 light:text-amber-800 shrink-0">{`}}`}</span>
         </button>
       ))}
     </div>

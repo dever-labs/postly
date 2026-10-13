@@ -37,7 +37,7 @@ export function VariableTable({ rows, onChange, testId }: Props) {
             type="button"
             aria-label={r.isSecret ? 'Secret variable' : 'Not secret'}
             onClick={() => update(i, { isSecret: !r.isSecret })}
-            className={`flex h-8 w-8 items-center justify-center rounded-sm hover:bg-th-surface-raised focus:outline-hidden ${r.isSecret ? 'text-amber-400' : 'text-th-text-faint'}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-sm hover:bg-th-surface-raised focus:outline-hidden ${r.isSecret ? 'text-amber-400 light:text-amber-800' : 'text-th-text-faint'}`}
             title={r.isSecret ? 'Secret (masked, never exported)' : 'Not secret'}
           >
             {r.isSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}

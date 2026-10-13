@@ -88,7 +88,7 @@ export function UpdateSettings() {
           <p className="mt-1 text-xs text-th-text-muted leading-relaxed">
             Configure an internal update mirror for air-gapped or proxy-restricted networks.
             When set, updates are fetched from this server instead of GitHub Releases.{' '}
-            <span className="opacity-70">
+            <span className="opacity-90">
               The server must serve <code className="font-mono">latest.yml</code> and the installer
               binaries in the standard electron-updater generic provider format.
             </span>
@@ -97,18 +97,18 @@ export function UpdateSettings() {
 
         {isEnterpriseManaged ? (
           <div className="rounded-sm border border-blue-500/30 bg-blue-500/5 px-3 py-2.5 flex flex-col gap-1">
-            <span className="text-xs font-medium text-blue-400">Managed by your administrator</span>
+            <span className="text-xs font-medium text-blue-400 light:text-blue-800">Managed by your administrator</span>
             <span className="text-xs text-th-text-muted font-mono break-all">{enterpriseUrl}</span>
-            <span className="text-xs text-th-text-muted opacity-70 mt-0.5">
+            <span className="text-xs text-th-text-muted opacity-90 mt-0.5">
               This URL is configured in the bundled enterprise.json and cannot be changed here.
             </span>
           </div>
         ) : (
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-th-text-muted">
+            <label htmlFor="update-internal-update-server-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">
               Internal update server URL
             </label>
-            <Input
+            <Input id="update-internal-update-server-url"
               type="url"
               className="w-full max-w-sm"
               placeholder="https://updates.internal.corp/postly/"

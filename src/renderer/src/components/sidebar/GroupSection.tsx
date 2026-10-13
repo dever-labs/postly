@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
+import { useTreeItem } from '@/components/ui/Tree'
 import { cn } from '@/lib/utils'
 import { FolderTreeRow } from '@/components/sidebar/FolderTreeRow'
 import { InlineInput } from '@/components/sidebar/InlineInput'
@@ -69,6 +70,8 @@ export function GroupSection({ source, integration, folders, requests, searchQue
 
   const isSourceHidden = hiddenSources.has(source)
   const isSourceOpen = !collapsedSources.has(source)
+  const sourceName = integration ? integration.name : capitalize(source)
+  const treeItem = useTreeItem({ itemKey: `src:${integration?.id ?? source}`, level: 1, expanded: isSourceOpen, selected: selectedItem?.type === 'git-source' && selectedItem.id === integration?.id })
 
   const totalRequests = requests.filter((request) => {
     const collection = getRootCollection(request.folderId, folders)
@@ -140,9 +143,9 @@ export function GroupSection({ source, integration, folders, requests, searchQue
 
   return (
     <Collapsible.Root open={isSourceOpen} onOpenChange={() => toggleSourceCollapsed(source)} className="mb-1">
-      <div className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
+      <div {...treeItem} aria-label={`${sourceName} ${totalRequests.length}`} className="group/header flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary">
         <Collapsible.Trigger asChild>
-          <button data-testid={`source-toggle-${source}`} className="shrink-0 rounded-sm p-0.5 focus:outline-hidden">
+          <button data-testid={`source-toggle-${source}`} data-tree-toggle tabIndex={-1} aria-label={`${isSourceOpen ? 'Collapse' : 'Expand'} ${sourceName}`} className="shrink-0 rounded-sm p-0.5 focus:outline-hidden">
             {isSourceOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         </Collapsible.Trigger>
@@ -150,44 +153,46 @@ export function GroupSection({ source, integration, folders, requests, searchQue
         <span className="shrink-0 p-0.5">{integration ? SOURCE_ICONS[integration.type] : SOURCE_ICONS[source]}</span>
 
         <button
+          data-tree-primary
+          tabIndex={-1}
           onClick={() => {
             if (integration && ['git', 'github', 'gitlab'].includes(integration.type)) selectItem('git-source', integration.id)
             else toggleSourceCollapsed(source)
           }}
           className={cn('flex flex-1 items-center gap-1 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden', selectedItem?.type === 'git-source' && selectedItem.id === integration?.id && 'text-th-text-primary')}
         >
-          <span className="truncate">{integration ? integration.name : capitalize(source)}</span>
+          <span className="truncate">{sourceName}</span>{' '}
           <Badge variant="grey" className="ml-0.5">{totalRequests.length}</Badge>
         </button>
 
         {integration ? (
           <div className="flex items-center gap-0.5">
             {(integration.status === 'error' || integration.status === 'disconnected') && (
-              <button onClick={() => integrationsStore.connect(integration.id)} className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-amber-400 hover:bg-th-surface-raised hover:text-amber-300 focus:outline-hidden" title="Reconnect">
+              <button onClick={() => integrationsStore.connect(integration.id)} className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs text-amber-400 light:text-amber-800 hover:bg-th-surface-raised hover:text-amber-300 focus:outline-hidden" title="Reconnect">
                 <AlertCircle className="h-3 w-3" />
                 <span className="hidden group-hover/header:inline">Reconnect</span>
               </button>
             )}
-            <button onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100" title="Add collection">
+            <button onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-focus-within/header:opacity-100 group-hover/header:opacity-100" title="Add collection" aria-label={`Add collection to ${sourceName}`}>
               <Plus className="h-3.5 w-3.5" />
             </button>
-            <button onClick={() => selectItem('edit-integration', integration.id)} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100" title="Edit integration">
+            <button onClick={() => selectItem('edit-integration', integration.id)} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-focus-within/header:opacity-100 group-hover/header:opacity-100" title="Edit integration" aria-label={`Edit ${sourceName}`}>
               <Settings className="h-3.5 w-3.5" />
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-0.5">
-            <button onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover/header:opacity-100" title="Add collection">
+            <button onClick={() => { if (!isSourceOpen) toggleSourceCollapsed(source); setAddingCollection(true) }} className="rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-focus-within/header:opacity-100 group-hover/header:opacity-100" title="Add collection" aria-label={`Add collection to ${sourceName}`}>
               <Plus className="h-3.5 w-3.5" />
             </button>
-            <button onClick={() => toggleSourceHidden(source)} className="rounded-sm p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-hidden" title={isSourceHidden ? 'Show source' : 'Hide source'}>
+            <button onClick={() => toggleSourceHidden(source)} className="rounded-sm p-0.5 text-th-text-faint hover:text-th-text-muted focus:outline-hidden" title={isSourceHidden ? 'Show source' : 'Hide source'} aria-label={isSourceHidden ? `Show ${sourceName}` : `Hide ${sourceName}`} aria-pressed={isSourceHidden}>
               {isSourceHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </button>
           </div>
         )}
       </div>
 
-      <Collapsible.Content>
+      <Collapsible.Content role="group">
         <div data-testid={`source-content-${source}`} className={cn(isSourceHidden && 'opacity-40')}>
           {rootFolders.length === 0 && !addingCollection && (
             <div className="mx-3 my-2 rounded-sm border border-dashed border-th-border px-3 py-3 text-center">

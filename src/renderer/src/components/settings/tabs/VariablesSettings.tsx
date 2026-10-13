@@ -50,7 +50,7 @@ export function VariablesSettings() {
         <div className="mb-2 text-xs font-medium text-th-text-muted">Built-in variables</div>
         <ul className="flex flex-col gap-1 text-xs text-th-text-subtle">
           {DYNAMIC_VARIABLES.map((d) => (
-            <li key={d.name}><code className="text-amber-400">{`{{${d.name}}}`}</code> — {d.description}</li>
+            <li key={d.name}><code className="text-amber-400 light:text-amber-800">{`{{${d.name}}}`}</code> — {d.description}</li>
           ))}
         </ul>
       </div>

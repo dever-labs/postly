@@ -154,7 +154,7 @@ export function AiChatPanel({ context, folderId }: Props) {
       <div className="drag-region flex shrink-0 items-center border-b border-th-border px-6 pt-8 pb-4">
         <div className="no-drag">
           <div className="mb-0.5 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-blue-400" />
+            <Sparkles className="h-4 w-4 text-blue-400 light:text-blue-800" />
             <h1 className="text-sm font-semibold text-th-text-primary">AI Assistant</h1>
           </div>
           <p className="flex flex-wrap items-center gap-1.5 text-xs text-th-text-muted">
@@ -229,12 +229,12 @@ export function AiChatPanel({ context, folderId }: Props) {
                             <span className={cn(
                               'shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase',
                               ep.protocol === 'http'
-                                ? ep.method === 'GET' ? 'bg-emerald-900/40 text-emerald-400'
-                                  : ep.method === 'POST' ? 'bg-blue-900/40 text-blue-400'
-                                    : ep.method === 'PUT' || ep.method === 'PATCH' ? 'bg-amber-900/40 text-amber-400'
-                                      : ep.method === 'DELETE' ? 'bg-rose-900/40 text-rose-400'
+                                ? ep.method === 'GET' ? 'bg-emerald-900/40 text-emerald-400 light:text-emerald-800'
+                                  : ep.method === 'POST' ? 'bg-blue-900/40 text-blue-400 light:text-blue-800'
+                                    : ep.method === 'PUT' || ep.method === 'PATCH' ? 'bg-amber-900/40 text-amber-400 light:text-amber-800'
+                                      : ep.method === 'DELETE' ? 'bg-rose-900/40 text-rose-400 light:text-rose-800'
                                         : 'bg-th-surface-raised text-th-text-muted'
-                                : 'bg-purple-900/40 text-purple-400'
+                                : 'bg-purple-900/40 text-purple-400 light:text-purple-800'
                             )}>
                               {ep.protocol === 'http' ? ep.method : ep.protocol.toUpperCase()}
                             </span>

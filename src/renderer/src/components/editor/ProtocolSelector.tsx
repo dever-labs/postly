@@ -35,7 +35,7 @@ export function ProtocolSelector({ value, onChange }: ProtocolSelectorProps) {
 
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ProtocolType)}>
-      <SelectTrigger className="w-[90px] shrink-0 gap-1.5 px-2">
+      <SelectTrigger aria-label="Protocol" className="w-[90px] shrink-0 gap-1.5 px-2">
         <span className="flex items-center gap-1.5">
           <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT_COLOR[value])} />
           <span className="font-mono text-[11px] font-semibold">{current.short}</span>

@@ -6,6 +6,8 @@ import type { Request } from '@/types'
 import { Badge } from '@/components/ui/Badge'
 import { useUIStore } from '@/store/ui'
 import { AiActionButton } from '@/components/ai/AiActionButton'
+import { MenuItem, RowMenu } from '@/components/ui/RowMenu'
+import { useTreeItem } from '@/components/ui/Tree'
 import { cn } from '@/lib/utils'
 
 const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
@@ -31,14 +33,17 @@ interface RequestTreeItemProps {
   onClick: () => void
   onDelete: () => void
   dndId: string
+  /** Depth in the tree, for aria-level */
+  level: number
   insertLine?: 'above' | 'below' | null
 }
 
-export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, insertLine }: RequestTreeItemProps) {
+export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, level, insertLine }: RequestTreeItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameValue, setNameValue] = useState(request.name)
   const selectItem = useUIStore((s) => s.selectItem)
+  const treeItem = useTreeItem({ itemKey: `req:${request.id}`, level, selected: isActive })
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
@@ -56,6 +61,8 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       <div
         ref={setNodeRef}
         style={style}
+        {...treeItem}
+        aria-label={`${(request.protocol && PROTOCOL_BADGE[request.protocol]?.label) || request.method} ${request.name}${request.isDirty ? ', unsaved changes' : ''}`}
       className={cn(
         'group relative flex items-center gap-1 px-2 py-0.5 text-sm cursor-pointer rounded-sm',
         isActive ? 'bg-th-surface-raised text-th-text-primary' : 'text-th-text-muted hover:bg-th-surface-raised/60 hover:text-th-text-primary'
@@ -65,7 +72,9 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       <button
         {...listeners}
         {...attributes}
-        className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover:opacity-100 active:cursor-grabbing"
+        tabIndex={-1}
+        aria-label={`Drag to reorder ${request.name}`}
+        className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-focus-within:opacity-100 group-hover:opacity-100 active:cursor-grabbing"
         onClick={(e) => e.stopPropagation()}
       >
         <GripVertical className="h-3.5 w-3.5" />
@@ -76,7 +85,7 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
         return pb
           ? <Badge variant={pb.variant} className="shrink-0 font-mono text-[10px]">{pb.label}</Badge>
           : <Badge variant={METHOD_COLORS[request.method] ?? 'grey'} className="shrink-0 font-mono text-[10px]">{request.method}</Badge>
-      })()}
+      })()}{' '}
 
       {renaming ? (
         <input
@@ -96,40 +105,32 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, i
       )}
 
       {request.isDirty && (
-        <span data-testid="request-dirty-dot" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />
+        <span data-testid="request-dirty-dot" role="img" aria-label="Unsaved changes" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />
       )}
 
       <button
-        className="shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-th-surface-hover focus:outline-hidden"
+        aria-label={`More actions for ${request.name}`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        data-tree-menu
+        tabIndex={-1}
+        className="shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-th-surface-hover focus:outline-hidden"
         onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen) }}
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
       </button>
 
       {menuOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-sm border border-th-border-strong bg-th-surface-raised shadow-lg">
-            <AiActionButton
-              variant="menu-item"
-              label="Review with AI"
-              onClick={() => { setMenuOpen(false); selectItem('ai-request', request.id) }}
-            />
-            <div className="border-t border-th-border mx-2" />
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover"
-              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true) }}
-            >
-              <Pencil className="h-3.5 w-3.5" /> Rename
-            </button>
-            <button
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-th-surface-hover"
-              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Delete
-            </button>
-          </div>
-        </>
+        <RowMenu label={`Actions for ${request.name}`} onClose={() => setMenuOpen(false)}>
+          <AiActionButton
+            variant="menu-item"
+            label="Review with AI"
+            onClick={() => { setMenuOpen(false); selectItem('ai-request', request.id) }}
+          />
+          <div className="border-t border-th-border mx-2" />
+          <MenuItem icon={<Pencil className="h-3.5 w-3.5" />} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setRenaming(true) }}>Rename</MenuItem>
+          <MenuItem danger icon={<Trash2 className="h-3.5 w-3.5" />} onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete() }}>Delete</MenuItem>
+        </RowMenu>
       )}
       </div>
       {insertLine === 'below' && <div className="mx-1 h-0.5 rounded-sm bg-blue-500" />}

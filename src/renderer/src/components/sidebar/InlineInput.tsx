@@ -26,7 +26,7 @@ export function InlineInput({ placeholder, onConfirm, onCancel, paddingLeft = 16
         placeholder={placeholder}
         className="flex-1 rounded-sm bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-hidden ring-1 ring-blue-500/50"
       />
-      <button onClick={() => { if (value.trim()) onConfirm(value.trim()); else onCancel() }} className="text-green-400 hover:text-green-300"><Check className="h-3.5 w-3.5" /></button>
+      <button onClick={() => { if (value.trim()) onConfirm(value.trim()); else onCancel() }} className="text-green-400 light:text-green-800 hover:text-green-300"><Check className="h-3.5 w-3.5" /></button>
       <button onClick={onCancel} className="text-th-text-subtle hover:text-th-text-secondary"><X className="h-3.5 w-3.5" /></button>
     </div>
   )

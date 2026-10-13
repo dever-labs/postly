@@ -26,7 +26,7 @@ export function WorkingSet() {
     <div data-testid="working-set" className="shrink-0 border-b border-th-border pb-1">
       <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-th-text-subtle">
         <span>Working set</span>
-        {dirty.length > 0 && <span data-testid="working-set-unsaved" className="text-amber-400">{dirty.length} unsaved</span>}
+        {dirty.length > 0 && <span data-testid="working-set-unsaved" className="text-amber-400 light:text-amber-800">{dirty.length} unsaved</span>}
       </div>
       <div className="max-h-44 overflow-y-auto">
         {ids.map((id) => {
@@ -52,7 +52,7 @@ export function WorkingSet() {
                 onClick={() => togglePin(id)}
                 title={isPinned ? 'Unpin' : 'Pin'}
                 aria-label={isPinned ? 'Unpin' : 'Pin'}
-                className={cn('shrink-0 hover:text-th-text-primary', isPinned ? 'text-blue-400' : 'text-th-text-subtle opacity-0 group-hover:opacity-100 focus:opacity-100')}
+                className={cn('shrink-0 hover:text-th-text-primary', isPinned ? 'text-blue-400 light:text-blue-800' : 'text-th-text-subtle opacity-0 group-hover:opacity-100 focus:opacity-100')}
               >
                 <Pin className="h-3 w-3" />
               </button>

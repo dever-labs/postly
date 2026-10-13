@@ -1,5 +1,6 @@
 import { Check, Database, GitBranch, Loader2, X } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { useModalFocus } from '@/hooks/useModalFocus'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -23,6 +24,8 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
   const { load: loadCollections } = useCollectionsStore()
 
   const isEdit = !!editIntegration
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useModalFocus(dialogRef, { active: open, onEscape: onClose })
   const initialMode: Mode = editIntegration?.type === 'backstage' ? 'backstage' : 'git'
 
   const [mode, setMode] = useState<Mode | null>(isEdit ? initialMode : null)
@@ -85,15 +88,15 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-      <div className="relative w-full max-w-md rounded-xl border border-th-border bg-th-surface shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="connect-integration-title" tabIndex={-1} className="relative w-full max-w-md rounded-xl border border-th-border bg-th-surface shadow-2xl">
         <div className="flex items-center justify-between border-b border-th-border px-5 py-4">
           <div>
-            <h2 className="text-sm font-semibold text-th-text-primary">{isEdit ? `Edit ${editIntegration.name}` : 'Add Git Source'}</h2>
+            <h2 id="connect-integration-title" className="text-sm font-semibold text-th-text-primary">{isEdit ? `Edit ${editIntegration.name}` : 'Add Git Source'}</h2>
             <p className="mt-0.5 text-xs text-th-text-subtle">
               {connectedUser ? 'Connected!' : !mode ? 'Choose a source type' : mode === 'git' ? 'Paste a repository URL' : 'Configure Backstage'}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden">
+          <button onClick={onClose} aria-label="Close" className="rounded-sm p-1.5 text-th-text-subtle hover:bg-th-surface-raised hover:text-th-text-secondary focus:outline-hidden">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -101,7 +104,7 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
         <div className="p-5">
           {connectedUser && (
             <div className="flex flex-col items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400"><Check className="h-5 w-5" /></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/20 text-green-400 light:text-green-800"><Check className="h-5 w-5" /></div>
               <p className="text-sm font-medium text-th-text-primary">Connected!</p>
               <Button size="sm" className="mt-2 w-full" onClick={onClose}>Done</Button>
             </div>
@@ -121,19 +124,19 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
           {mode === 'git' && !connectedUser && (
             <div className="flex flex-col gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
-                <Input placeholder="https://github.com/org/repo" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} onBlur={() => { if (repoUrl && !name) setName(parseRepoName(repoUrl)) }} className="font-mono" />
+                <label htmlFor="connectintegration-repository-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Repository URL</label>
+                <Input id="connectintegration-repository-url" placeholder="https://github.com/org/repo" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} onBlur={() => { if (repoUrl && !name) setName(parseRepoName(repoUrl)) }} className="font-mono" />
                 <p className="mt-1 text-[11px] text-th-text-faint">Uses your local git credentials — no token needed.</p>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Name <span className="text-th-text-faint">(auto-filled)</span></label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="org/repo" />
+                <label htmlFor="connectintegration-name-auto-filled" className="mb-1.5 block text-xs font-medium text-th-text-muted">Name <span className="text-th-text-faint">(auto-filled)</span></label>
+                <Input id="connectintegration-name-auto-filled" value={name} onChange={(e) => setName(e.target.value)} placeholder="org/repo" />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-th-text-muted">Default branch</label>
-                <Input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
+                <label htmlFor="connectintegration-default-branch" className="mb-1.5 block text-xs font-medium text-th-text-muted">Default branch</label>
+                <Input id="connectintegration-default-branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
               </div>
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
               <div className="flex gap-2 pt-1">
                 {!isEdit && <Button variant="ghost" size="sm" onClick={() => setMode(null)}>Back</Button>}
                 <Button size="sm" className="ml-auto" onClick={handleConnect} disabled={connecting || !repoUrl.trim()}>
@@ -145,10 +148,10 @@ export function ConnectIntegrationDialog({ open, onClose, editIntegration }: Pro
 
           {mode === 'backstage' && !connectedUser && (
             <div className="flex flex-col gap-4">
-              <div><label className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label><Input value={bsUrl} onChange={(e) => setBsUrl(e.target.value)} /></div>
-              <div><label className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label><Input value={bsName} onChange={(e) => setBsName(e.target.value)} /></div>
-              <div><label className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label><Input type="password" value={bsToken} onChange={(e) => setBsToken(e.target.value)} /></div>
-              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400">{error}</p>}
+              <div><label htmlFor="connectintegration-base-url" className="mb-1.5 block text-xs font-medium text-th-text-muted">Base URL</label><Input id="connectintegration-base-url" value={bsUrl} onChange={(e) => setBsUrl(e.target.value)} /></div>
+              <div><label htmlFor="connectintegration-name" className="mb-1.5 block text-xs font-medium text-th-text-muted">Name</label><Input id="connectintegration-name" value={bsName} onChange={(e) => setBsName(e.target.value)} /></div>
+              <div><label htmlFor="connectintegration-token-optional" className="mb-1.5 block text-xs font-medium text-th-text-muted">Token <span className="text-th-text-faint">(optional)</span></label><Input id="connectintegration-token-optional" type="password" value={bsToken} onChange={(e) => setBsToken(e.target.value)} /></div>
+              {error && <p className="rounded-sm bg-rose-900/30 px-3 py-2 text-xs text-rose-400 light:text-rose-800">{error}</p>}
               <div className="flex gap-2 pt-1">
                 {!isEdit && <Button variant="ghost" size="sm" onClick={() => setMode(null)}>Back</Button>}
                 <Button size="sm" className="ml-auto" onClick={handleConnect} disabled={connecting}>

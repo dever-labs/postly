@@ -144,9 +144,9 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
           <span className={cn(
             'rounded-full px-2 py-0.5 text-xs font-medium',
             integration.status === 'connected'
-              ? 'bg-emerald-900/20 text-emerald-400'
+              ? 'bg-emerald-900/20 text-emerald-400 light:text-emerald-800'
               : integration.status === 'error'
-              ? 'bg-rose-900/20 text-rose-400'
+              ? 'bg-rose-900/20 text-rose-400 light:text-rose-800'
               : 'bg-th-surface text-th-text-faint'
           )}>
             {integration.status}
@@ -267,7 +267,7 @@ export function GitSourceView({ integrationId }: { integrationId: string }) {
                   className={cn(
                     'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors text-left',
                     b === currentBranch
-                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                      ? 'bg-blue-500/10 text-blue-400 light:text-blue-800 border border-blue-500/20'
                       : 'text-th-text-secondary hover:bg-th-surface-raised/60 border border-transparent'
                   )}
                 >

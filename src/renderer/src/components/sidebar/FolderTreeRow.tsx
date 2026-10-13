@@ -6,6 +6,8 @@ import type { Folder, Request } from '@/types'
 import { AiActionButton } from '@/components/ai/AiActionButton'
 import { RequestTreeItem } from '@/components/sidebar/RequestTreeItem'
 import { Badge } from '@/components/ui/Badge'
+import { MenuItem, RowMenu } from '@/components/ui/RowMenu'
+import { useTreeItem } from '@/components/ui/Tree'
 import { useCollectionsStore } from '@/store/collections'
 import { useRequestsStore } from '@/store/requests'
 import { useUIStore } from '@/store/ui'
@@ -77,11 +79,12 @@ export function FolderTreeRow({
     .filter((request) => request.folderId === folder.id && (!searchQuery || `${request.name} ${request.url}`.toLowerCase().includes(searchQuery.toLowerCase())))
     .sort((a, b) => a.sortOrder - b.sortOrder)
 
-  if (searchQuery && !subtreeMatches(folder, allFolders, requests, searchQuery)) return null
-
   const isRoot = !folder.parentId
   const isOpen = !folder.collapsed || !!searchQuery
   const isSelected = selectedItem?.id === folder.id && selectedItem.type === (isRoot ? 'collection' : 'group')
+  const treeItem = useTreeItem({ itemKey: `fld:${folder.id}`, level: depth + 2, expanded: isOpen, selected: isSelected })
+
+  if (searchQuery && !subtreeMatches(folder, allFolders, requests, searchQuery)) return null
 
   const activeReqId = dragActiveId?.startsWith('req:') ? dragActiveId.slice(4) : null
   const activeReq = activeReqId ? requests.find((request) => request.id === activeReqId) : null
@@ -116,6 +119,8 @@ export function FolderTreeRow({
       ) : (
         <Collapsible.Root open={isOpen} onOpenChange={() => toggleFolderCollapsed(folder.id)}>
           <div
+            {...treeItem}
+            aria-label={`${folder.name}${isRoot ? ` ${folder.source}` : ''}${isDirty ? ', unsaved changes' : ''}`}
             className={cn(
               'group relative flex items-center gap-1 rounded-sm px-2 py-0.5 text-th-text-muted hover:text-th-text-primary',
               isSelected ? 'bg-th-surface-hover text-th-text-primary' : 'hover:bg-th-surface-raised/60',
@@ -126,19 +131,23 @@ export function FolderTreeRow({
             <button
               {...listeners}
               {...attributes}
-              className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-hover:opacity-100 active:cursor-grabbing"
+              tabIndex={-1}
+              aria-label={`Drag to reorder ${folder.name}`}
+              className="cursor-grab shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-th-text-muted focus:outline-hidden group-focus-within:opacity-100 group-hover:opacity-100 active:cursor-grabbing"
               onClick={(e) => e.stopPropagation()}
             >
               <GripVertical className="h-3.5 w-3.5" />
             </button>
 
             <Collapsible.Trigger asChild>
-              <button data-testid={`${isRoot ? 'collection' : 'group'}-toggle-${folder.id}`} className="shrink-0 rounded-sm p-0.5 focus:outline-hidden" onClick={(e) => e.stopPropagation()}>
+              <button data-testid={`${isRoot ? 'collection' : 'group'}-toggle-${folder.id}`} data-tree-toggle tabIndex={-1} aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${folder.name}`} className="shrink-0 rounded-sm p-0.5 focus:outline-hidden" onClick={(e) => e.stopPropagation()}>
                 {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             </Collapsible.Trigger>
 
             <button
+              data-tree-primary
+              tabIndex={-1}
               onClick={() => selectItem(isRoot ? 'collection' : 'group', folder.id)}
               className={cn(
                 'flex flex-1 items-center gap-1.5 truncate rounded-sm py-1 text-left text-sm font-semibold focus:outline-hidden',
@@ -147,42 +156,37 @@ export function FolderTreeRow({
               )}
             >
               {isRoot ? <FolderOpen className="h-3.5 w-3.5 shrink-0" /> : <FolderPlus className="h-3.5 w-3.5 shrink-0" />}
-              <span className="truncate">{folder.name}</span>
+              <span className="truncate">{folder.name}</span>{' '}
               {isRoot && <Badge variant="grey" className="ml-1">{folder.source}</Badge>}
-              {isDirty && <span data-testid={isRoot ? 'collection-dirty-dot' : 'group-dirty-dot'} className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
+              {isDirty && <span data-testid={isRoot ? 'collection-dirty-dot' : 'group-dirty-dot'} role="img" aria-label="Unsaved changes" className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" title="Unsaved changes" />}
               {folder.hidden && <EyeOff className="ml-auto h-3 w-3 shrink-0" />}
             </button>
 
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-              <button title="Add request" onClick={() => onAddRequest(folder)} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+              <button title="Add request" aria-label={`Add request to ${folder.name}`} tabIndex={-1} onClick={() => onAddRequest(folder)} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
                 <Plus className="h-3.5 w-3.5" />
               </button>
-              <button title="Add folder" onClick={() => onAddFolderStart(folder.id)} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
+              <button title="Add folder" aria-label={`Add folder to ${folder.name}`} tabIndex={-1} onClick={() => onAddFolderStart(folder.id)} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
                 <FolderPlus className="h-3.5 w-3.5" />
               </button>
-              <button title="More" onClick={(e) => { e.stopPropagation(); onMenuToggle(folder.id) }} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
+              <button title="More" aria-label={`More actions for ${folder.name}`} aria-haspopup="menu" aria-expanded={folderMenuOpen === folder.id} data-tree-menu tabIndex={-1} onClick={(e) => { e.stopPropagation(); onMenuToggle(folder.id) }} className="rounded-sm p-0.5 hover:bg-th-surface-hover focus:outline-hidden">
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             </div>
 
             {folderMenuOpen === folder.id && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={onMenuClose} />
-                <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-sm border border-th-border-strong bg-th-surface-raised shadow-lg">
-                  <AiActionButton variant="menu-item" onClick={() => { onMenuClose(); selectItem(isRoot ? 'ai-collection' : 'ai-group', folder.id) }} />
-                  <div className="mx-2 border-t border-th-border" />
-                  <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-th-text-primary hover:bg-th-surface-hover" onClick={() => { onMenuClose(); onRenameStart(folder.id) }}>
-                    <Pencil className="h-3.5 w-3.5" /> Rename
-                  </button>
-                  <button className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-th-surface-hover" onClick={() => { onMenuClose(); onDeleteFolder(folder) }}>
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                  </button>
-                </div>
-              </>
+              <RowMenu label={`Actions for ${folder.name}`} onClose={onMenuClose}>
+                <AiActionButton variant="menu-item" onClick={() => { onMenuClose(); selectItem(isRoot ? 'ai-collection' : 'ai-group', folder.id) }} />
+                <div className="mx-2 border-t border-th-border" />
+                <MenuItem icon={<Plus className="h-3.5 w-3.5" />} onClick={() => { onMenuClose(); onAddRequest(folder) }}>Add request</MenuItem>
+                <MenuItem icon={<FolderPlus className="h-3.5 w-3.5" />} onClick={() => { onMenuClose(); onAddFolderStart(folder.id) }}>Add folder</MenuItem>
+                <MenuItem icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => { onMenuClose(); onRenameStart(folder.id) }}>Rename</MenuItem>
+                <MenuItem danger icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => { onMenuClose(); onDeleteFolder(folder) }}>Delete</MenuItem>
+              </RowMenu>
             )}
           </div>
 
-          <Collapsible.Content data-testid={`${isRoot ? 'collection' : 'group'}-content-${folder.id}`}>
+          <Collapsible.Content role="group" data-testid={`${isRoot ? 'collection' : 'group'}-content-${folder.id}`}>
             <div>
               {folderRequests.length === 0 && children.length === 0 && !addingFolderTo && !addingRequestTo && !searchQuery && (
                 <div className="mx-2 my-1.5 rounded-sm border border-dashed border-th-border px-2 py-2 text-center" style={{ marginLeft: rowPadding + 28 }}>
@@ -204,6 +208,7 @@ export function FolderTreeRow({
                 {folderRequests.map((request) => (
                   <div key={request.id} style={{ paddingLeft: rowPadding + 28 }}>
                     <RequestTreeItem
+                      level={depth + 3}
                       dndId={`req:${request.id}`}
                       request={request}
                       isActive={request.id === activeRequestId && !selectedItem}
