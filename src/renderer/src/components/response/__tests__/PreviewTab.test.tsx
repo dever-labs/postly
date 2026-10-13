@@ -26,6 +26,12 @@ describe('PreviewTab', () => {
     await waitFor(() => expect(screen.getByText(/too large to preview/)).toBeDefined())
   })
 
+  it('says so when the image was not retained', () => {
+    render(<PreviewTab body="" contentType="image/png" binary />)
+    expect(screen.getByText(/too large to preview/)).toBeDefined()
+    expect(preview).not.toHaveBeenCalled()
+  })
+
   it('explains that other binary types have no preview', () => {
     render(<PreviewTab body="" contentType="application/pdf" bodyId="b1" binary />)
     expect(screen.getByTestId('preview-unavailable')).toBeDefined()

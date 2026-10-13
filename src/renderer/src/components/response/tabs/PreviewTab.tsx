@@ -30,7 +30,7 @@ export function PreviewTab({ body, contentType = '', bodyId, binary }: PreviewTa
     return (
       <div data-testid="preview-image" className="flex h-full items-center justify-center overflow-auto bg-th-surface p-4">
         {src ? <img src={src} alt="Response preview" className="max-h-full max-w-full object-contain" /> : (
-          <span className="text-sm text-th-text-subtle">{error ?? 'Loading preview…'}</span>
+          <span className="text-sm text-th-text-subtle">{error ?? (bodyId ? 'Loading preview…' : 'This image is too large to preview.')}</span>
         )}
       </div>
     )
