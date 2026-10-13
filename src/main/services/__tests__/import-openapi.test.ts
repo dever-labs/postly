@@ -298,7 +298,7 @@ describe('OpenAPI edge cases', () => {
         },
       },
     })
-    const rows = requests[0].params.map((q) => [q.key, q.value])
+    const rows = (requests[0].params as Array<{ key: string; value: string }>).map((q) => [q.key, q.value])
     expect(rows).toEqual([['ids', '1'], ['ids', '2'], ['csv', '1,2'], ['o[a]', '1']])
   })
 
@@ -311,6 +311,6 @@ describe('OpenAPI edge cases', () => {
         },
       },
     })
-    expect(requests[0].headers.map((h) => h.key)).toEqual(['X-Ok'])
+    expect((requests[0].headers as Array<{ key: string }>).map((h) => h.key)).toEqual(['X-Ok'])
   })
 })
