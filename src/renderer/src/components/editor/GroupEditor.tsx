@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronRight, FolderOpen, Folder, HardDrive, GitFork, GitBranch, Box } from 'lucide-react'
-import type { AuthType, Folder as FolderType, SslVerification } from '@/types'
+import type { AuthType, Folder as FolderType, NetworkSettings, SslVerification } from '@/types'
 import { AuthEditor } from '@/components/editor/AuthEditor'
 import { SslEditor } from '@/components/editor/SslEditor'
+import { NetworkEditor } from '@/components/editor/NetworkEditor'
+import { useInheritedNetwork } from '@/components/editor/useInheritedNetwork'
+import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from '@/store/collections'
 import { useUIStore } from '@/store/ui'
 import { useIntegrationsStore } from '@/store/integrations'
@@ -50,6 +53,7 @@ export function GroupEditor({ folderId }: Props) {
   const folders = useCollectionsStore((state) => state.folders)
   const folder = useCollectionsStore((state) => state.groups.find((item) => item.id === folderId))
   const updateGroup = useCollectionsStore((state) => state.updateGroup)
+  const inheritedNetwork = useInheritedNetwork(folder?.parentId)
   const integrations = useIntegrationsStore((state) => state.integrations)
   const addToast = useUIStore((state) => state.addToast)
   const selectItem = useUIStore((state) => state.selectItem)
@@ -61,12 +65,13 @@ export function GroupEditor({ folderId }: Props) {
   const [authType, setAuthType] = useState<AuthType>('none')
   const [authConfig, setAuthConfig] = useState<Record<string, string>>({})
   const [sslVerification, setSslVerification] = useState<SslVerification>('inherit')
+  const [networkSettings, setNetworkSettings] = useState<NetworkSettings | undefined>(undefined)
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification } | null>(null)
+  const pendingDraftData = useRef<{ name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification; networkSettings?: NetworkSettings } | null>(null)
 
-  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification }
+  type FormSnapshot = { name: string; description: string; authType: AuthType; authConfig: Record<string, string>; sslVerification: SslVerification; networkSettings?: NetworkSettings }
   const undoStack = useRef<FormSnapshot[]>([])
   const lastUndoField = useRef<string | null>(null)
   const undoPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -96,6 +101,7 @@ export function GroupEditor({ folderId }: Props) {
         authType: fields.authType,
         authConfig: JSON.stringify(fields.authConfig),
         sslVerification: fields.sslVerification,
+        networkSettings: JSON.stringify(fields.networkSettings ?? {}),
       })
     }, 500)
   }
@@ -113,6 +119,7 @@ export function GroupEditor({ folderId }: Props) {
         authType: folder.authType,
         authConfig: folder.authConfig,
         sslVerification: folder.sslVerification ?? 'inherit',
+        networkSettings: folder.networkSettings,
       }
       try {
         const { data } = await window.api.drafts.group.get({ groupId: folderId }) as { data: Record<string, unknown> | null }
@@ -122,6 +129,7 @@ export function GroupEditor({ folderId }: Props) {
           setAuthType(((data.auth_type as AuthType) ?? folder.authType))
           setAuthConfig(typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : folder.authConfig)
           setSslVerification(((data.ssl_verification as SslVerification) ?? folder.sslVerification ?? 'inherit'))
+          setNetworkSettings(data.network_settings != null ? normalizeNetworkSettings(data.network_settings) : folder.networkSettings)
           setIsDirty(true)
           setEditorDirty(folderId, true)
           return
@@ -132,6 +140,7 @@ export function GroupEditor({ folderId }: Props) {
       setAuthType(folder.authType)
       setAuthConfig(folder.authConfig)
       setSslVerification(folder.sslVerification ?? 'inherit')
+    setNetworkSettings(folder.networkSettings)
       setIsDirty(false)
     }
     load()
@@ -142,7 +151,7 @@ export function GroupEditor({ folderId }: Props) {
         const pending = pendingDraftData.current
         if (pending) {
           pendingDraftData.current = null
-          window.api.drafts.group.upsert({ groupId: folderId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification })
+          window.api.drafts.group.upsert({ groupId: folderId, name: pending.name, description: pending.description, authType: pending.authType, authConfig: JSON.stringify(pending.authConfig), sslVerification: pending.sslVerification, networkSettings: JSON.stringify(pending.networkSettings ?? {}) })
         }
       }
       clearUndo()
@@ -170,6 +179,7 @@ export function GroupEditor({ folderId }: Props) {
     setAuthType(folder.authType)
     setAuthConfig(folder.authConfig)
     setSslVerification(folder.sslVerification ?? 'inherit')
+    setNetworkSettings(folder.networkSettings)
     setIsDirty(false)
     setEditorDirty(folderId, false)
   }
@@ -179,7 +189,7 @@ export function GroupEditor({ folderId }: Props) {
     if (draftTimer.current) { clearTimeout(draftTimer.current); draftTimer.current = null }
     clearUndo()
     setSaving(true)
-    await updateGroup(folderId, { name: name.trim(), description, authType, authConfig, sslVerification })
+    await updateGroup(folderId, { name: name.trim(), description, authType, authConfig, sslVerification, networkSettings: networkSettings ?? null })
     await window.api.drafts.group.delete({ groupId: folderId })
     setSaving(false)
     setIsDirty(false)
@@ -193,7 +203,7 @@ export function GroupEditor({ folderId }: Props) {
   }
 
   const mark = (fields?: Partial<FormSnapshot>, changedField?: string) => {
-    const currentSnapshot: FormSnapshot = { name, description, authType, authConfig, sslVerification }
+    const currentSnapshot: FormSnapshot = { name, description, authType, authConfig, sslVerification, networkSettings }
     if (changedField !== lastUndoField.current) {
       if (undoPushTimer.current) { clearTimeout(undoPushTimer.current); undoPushTimer.current = null }
       pushUndo(currentSnapshot)
@@ -211,6 +221,7 @@ export function GroupEditor({ folderId }: Props) {
       authType: fields?.authType ?? authType,
       authConfig: fields?.authConfig ?? authConfig,
       sslVerification: fields?.sslVerification ?? sslVerification,
+      networkSettings: fields && 'networkSettings' in fields ? fields.networkSettings : networkSettings,
     }
     const atSaved = savedSnapshot.current !== null && JSON.stringify(newState) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
@@ -236,6 +247,7 @@ export function GroupEditor({ folderId }: Props) {
     setAuthType(previous.authType)
     setAuthConfig(previous.authConfig)
     setSslVerification(previous.sslVerification)
+    setNetworkSettings(previous.networkSettings)
     const atSaved = savedSnapshot.current && JSON.stringify(previous) === JSON.stringify(savedSnapshot.current)
     if (atSaved) {
       setIsDirty(false)
@@ -332,6 +344,17 @@ export function GroupEditor({ folderId }: Props) {
               value={sslVerification}
               onChange={(value) => { setSslVerification(value); mark({ sslVerification: value }, 'ssl') }}
               inheritedFrom={collection?.sslVerification !== 'inherit' ? collection?.name : undefined}
+            />
+          </Section>
+
+          <Section title="Timeout & Redirects">
+            <p className="mb-3 text-xs text-th-text-faint">
+              Default timeout and redirect behaviour for requests in this folder. Use <strong className="text-th-text-subtle">Inherit</strong> to fall through to the parent folder, the collection, then the global setting.
+            </p>
+            <NetworkEditor
+              value={networkSettings}
+              onChange={(v) => { setNetworkSettings(v); mark({ networkSettings: v }, 'network') }}
+              inherited={inheritedNetwork}
             />
           </Section>
         </div>

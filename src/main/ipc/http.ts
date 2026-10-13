@@ -13,6 +13,7 @@ import { tlsSelectionFor } from './certificates'
 import { runExtraction, type ExtractRule } from '../../shared/extract'
 import { applyExtraction, guardedRegex } from '../services/extract-apply'
 import { storeResponseBody } from '../services/response-store'
+import { parseNetworkSettings, resolveNetwork } from '../services/network-settings'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
 type LogLevel = 'info' | 'warn' | 'error'
@@ -24,6 +25,7 @@ type FolderLineageRow = {
   auth_type: string | null
   auth_config: string | null
   ssl_verification: string | null
+  network_settings: string | null
   integration_id: string | null
 }
 
@@ -57,15 +59,15 @@ function getFolderLineage(folderId?: string): FolderLineageRow[] {
   if (!folderId) return []
   return queryAll<FolderLineageRow>(
     `WITH RECURSIVE lineage AS (
-       SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, integration_id, 0 AS depth
+       SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, network_settings, integration_id, 0 AS depth
        FROM folders
        WHERE id = ?
        UNION ALL
-       SELECT f.id, f.parent_id, f.name, f.auth_type, f.auth_config, f.ssl_verification, f.integration_id, lineage.depth + 1
+       SELECT f.id, f.parent_id, f.name, f.auth_type, f.auth_config, f.ssl_verification, f.network_settings, f.integration_id, lineage.depth + 1
        FROM folders f
        JOIN lineage ON lineage.parent_id = f.id
      )
-     SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, integration_id
+     SELECT id, parent_id, name, auth_type, auth_config, ssl_verification, network_settings, integration_id
      FROM lineage
      ORDER BY depth ASC`,
     [folderId]
@@ -187,8 +189,6 @@ export function registerHttpHandlers(): void {
 
       const generalSettings = getGeneralSettings()
       let sslVerification = generalSettings.sslVerification
-      const followRedirects = generalSettings.followRedirects
-      const timeout = generalSettings.defaultTimeout
 
       const shouldInheritSsl = (v: string | undefined) => !v || v === 'inherit'
       let resolvedSsl: string | undefined = req.sslVerification
@@ -205,7 +205,22 @@ export function registerHttpHandlers(): void {
       else if (resolvedSsl === 'disabled') { sslVerification = false; sslSource = resolvedSsl === req.sslVerification ? 'request' : sslSource }
 
       if (!sslVerification) log('warn', `SSL verification disabled (${sslSource})`)
-      if (!followRedirects) log('info', 'Following redirects: disabled')
+
+      const network = resolveNetwork(
+        { timeout: generalSettings.defaultTimeout, followRedirects: generalSettings.followRedirects },
+        [
+          { label: 'request', settings: parseNetworkSettings(req.networkSettings) },
+          ...lineage.map((f) => ({
+            label: f.parent_id ? `folder "${f.name}"` : `collection "${f.name}"`,
+            settings: parseNetworkSettings(f.network_settings),
+          })),
+        ]
+      )
+      const { timeout, followRedirects, maxRedirects } = network
+      log('info', `Timeout: ${timeout}ms (${network.sources.timeout})`)
+      log('info', followRedirects
+        ? `Following redirects: up to ${maxRedirects} (${network.sources.followRedirects === network.sources.maxRedirects ? network.sources.followRedirects : `follow: ${network.sources.followRedirects}, limit: ${network.sources.maxRedirects}`})`
+        : `Following redirects: disabled (${network.sources.followRedirects})`)
 
       resolvedAuthConfig = substituteRecord(resolvedAuthConfig, sub)
 
@@ -278,7 +293,7 @@ export function registerHttpHandlers(): void {
       const controller = new AbortController()
       currentAbortController = controller
       const { raw, finalUrl, ...response } = await executeRequest(interpolatedReq, {
-        sslVerification, followRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
+        sslVerification, followRedirects, maxRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
         signal: controller.signal,
         onStream: (message) => { if (!event.sender.isDestroyed()) event.sender.send('postly:http:stream', message) },
         onLog: (entry) => log(entry.level, entry.message, entry.detail)

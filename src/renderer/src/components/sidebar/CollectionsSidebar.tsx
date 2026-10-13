@@ -129,7 +129,9 @@ export function CollectionsSidebar() {
 
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
-      <div className={cn('flex shrink-0 border-b border-th-border', window.api.platform === 'darwin' && 'pt-8')}>
+      {/* Same height as the drag strip above the editor pages (pt-8), so the window can be dragged from edge to edge */}
+      <div data-testid="sidebar-drag-strip" className="drag-region h-8 shrink-0" />
+      <div className="flex shrink-0 border-b border-th-border">
         <button
           data-testid="tab-apis"
           onClick={() => setSidebarTab('apis')}
