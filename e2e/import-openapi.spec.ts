@@ -30,6 +30,12 @@ test.beforeAll(async () => {
     if (req.url === '/openapi.yaml') {
       res.writeHead(200, { 'Content-Type': 'application/yaml' })
       res.end(SPEC)
+    } else if (req.url === '/huge') {
+      // chunked, no Content-Length: the size cap must stop the download
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      const chunk = Buffer.alloc(1024 * 1024, 'a')
+      const timer = setInterval(() => { if (!res.write(chunk)) return }, 1)
+      res.on('close', () => clearInterval(timer))
     } else {
       res.writeHead(404).end()
     }
@@ -77,6 +83,10 @@ test.describe('Import OpenAPI', () => {
     await window.getByTestId('import-url').fill(`${base}/missing.yaml`)
     await window.getByTestId('import-url-fetch').click()
     await expect(window.getByTestId('import-error')).toContainText('404')
+
+    await window.getByTestId('import-url').fill(`${base}/huge`)
+    await window.getByTestId('import-url-fetch').click()
+    await expect(window.getByTestId('import-error')).toContainText('larger than 20 MB')
 
     await window.getByTestId('import-url').fill('ftp://example.com/x')
     await window.getByTestId('import-url-fetch').click()

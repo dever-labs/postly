@@ -402,8 +402,20 @@ export function registerExportImportHandlers(): void {
       if (!response.ok) return { error: `The server answered ${response.status} ${response.statusText}.` }
       const declared = Number(response.headers.get('content-length') ?? 0)
       if (declared > MAX_IMPORT_BYTES) return { error: 'The document is larger than 20 MB.' }
-      const text = await response.text()
-      if (text.length > MAX_IMPORT_BYTES) return { error: 'The document is larger than 20 MB.' }
+      const chunks: Uint8Array[] = []
+      let received = 0
+      const reader = response.body?.getReader()
+      while (reader) {
+        const { done, value } = await reader.read()
+        if (done) break
+        received += value.byteLength
+        if (received > MAX_IMPORT_BYTES) {
+          await reader.cancel()
+          return { error: 'The document is larger than 20 MB.' }
+        }
+        chunks.push(value)
+      }
+      const text = Buffer.concat(chunks).toString('utf-8')
       return { data: { text } }
     } catch (err) {
       return { error: err instanceof TypeError && /Invalid URL/.test(err.message) ? 'Enter a valid http(s) URL.' : `Could not fetch the document: ${err instanceof Error ? err.message : String(err)}` }
