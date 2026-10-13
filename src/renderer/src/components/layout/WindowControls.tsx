@@ -44,7 +44,7 @@ export function WindowControls() {
   return (
     <div className="no-drag absolute right-0 top-0 z-[100] flex">
       <button
-        className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
+        className="no-drag flex h-8 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
         onClick={() => window.api.window.minimize()}
         title="Minimize"
         aria-label="Minimize"
@@ -52,7 +52,7 @@ export function WindowControls() {
         <MinimizeIcon />
       </button>
       <button
-        className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
+        className="no-drag flex h-8 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-white/10 hover:text-th-text-primary light:hover:bg-black/10"
         onClick={() => window.api.window.maximize()}
         title={isMaximized ? 'Restore' : 'Maximize'}
         aria-label={isMaximized ? 'Restore' : 'Maximize'}
@@ -60,7 +60,7 @@ export function WindowControls() {
         {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
       </button>
       <button
-        className="no-drag flex h-12 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-red-500 hover:text-white"
+        className="no-drag flex h-8 w-[46px] cursor-default items-center justify-center text-th-text-subtle transition-colors hover:bg-red-500 hover:text-white"
         onClick={() => window.api.window.close()}
         title="Close"
         aria-label="Close"
