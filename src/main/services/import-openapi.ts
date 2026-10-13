@@ -237,6 +237,11 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   for (const [path, rawItem] of Object.entries(paths)) {
     if (!isObj(rawItem)) continue
     const pathParams = Array.isArray(rawItem.parameters) ? rawItem.parameters.filter(isObj) : []
+    for (const key of ['query', 'additionalOperations']) {
+      if (isObj(rawItem[key]) && (key !== 'query' || Object.keys(rawItem[key] as Obj).length > 0)) {
+        warnings.push(`${path}: the "${key}" operation${key === 'query' ? '' : 's'} (OpenAPI 3.2) ${key === 'query' ? 'is' : 'are'} not imported.`)
+      }
+    }
     for (const method of METHODS) {
       const op = rawItem[method]
       if (!isObj(op)) continue

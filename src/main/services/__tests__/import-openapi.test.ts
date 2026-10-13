@@ -313,4 +313,13 @@ describe('OpenAPI edge cases', () => {
     })
     expect((requests[0].headers as Array<{ key: string }>).map((h) => h.key)).toEqual(['X-Ok'])
   })
+
+  it('warns about OpenAPI 3.2 operations it cannot import and still imports trace', async () => {
+    const { warnings, requests } = await run({
+      '/a': { trace: { responses: {} }, query: { responses: {} }, additionalOperations: { COPY: { responses: {} } } },
+    })
+    expect(requests).toHaveLength(1)
+    expect(warnings.join()).toMatch(/"query" operation/)
+    expect(warnings.join()).toMatch(/"additionalOperations" operations/)
+  })
 })
