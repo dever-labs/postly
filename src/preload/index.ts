@@ -227,6 +227,8 @@ const api = {
     export: (data?: { collectionIds?: string[] }) => ipcRenderer.invoke('postly:export', data ?? {}),
     import: () => ipcRenderer.invoke('postly:import'),
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
+    parse: (data: { text: string }) => ipcRenderer.invoke('postly:import:parse', data),
+    fetchUrl: (data: { url: string }) => ipcRenderer.invoke('postly:import:fetch-url', data),
   },
   updater: {
     check: () => ipcRenderer.invoke('postly:updater:check'),

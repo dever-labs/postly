@@ -2,20 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../database', () => ({
   queryAll: vi.fn(),
-  run: vi.fn(),
+  runTransaction: vi.fn(),
 }))
 
 vi.mock('../../services/variable-store', () => ({
   exportCollectionVariables: vi.fn(() => []),
-  importCollectionVariables: vi.fn(),
+  collectionVariableStatements: vi.fn(() => []),
 }))
 
-import { queryAll, run } from '../../database'
+import { queryAll, runTransaction } from '../../database'
 import { tryParse, buildExport, importData } from '../export-import'
 import type { PostlyExportFile } from '../export-import'
 
 const mockQueryAll = vi.mocked(queryAll)
-const mockRun = vi.mocked(run)
+const mockTransaction = vi.mocked(runTransaction)
 
 beforeEach(() => vi.resetAllMocks())
 
@@ -193,7 +193,9 @@ describe('importData', () => {
   }
 
   function insertCalls() {
-    return mockRun.mock.calls.filter(([sql]) => (sql as string).startsWith('INSERT'))
+    return mockTransaction.mock.calls
+      .flatMap(([statements]) => statements.map((st) => [st.sql, st.params] as const))
+      .filter(([sql]) => sql.trim().startsWith('INSERT'))
   }
 
   function folderInserts() {
@@ -214,6 +216,13 @@ describe('importData', () => {
     importData(makeFile())
     expect(folderInserts()).toHaveLength(2)
     expect(requestInserts()).toHaveLength(1)
+  })
+
+  it('writes everything in one transaction and rolls back as a whole on failure', () => {
+    importData(makeFile())
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+    mockTransaction.mockImplementationOnce(() => { throw new Error('boom') })
+    expect(() => importData(makeFile())).toThrow('boom')
   })
 
   it('handles multiple collections', () => {
@@ -554,9 +563,10 @@ describe('timeout / redirect overrides', () => {
       }],
     }
     importData(file)
-    const folderInsert = mockRun.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO folders'))
-    expect(folderInsert?.[1]).toContain('{"timeout":7000}')
-    const requestInsert = mockRun.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO requests'))
-    expect(requestInsert?.[1]).toContain(null)
+    const statements = mockTransaction.mock.calls.flatMap(([st]) => st)
+    const folderInsert = statements.find((st) => st.sql.includes('INSERT INTO folders'))
+    expect(folderInsert?.params).toContain('{"timeout":7000}')
+    const requestInsert = statements.find((st) => st.sql.includes('INSERT INTO requests'))
+    expect(requestInsert?.params).toContain(null)
   })
 })

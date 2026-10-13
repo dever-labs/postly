@@ -1,6 +1,7 @@
-import { Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Upload } from 'lucide-react'
+import { AlertTriangle, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Link as LinkIcon, Upload } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select'
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
@@ -13,12 +14,23 @@ interface ParsedCollection {
   description?: string
   source?: string
   integrationName?: string
-  groups?: Array<{ name: string; requests?: unknown[] }>
+}
+
+interface PreviewEntry {
+  collection: ParsedCollection
+  folders: number
+  requests: number
 }
 
 interface ParsedFile {
-  $schema: string
-  collections: ParsedCollection[]
+  format: 'postly' | 'openapi'
+  collections: PreviewEntry[]
+  warnings: string[]
+}
+
+const FORMAT_LABELS: Record<ParsedFile['format'], string> = {
+  postly: 'Postly export',
+  openapi: 'OpenAPI / Swagger',
 }
 
 const SOURCE_LABELS: Record<CollectionSource, string> = {
@@ -35,10 +47,6 @@ const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
   gitlab: <GitBranch className="h-4 w-4" />,
   backstage: <Database className="h-4 w-4" />,
   git: <GitBranch className="h-4 w-4" />,
-}
-
-function requestCount(col: ParsedCollection): number {
-  return col.groups?.reduce((sum, g) => sum + (g.requests?.length ?? 0), 0) ?? 0
 }
 
 export function ImportPage() {
@@ -60,45 +68,63 @@ export function ImportPage() {
   const [sourceOverrides, setSourceOverrides] = useState<Record<number, CollectionSource>>({})
   const [importing, setImporting] = useState(false)
   const [parseError, setParseError] = useState('')
+  const [url, setUrl] = useState('')
+  const [fetching, setFetching] = useState(false)
+
+  const showPreview = (name: string, preview: ParsedFile) => {
+    setFileName(name)
+    setParsedFile(preview)
+    const overrides: Record<number, CollectionSource> = {}
+    preview.collections.forEach((entry, i) => {
+      overrides[i] = (['local', 'github', 'gitlab', 'backstage'] as CollectionSource[]).includes(entry.collection.source as CollectionSource)
+        ? (entry.collection.source as CollectionSource)
+        : 'local'
+    })
+    setSourceOverrides(overrides)
+  }
+
+  const parseText = async (name: string, text: string) => {
+    const { data, error } = await window.api.exportImport.parse({ text }) as { data?: ParsedFile; error?: string }
+    if (error || !data) {
+      setParseError(error ?? 'Could not read the file.')
+      setParsedFile(null)
+      return
+    }
+    showPreview(name, data)
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setFileName(file.name)
     setParseError('')
-
     const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target?.result as string) as ParsedFile
-        if (!parsed.$schema?.startsWith('postly/') || !Array.isArray(parsed.collections)) {
-          setParseError('Not a valid Postly export file.')
-          setParsedFile(null)
-          return
-        }
-        setParsedFile(parsed)
-        const overrides: Record<number, CollectionSource> = {}
-        parsed.collections.forEach((col, i) => {
-          overrides[i] = (['local', 'github', 'gitlab', 'backstage'] as CollectionSource[]).includes(col.source as CollectionSource)
-            ? (col.source as CollectionSource)
-            : 'local'
-        })
-        setSourceOverrides(overrides)
-      } catch {
-        setParseError('Failed to parse file — ensure it is a valid JSON file.')
-        setParsedFile(null)
-      }
-    }
+    reader.onload = (ev) => { void parseText(file.name, String(ev.target?.result ?? '')) }
+    reader.onerror = () => setParseError('Could not read the file.')
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  const handleFetchUrl = async () => {
+    const target = url.trim()
+    if (!target) return
+    setParseError('')
+    setFetching(true)
+    const { data, error } = await window.api.exportImport.fetchUrl({ url: target }) as { data?: { text: string }; error?: string }
+    if (error || !data) {
+      setFetching(false)
+      setParseError(error ?? 'Could not fetch the document.')
+      return
+    }
+    await parseText(target, data.text)
+    setFetching(false)
   }
 
   const handleImport = async () => {
     if (!parsedFile) return
     setImporting(true)
-    const collectionsWithSource = parsedFile.collections.map((col, i) => ({
-      ...col,
-      source: sourceOverrides[i] ?? col.source ?? 'local',
+    const collectionsWithSource = parsedFile.collections.map(({ collection }, i) => ({
+      ...collection,
+      source: sourceOverrides[i] ?? collection.source ?? 'local',
     }))
     const { data, error } = await window.api.exportImport.importCollections({
       collections: collectionsWithSource,
@@ -125,7 +151,7 @@ export function ImportPage() {
             Import Collections
           </div>
           <h1 className="text-sm font-semibold text-th-text-primary">
-            {parsedFile ? 'Configure import sources' : 'Choose a file to import'}
+            {parsedFile ? 'Review and import' : 'Choose a file or URL to import'}
           </h1>
         </div>
       </div>
@@ -135,7 +161,7 @@ export function ImportPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json"
+            accept=".json,.yaml,.yml,application/json"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -146,8 +172,8 @@ export function ImportPage() {
             >
               <FolderOpen className="h-8 w-8 text-th-text-muted" />
               <div>
-                <p className="text-sm font-medium text-th-text-secondary">Browse for a .postly.json file</p>
-                <p className="mt-0.5 text-xs text-th-text-subtle">Select a previously exported Postly collection</p>
+                <p className="text-sm font-medium text-th-text-secondary">Browse for a file</p>
+                <p className="mt-0.5 text-xs text-th-text-subtle">Postly export (.postly.json), or an OpenAPI 3.x / Swagger 2 document (JSON or YAML)</p>
               </div>
             </button>
           ) : (
@@ -160,15 +186,44 @@ export function ImportPage() {
               <span className="shrink-0 text-xs text-th-text-subtle">Change file</span>
             </button>
           )}
-          {parseError && <p className="mt-2 text-xs text-red-400 light:text-red-800">{parseError}</p>}
+          {!parsedFile && (
+            <form
+              className="mt-3 flex items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); void handleFetchUrl() }}
+            >
+              <LinkIcon className="h-4 w-4 shrink-0 text-th-text-muted" aria-hidden="true" />
+              <Input
+                data-testid="import-url"
+                aria-label="OpenAPI document URL"
+                placeholder="…or paste the URL of an OpenAPI / Swagger document"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
+              <Button type="submit" data-testid="import-url-fetch" disabled={fetching || !url.trim()}>
+                {fetching ? 'Fetching…' : 'Fetch'}
+              </Button>
+            </form>
+          )}
+          {parseError && <p role="alert" data-testid="import-error" className="mt-2 text-xs text-red-400 light:text-red-800">{parseError}</p>}
         </div>
 
         {parsedFile && (
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-th-text-subtle">
-              {parsedFile.collections.length} collection{parsedFile.collections.length !== 1 ? 's' : ''} found
+            <p data-testid="import-format" className="text-xs font-medium uppercase tracking-wide text-th-text-subtle">
+              {FORMAT_LABELS[parsedFile.format]} · {parsedFile.collections.length} collection{parsedFile.collections.length !== 1 ? 's' : ''} found
             </p>
-            {parsedFile.collections.map((col, i) => (
+            {parsedFile.warnings.length > 0 && (
+              <div data-testid="import-warnings" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-amber-400 light:text-amber-900">
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                  {parsedFile.warnings.length} thing{parsedFile.warnings.length !== 1 ? 's' : ''} could not be fully mapped
+                </p>
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs text-th-text-muted">
+                  {parsedFile.warnings.map((w) => <li key={w}>{w}</li>)}
+                </ul>
+              </div>
+            )}
+            {parsedFile.collections.map(({ collection: col, folders, requests }, i) => (
               <div
                 key={i}
                 className="flex items-start gap-4 rounded-lg border border-th-border bg-th-surface-raised px-4 py-3"
@@ -184,8 +239,7 @@ export function ImportPage() {
                     <p className="mt-0.5 text-xs text-th-text-subtle truncate">{col.description}</p>
                   )}
                   <p className="mt-1 text-xs text-th-text-faint">
-                    {col.groups?.length ?? 0} group{col.groups?.length !== 1 ? 's' : ''} ·{' '}
-                    {requestCount(col)} request{requestCount(col) !== 1 ? 's' : ''}
+                    {folders} folder{folders !== 1 ? 's' : ''} · {requests} request{requests !== 1 ? 's' : ''}
                   </p>
                 </div>
 
