@@ -12,6 +12,7 @@ import { createSubstitution, substituteBody, substituteRecord } from '../service
 import { tlsSelectionFor } from './certificates'
 import { runExtraction, type ExtractRule } from '../../shared/extract'
 import { applyExtraction, guardedRegex } from '../services/extract-apply'
+import { storeResponseBody } from '../services/response-store'
 import { parseNetworkSettings, resolveNetwork } from '../services/network-settings'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../services/file-access'
 
@@ -291,7 +292,7 @@ export function registerHttpHandlers(): void {
 
       const controller = new AbortController()
       currentAbortController = controller
-      const response = await executeRequest(interpolatedReq, {
+      const { raw, finalUrl, ...response } = await executeRequest(interpolatedReq, {
         sslVerification, followRedirects, maxRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
         signal: controller.signal,
         onStream: (message) => { if (!event.sender.isDestroyed()) event.sender.send('postly:http:stream', message) },
@@ -308,7 +309,8 @@ export function registerHttpHandlers(): void {
         log('warn', `Could not record history: ${String(err)}`)
       }
       const extracted = extractFromResponse(req.extractRules, response, activeEnv?.id ?? null, rootFolder?.id ?? null, log)
-      return { data: { ...response, logs, extracted } }
+      const bodyId = raw ? storeResponseBody({ raw, headers: response.headers, url: finalUrl ?? req.url }) : undefined
+      return { data: { ...response, bodyId, logs, extracted } }
     } catch (err) {
       currentAbortController = null
       log('error', `Unexpected error: ${String(err)}`)

@@ -1,6 +1,7 @@
 import { registerCollectionHandlers } from './collections'
 import { registerRequestHandlers } from './requests'
 import { registerHttpHandlers } from './http'
+import { registerResponseHandlers } from './response'
 import { registerOAuthHandlers } from './oauth'
 import { registerEnvironmentHandlers } from './environments'
 import { registerBackstageHandlers } from './backstage'
@@ -31,6 +32,7 @@ export function registerAllIpcHandlers(): void {
   registerCollectionHandlers()
   registerRequestHandlers()
   registerHttpHandlers()
+  registerResponseHandlers()
   registerOAuthHandlers()
   registerEnvironmentHandlers()
   registerBackstageHandlers()

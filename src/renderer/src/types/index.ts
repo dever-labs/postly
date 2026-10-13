@@ -185,6 +185,14 @@ export interface HttpResponse {
   size: number
   logs?: LogEntry[]
   cookies?: ResponseCookie[]
+  /** Handle for Save/Preview in the main process; absent when the body is not retained. */
+  bodyId?: string
+  /** Binary payload: `body` is empty and the bytes can only be saved or previewed. */
+  binary?: boolean
+  /** `body` holds only the first part of a large response. */
+  bodyTruncated?: boolean
+  /** Too large to retain, so it cannot be saved. */
+  bodyTooLarge?: boolean
   /** Variables written by Extract rules, so stores can refresh. */
   extracted?: { variable: string; scope: 'environment' | 'collection' }[]
 }

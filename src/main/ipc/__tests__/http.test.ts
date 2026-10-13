@@ -47,6 +47,7 @@ import { applyExtraction } from '../../services/extract-apply'
 import { recordHistory } from '../../services/history'
 import { queryOne, queryAll } from '../../database'
 import { executeRequest } from '../../services/http-executor'
+import { getResponseBody } from '../../services/response-store'
 import { collectLocalFilePaths, confirmLocalFileReads } from '../../services/file-access'
 import { getValidTokenForConfig, authorizeInline } from '../../services/oauth'
 
@@ -806,6 +807,31 @@ describe('http IPC handler', () => {
       await invoke(baseReq())
       // Second cancel should be a no-op (controller was cleared after first execute)
       await expect(invokeCancel()).resolves.toBeUndefined()
+    })
+  })
+
+  describe('response body handle', () => {
+    it('keeps the raw bytes in the main process and returns only a handle', async () => {
+      const raw = Buffer.from([0, 1, 2, 255])
+      mockExec.mockResolvedValueOnce({ ...baseResp(), raw, finalUrl: 'https://x.test/final' })
+
+      const data = await invokeOk(baseReq())
+
+      expect(typeof data.bodyId).toBe('string')
+      expect(data.raw).toBeUndefined()
+      expect(data.finalUrl).toBeUndefined()
+      expect(getResponseBody(data.bodyId)).toMatchObject({ raw, url: 'https://x.test/final' })
+    })
+
+    it('has no handle when the body was not retained', async () => {
+      mockExec.mockResolvedValueOnce({ ...baseResp(), bodyTooLarge: true })
+      expect((await invokeOk(baseReq())).bodyId).toBeUndefined()
+    })
+
+    it('records history without the raw bytes', async () => {
+      mockExec.mockResolvedValueOnce({ ...baseResp(), raw: Buffer.from('x') })
+      await invoke(baseReq())
+      expect(vi.mocked(recordHistory).mock.calls.at(-1)?.[1]).not.toHaveProperty('raw')
     })
   })
 })
