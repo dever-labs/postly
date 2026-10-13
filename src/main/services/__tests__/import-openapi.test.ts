@@ -261,3 +261,56 @@ describe('documents without tags', () => {
     expect(preview.collections[0].collection.folders.map((f) => f.name)).toEqual(['pets'])
   })
 })
+
+describe('OpenAPI edge cases', () => {
+  const base = { openapi: '3.0.0', info: { title: 'T', version: '1' }, servers: [{ url: 'https://a.test' }] }
+  const run = async (paths: object) => {
+    const p = await previewImport(JSON.stringify({ ...base, paths }))
+    const c = p.collections[0].collection
+    const requests = [...c.requests, ...c.folders.flatMap((f) => f.requests)]
+    return { warnings: p.warnings, requests }
+  }
+
+  it('warns when an operation or path declares its own servers', async () => {
+    const a = await run({ '/a': { get: { servers: [{ url: 'https://o.test' }], responses: {} } } })
+    const b = await run({ '/a': { servers: [{ url: 'https://o.test' }], get: { responses: {} } } })
+    expect(a.warnings.join()).toMatch(/own servers/)
+    expect(b.warnings.join()).toMatch(/own servers/)
+  })
+
+  it('warns about references to other files instead of silently dropping them', async () => {
+    const { warnings } = await run({
+      '/a': { post: { requestBody: { content: { 'application/json': { schema: { $ref: './pet.yaml' } } } }, responses: {} } },
+    })
+    expect(warnings.join()).toMatch(/other files or URLs.*\.\/pet\.yaml/)
+  })
+
+  it('expands array and object query parameters according to their style', async () => {
+    const { requests } = await run({
+      '/a': {
+        get: {
+          parameters: [
+            { name: 'ids', in: 'query', schema: { type: 'array', items: { type: 'integer' } }, example: [1, 2] },
+            { name: 'csv', in: 'query', explode: false, schema: { type: 'array', items: { type: 'integer' } }, example: [1, 2] },
+            { name: 'o', in: 'query', style: 'deepObject', schema: { type: 'object' }, example: { a: 1 } },
+          ],
+          responses: {},
+        },
+      },
+    })
+    const rows = requests[0].params.map((q) => [q.key, q.value])
+    expect(rows).toEqual([['ids', '1'], ['ids', '2'], ['csv', '1,2'], ['o[a]', '1']])
+  })
+
+  it('ignores Accept, Content-Type and Authorization header parameters', async () => {
+    const { requests } = await run({
+      '/a': {
+        get: {
+          parameters: ['Authorization', 'Content-Type', 'Accept', 'X-Ok'].map((name) => ({ name, in: 'header', schema: { type: 'string' } })),
+          responses: {},
+        },
+      },
+    })
+    expect(requests[0].headers.map((h) => h.key)).toEqual(['X-Ok'])
+  })
+})

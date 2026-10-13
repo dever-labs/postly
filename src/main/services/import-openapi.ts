@@ -142,6 +142,36 @@ function mapScheme(name: string, scheme: unknown, scopes: string[], warnings: st
   return null
 }
 
+/** Query parameter rows following the declared style/explode; arrays and objects are never sent as JSON text. */
+function queryRows(p: Obj, value: unknown): Array<ReturnType<typeof kv>> {
+  const key = str(p.name)
+  const enabled = p.required === true
+  const explode = typeof p.explode === 'boolean' ? p.explode : p.style === undefined || p.style === 'form'
+  if (Array.isArray(value)) {
+    const sep = p.style === 'spaceDelimited' ? ' ' : p.style === 'pipeDelimited' ? '|' : ','
+    if (explode && (p.style === undefined || p.style === 'form')) return value.map((v) => kv(key, v, enabled))
+    return [kv(key, value.join(sep), enabled)]
+  }
+  if (isObj(value)) {
+    if (p.style === 'deepObject') return Object.entries(value).map(([k, v]) => kv(`${key}[${k}]`, v, enabled))
+    if (explode) return Object.entries(value).map(([k, v]) => kv(k, v, enabled))
+    return [kv(key, Object.entries(value).flat().join(','), enabled)]
+  }
+  return [kv(key, value, enabled)]
+}
+
+// Per the OpenAPI spec these header parameters are defined elsewhere and must be ignored
+const IGNORED_HEADERS = new Set(['accept', 'content-type', 'authorization'])
+
+/** Remaining $refs after dereferencing are the ones that point outside the document. */
+function externalRefs(node: unknown, found = new Set<string>(), seen = new Set<unknown>()): Set<string> {
+  if (typeof node !== 'object' || node === null || seen.has(node)) return found
+  seen.add(node)
+  if (!Array.isArray(node) && typeof (node as Obj).$ref === 'string') found.add(String((node as Obj).$ref))
+  for (const value of Object.values(node)) externalRefs(value, found, seen)
+  return found
+}
+
 /** Converts an already dereferenced OpenAPI 3.x or Swagger 2 document into a Postly collection. */
 export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   const warnings: string[] = []
@@ -212,6 +242,9 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
       if (!isObj(op)) continue
       count++
       const label = `${method.toUpperCase()} ${path}`
+      if ((Array.isArray(op.servers) && op.servers.length > 0) || (Array.isArray(rawItem.servers) && rawItem.servers.length > 0)) {
+        warnings.push(`${label}: defines its own servers, which are not mapped; it uses {{baseUrl}}.`)
+      }
 
       const own = Array.isArray(op.parameters) ? op.parameters.filter(isObj) : []
       const merged = new Map<string, Obj>()
@@ -219,7 +252,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
       const params: Obj[] = [...merged.values()]
 
       const query = params.filter((p) => p.in === 'query')
-      const headers = params.filter((p) => p.in === 'header')
+      const headers = params.filter((p) => p.in === 'header' && !IGNORED_HEADERS.has(str(p.name).toLowerCase()))
       if (params.some((p) => p.in === 'cookie')) warnings.push(`${label}: cookie parameters are not mapped; set them in the cookie jar or a Cookie header.`)
       // Only values the author supplied; invented placeholders would be sent as real data
       const paramValue = (p: Obj): unknown => {
@@ -306,7 +339,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
         method: method.toUpperCase(),
         url,
         protocol: 'http',
-        params: query.map((p) => kv(str(p.name), paramValue(p), p.required === true)),
+        params: query.flatMap((p) => queryRows(p, paramValue(p))),
         headers: headers.map((p) => kv(str(p.name), paramValue(p), p.required === true)),
         bodyType,
         bodyContent,
@@ -327,6 +360,11 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
     }
   }
 
+  const external = externalRefs(doc)
+  if (external.size > 0) {
+    const sample = [...external].slice(0, 3).join(', ')
+    warnings.push(`${external.size} reference${external.size === 1 ? '' : 's'} to other files or URLs were not followed (${sample}${external.size > 3 ? ', …' : ''}), so the affected bodies and parameters are incomplete. Bundle the document into a single file first (for example with "redocly bundle" or "swagger-cli bundle").`)
+  }
   if (isObj(doc.webhooks) && Object.keys(doc.webhooks).length > 0) warnings.push('Webhooks are not imported.')
   if (count === 0) warnings.push('The document has no operations.')
 
