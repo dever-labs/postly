@@ -25,7 +25,7 @@ describe('OpenAPI 3 import', () => {
     expect(variables).toContainEqual({ key: 'petId', value: '7', isSecret: false })
     expect(folders[0].requests[0].url).toBe('{{baseUrl}}/pets')
     expect(folders[0].requests[2].url).toBe('{{baseUrl}}/pets/{{petId}}')
-    expect(warnings.some((w) => w.includes('2 servers') && w.includes('staging.example.com'))).toBe(true)
+    expect(warnings).toContain('2 servers are defined; only the first is used as {{baseUrl}} (others: https://staging.example.com/v1).')
   })
 
   it('merges path-level parameters and marks only required ones enabled', async () => {
