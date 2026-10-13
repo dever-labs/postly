@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { HistoryEntryDetail, HttpRequest, HttpResponse, Request, KeyValuePair } from '../types'
 import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
+import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from './collections'
 import { useEnvironmentsStore } from './environments'
 import { useVariablesStore } from './variables'
@@ -67,7 +68,7 @@ interface RequestsState {
 const DIRTY_FIELDS = new Set<keyof Request>([
   'name', 'method', 'url', 'params', 'headers',
   'bodyType', 'bodyContent', 'authType', 'authConfig', 'description',
-  'sslVerification', 'protocol', 'protocolConfig',
+  'sslVerification', 'networkSettings', 'protocol', 'protocolConfig',
 ])
 
 const MAX_UNDO_STEPS = 50
@@ -95,6 +96,7 @@ function upsertDraftNow(request: Request): void {
     authType: s.authType as string | undefined,
     authConfig: typeof s.authConfig === 'string' ? s.authConfig : JSON.stringify(s.authConfig),
     sslVerification: s.sslVerification as string | undefined,
+    networkSettings: JSON.stringify(request.networkSettings ?? {}),
     protocol: s.protocol as string | undefined,
     protocolConfig: typeof s.protocolConfig === 'string' ? s.protocolConfig : JSON.stringify(s.protocolConfig),
   })
@@ -178,6 +180,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
         if (data.auth_type != null) draft.authType = data.auth_type as Request['authType']
         if (data.auth_config != null) draft.authConfig = typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : data.auth_config as Record<string, string>
         if (data.ssl_verification != null) draft.sslVerification = data.ssl_verification as Request['sslVerification']
+        if (data.network_settings != null) draft.networkSettings = normalizeNetworkSettings(data.network_settings)
         if (data.protocol != null) draft.protocol = data.protocol as Request['protocol']
         if (data.protocol_config != null) draft.protocolConfig = typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : data.protocol_config as Record<string, string>
         draft.isDirty = true
@@ -338,6 +341,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       authType: editingRequest.authType,
       authConfig: editingRequest.authConfig,
       sslVerification: editingRequest.sslVerification,
+      networkSettings: editingRequest.networkSettings,
       folderId: editingRequest.folderId,
     }
     httpRequest.params = kvpToRecord(editingRequest.params)
@@ -464,6 +468,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       authConfig: typeof data.auth_config === 'string' ? JSON.parse(data.auth_config as string) : (data.auth_config as Record<string, string>) ?? {},
       protocolConfig: typeof data.protocol_config === 'string' ? JSON.parse(data.protocol_config as string) : (data.protocol_config as Record<string, string>) ?? {},
       sslVerification: (data.ssl_verification as Request['sslVerification']) ?? 'inherit',
+      networkSettings: normalizeNetworkSettings(data.network_settings),
       description: data.description as string | undefined,
       scmPath: data.scm_path as string | undefined,
       scmSha: data.scm_sha as string | undefined,

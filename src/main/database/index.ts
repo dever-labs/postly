@@ -366,6 +366,10 @@ function runMigrations(): void {
     created_at INTEGER NOT NULL
   )`)
   recreateDraftTables()
+  // Timeout / redirect overrides, stored as JSON; NULL means inherit
+  for (const table of ['folders', 'requests', 'request_drafts', 'collection_drafts', 'group_drafts']) {
+    addColumnIfMissing(table, 'network_settings', 'TEXT')
+  }
   db.run(`CREATE TABLE IF NOT EXISTS env_drafts (
     env_id TEXT PRIMARY KEY REFERENCES environments(id) ON DELETE CASCADE,
     vars_json TEXT NOT NULL,

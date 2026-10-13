@@ -7,6 +7,7 @@ import crypto from 'crypto'
 import { queryOne, run } from '../database'
 import { parseOpenApiToRequests } from './openapi-parser'
 import { importCollectionVariables } from './variable-store'
+import { serializeNetworkSettings } from './network-settings'
 import type { PostlyExportFile, ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
 
 export const GIT_MISSING_MESSAGE =
@@ -277,8 +278,8 @@ function insertExportRequest(
     `INSERT INTO requests
        (id, folder_id, name, method, url, params, headers, body_type, body_content,
         auth_type, auth_config, ssl_verification, protocol, protocol_config,
-        description, scm_path, is_dirty, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        description, scm_path, network_settings, is_dirty, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     [reqId, folderId, request.name, request.method ?? 'GET', request.url ?? '',
       JSON.stringify(request.params ?? []), JSON.stringify(request.headers ?? []),
       request.bodyType ?? 'none', request.bodyContent ?? '',
@@ -286,7 +287,7 @@ function insertExportRequest(
       JSON.stringify(request.auth?.config ?? {}),
       request.ssl ?? 'inherit', request.protocol ?? 'http',
       JSON.stringify(request.protocolConfig ?? {}),
-      request.description ?? '', scmPath, sortOrder, now, now]
+      request.description ?? '', scmPath, serializeNetworkSettings(request.network), sortOrder, now, now]
   )
 }
 
@@ -301,11 +302,11 @@ function insertExportFolder(
   run(
     `INSERT INTO folders
       (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
-       ssl_verification, hidden, collapsed, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, 0, 0, ?, ?, ?)`,
+       ssl_verification, network_settings, hidden, collapsed, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
     [folderId, parentId, folder.name, folder.description ?? '',
       folder.auth?.type ?? 'none', JSON.stringify(folder.auth?.config ?? {}),
-      folder.ssl ?? 'inherit', sortOrder, now, now]
+      folder.ssl ?? 'inherit', serializeNetworkSettings(folder.network), sortOrder, now, now]
   )
   for (const [ri, req] of (folder.requests ?? []).entries()) {
     insertExportRequest(req, folderId, scmPath, ri, now)
@@ -328,8 +329,8 @@ function upsertPostlyCollection(
   run('DELETE FROM folders WHERE parent_id = ?', [collectionId])
   importCollectionVariables(collectionId, col.variables)
   run(
-    'UPDATE folders SET name = ?, source_meta = ?, updated_at = ? WHERE id = ?',
-    [col.name, JSON.stringify({ integrationId, fileName }), now, collectionId]
+    'UPDATE folders SET name = ?, source_meta = ?, network_settings = ?, updated_at = ? WHERE id = ?',
+    [col.name, JSON.stringify({ integrationId, fileName }), serializeNetworkSettings(col.network), now, collectionId]
   )
   for (const [ri, req] of (col.requests ?? []).entries()) {
     insertExportRequest(req, collectionId, fileName, ri, now)

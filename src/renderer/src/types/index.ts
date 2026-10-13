@@ -19,6 +19,13 @@ export type AuthType = 'none' | 'inherit' | 'bearer' | 'basic' | 'jwt' | 'oauth2
 export type CollectionSource = 'local' | 'backstage' | 'github' | 'gitlab' | 'git'
 export type SslVerification = 'inherit' | 'enabled' | 'disabled'
 
+/** Timeout / redirect overrides. A missing key means "inherit from the parent or the global setting". */
+export interface NetworkSettings {
+  timeout?: number
+  followRedirects?: boolean
+  maxRedirects?: number
+}
+
 export interface KeyValuePair {
   id: string
   key: string
@@ -38,6 +45,7 @@ export interface Folder {
   authType: AuthType
   authConfig: Record<string, string>
   sslVerification: SslVerification
+  networkSettings?: NetworkSettings
   hidden: boolean
   collapsed: boolean
   sortOrder: number
@@ -83,6 +91,7 @@ export interface Request {
   authConfig: Record<string, string>
   protocolConfig: Record<string, string>
   sslVerification: SslVerification
+  networkSettings?: NetworkSettings
   description?: string
   scmPath?: string
   scmSha?: string
@@ -144,6 +153,7 @@ export interface HttpRequest {
   authType: AuthType
   authConfig: Record<string, string>
   sslVerification?: SslVerification
+  networkSettings?: NetworkSettings
   folderId?: string
   extractRules?: ExtractRule[]
 }

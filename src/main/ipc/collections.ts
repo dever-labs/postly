@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { queryAll, queryOne, run } from '../database'
 import * as gitLocal from '../services/git-local'
 import { deleteCollectionVariables } from '../services/variable-store'
+import { serializeNetworkSettings } from '../services/network-settings'
 
 interface FolderRow {
   id: string
@@ -33,6 +34,7 @@ interface FolderUpdateArgs {
   authType?: string
   authConfig?: Record<string, string>
   sslVerification?: string
+  networkSettings?: unknown
   collapsed?: boolean
   parentId?: string | null
   sortOrder?: number
@@ -98,6 +100,7 @@ function updateFolder(args: FolderUpdateArgs) {
   if (args.authType !== undefined) { fields.push('auth_type = ?'); values.push(args.authType) }
   if (args.authConfig !== undefined) { fields.push('auth_config = ?'); values.push(JSON.stringify(args.authConfig)) }
   if (args.sslVerification !== undefined) { fields.push('ssl_verification = ?'); values.push(args.sslVerification) }
+  if (args.networkSettings !== undefined) { fields.push('network_settings = ?'); values.push(serializeNetworkSettings(args.networkSettings)) }
   if (args.collapsed !== undefined) { fields.push('collapsed = ?'); values.push(args.collapsed ? 1 : 0) }
   if (args.parentId !== undefined) { fields.push('parent_id = ?'); values.push(args.parentId ?? null) }
   if (args.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(args.sortOrder) }
@@ -239,6 +242,7 @@ export function registerCollectionHandlers(): void {
     authType?: string
     authConfig?: Record<string, string>
     sslVerification?: string
+    networkSettings?: unknown
     sortOrder?: number
     collectionId?: string
     parentId?: string | null
