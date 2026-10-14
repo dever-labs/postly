@@ -1,0 +1,112 @@
+openapi: 3.0.3
+info:
+  title: Pet Store
+  description: Sample API
+  version: 1.0.0
+servers:
+  - url: https://{env}.example.com/v1
+    variables:
+      env:
+        default: api
+  - url: https://staging.example.com/v1
+tags:
+  - name: pets
+    description: Pet operations
+security:
+  - bearerAuth: []
+paths:
+  /pets:
+    parameters:
+      - name: X-Trace
+        in: header
+        schema: { type: string }
+    get:
+      tags: [pets]
+      summary: List pets
+      parameters:
+        - name: limit
+          in: query
+          required: true
+          schema: { type: integer, default: 20 }
+        - name: tag
+          in: query
+          schema: { type: string }
+        - name: session
+          in: cookie
+          schema: { type: string }
+    post:
+      tags: [pets]
+      summary: Create pet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+      callbacks:
+        onDone:
+          '{$request.body#/url}': {}
+  /pets/{petId}:
+    get:
+      tags: [pets]
+      operationId: getPet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 7
+      security:
+        - apiKey: []
+    delete:
+      tags: [pets]
+      summary: Delete pet
+      security: []
+  /upload:
+    post:
+      summary: Upload avatar
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                file: { type: string, format: binary }
+  /login:
+    post:
+      summary: Log in
+      security:
+        - oauth: [read]
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                user: { type: string, example: bob }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+    apiKey: { type: apiKey, in: header, name: X-API-Key }
+    oauth:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://example.com/auth
+          scopes: { read: Read }
+  schemas:
+    Pet:
+      type: object
+      required: [name]
+      properties:
+        id: { type: integer, readOnly: true }
+        name: { type: string, example: Rex }
+        tags:
+          type: array
+          items: { type: string }
+        owner:
+          $ref: '#/components/schemas/Owner'
+    Owner:
+      type: object
+      properties:
+        email: { type: string }

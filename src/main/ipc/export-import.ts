@@ -1,9 +1,10 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron'
 import crypto from 'crypto'
 import fs from 'fs'
-import { queryAll, run } from '../database'
+import { queryAll, runTransaction } from '../database'
 import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
-import { exportCollectionVariables, importCollectionVariables, type VariableRow } from '../services/variable-store'
+import { MAX_IMPORT_BYTES, previewImport } from '../services/import-formats'
+import { collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
 
@@ -198,17 +199,18 @@ export function buildExport(collectionIds?: string[]): PostlyExportFile {
   return { $schema: SCHEMA, exportedAt: new Date().toISOString(), collections }
 }
 
-function importRequests(requests: ExportRequest[], folderId: string, now: number): void {
+type Statement = { sql: string; params: unknown[] }
+
+function requestStatements(requests: ExportRequest[], folderId: string, now: number, out: Statement[]): void {
   for (const [index, request] of requests.entries()) {
-    const requestId = crypto.randomUUID()
-    run(
-      `INSERT INTO requests
+    out.push({
+      sql: `INSERT INTO requests
          (id, folder_id, name, method, url, params, headers, body_type, body_content,
           auth_type, auth_config, ssl_verification, protocol, protocol_config,
           description, network_settings, is_dirty, sort_order, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-      [
-        requestId,
+      params: [
+        crypto.randomUUID(),
         folderId,
         request.name,
         request.method ?? 'GET',
@@ -227,19 +229,19 @@ function importRequests(requests: ExportRequest[], folderId: string, now: number
         index,
         now,
         now,
-      ]
-    )
+      ],
+    })
   }
 }
 
-function importFolder(folder: ExportFolder, parentId: string, sortOrder: number, now: number): void {
+function folderStatements(folder: ExportFolder, parentId: string, sortOrder: number, now: number, out: Statement[]): void {
   const folderId = crypto.randomUUID()
-  run(
-    `INSERT INTO folders
+  out.push({
+    sql: `INSERT INTO folders
       (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
        ssl_verification, network_settings, hidden, collapsed, sort_order, created_at, updated_at)
      VALUES (?, ?, ?, ?, 'local', NULL, NULL, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
-    [
+    params: [
       folderId,
       parentId,
       folder.name,
@@ -251,26 +253,28 @@ function importFolder(folder: ExportFolder, parentId: string, sortOrder: number,
       sortOrder,
       now,
       now,
-    ]
-  )
-  importRequests(folder.requests ?? [], folderId, now)
+    ],
+  })
+  requestStatements(folder.requests ?? [], folderId, now, out)
   // fall back to `groups` for exports created before the folder-tree refactor
   const children = folder.folders ?? folder.groups ?? []
   for (const [index, child] of children.entries()) {
-    importFolder(child, folderId, index, now)
+    folderStatements(child, folderId, index, now, out)
   }
 }
 
+/** Imports every collection in one transaction: a failure leaves nothing behind. */
 export function importData(data: PostlyExportFile): number {
   const now = Date.now()
+  const statements: Statement[] = []
   for (const [collectionIndex, collection] of data.collections.entries()) {
     const collectionId = crypto.randomUUID()
-    run(
-      `INSERT INTO folders
+    statements.push({
+      sql: `INSERT INTO folders
         (id, parent_id, name, description, source, source_meta, integration_id, auth_type, auth_config,
          ssl_verification, network_settings, hidden, collapsed, sort_order, created_at, updated_at)
        VALUES (?, NULL, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
-      [
+      params: [
         collectionId,
         collection.name,
         collection.description ?? '',
@@ -282,16 +286,17 @@ export function importData(data: PostlyExportFile): number {
         collectionIndex,
         now,
         now,
-      ]
-    )
-    importCollectionVariables(collectionId, collection.variables)
-    importRequests(collection.requests ?? [], collectionId, now)
+      ],
+    })
+    statements.push(...collectionVariableStatements(collectionId, collection.variables))
+    requestStatements(collection.requests ?? [], collectionId, now, statements)
     // fall back to `groups` for exports created before the folder-tree refactor
     const topFolders = collection.folders ?? collection.groups ?? []
     for (const [folderIndex, folder] of topFolders.entries()) {
-      importFolder(folder, collectionId, folderIndex, now)
+      folderStatements(folder, collectionId, folderIndex, now, statements)
     }
   }
+  runTransaction(statements)
   return data.collections.length
 }
 
@@ -377,6 +382,43 @@ export function registerExportImportHandlers(): void {
       return { data: { count } }
     } catch (err) {
       return { error: String(err) }
+    }
+  })
+
+  ipcMain.handle('postly:import:parse', async (_event, args: { text?: string; sourceUrl?: string }) => {
+    try {
+      if (typeof args?.text !== 'string') return { error: 'No file content provided.' }
+      return { data: await previewImport(args.text, { sourceUrl: typeof args.sourceUrl === 'string' ? args.sourceUrl : undefined }) }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('postly:import:fetch-url', async (_event, args: { url?: string }) => {
+    try {
+      const url = new URL(String(args?.url ?? '').trim())
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return { error: 'Only http and https URLs can be imported.' }
+      const response = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { Accept: 'application/json, application/yaml, text/yaml, */*' } })
+      if (!response.ok) return { error: `The server answered ${response.status} ${response.statusText}.` }
+      const declared = Number(response.headers.get('content-length') ?? 0)
+      if (declared > MAX_IMPORT_BYTES) return { error: 'The document is larger than 20 MB.' }
+      const chunks: Uint8Array[] = []
+      let received = 0
+      const reader = response.body?.getReader()
+      while (reader) {
+        const { done, value } = await reader.read()
+        if (done) break
+        received += value.byteLength
+        if (received > MAX_IMPORT_BYTES) {
+          await reader.cancel()
+          return { error: 'The document is larger than 20 MB.' }
+        }
+        chunks.push(value)
+      }
+      const text = Buffer.concat(chunks).toString('utf-8')
+      return { data: { text } }
+    } catch (err) {
+      return { error: err instanceof TypeError && /Invalid URL/.test(err.message) ? 'Enter a valid http(s) URL.' : `Could not fetch the document: ${err instanceof Error ? err.message : String(err)}` }
     }
   })
 }

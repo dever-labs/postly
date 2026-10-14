@@ -1,0 +1,27 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Legacy API", "version": "1" },
+  "host": "legacy.example.com",
+  "basePath": "/api",
+  "schemes": ["https"],
+  "securityDefinitions": { "basic": { "type": "basic" } },
+  "security": [{ "basic": [] }],
+  "paths": {
+    "/items/{id}": {
+      "put": {
+        "tags": ["items"],
+        "summary": "Update item",
+        "consumes": ["application/json"],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "type": "string" },
+          { "name": "body", "in": "body", "schema": { "type": "object", "properties": { "label": { "type": "string" } } } }
+        ]
+      },
+      "post": {
+        "summary": "Upload form",
+        "consumes": ["application/x-www-form-urlencoded"],
+        "parameters": [{ "name": "q", "in": "formData", "type": "string", "default": "x" }]
+      }
+    }
+  }
+}

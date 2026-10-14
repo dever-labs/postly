@@ -61,10 +61,22 @@ export function replaceVariables(scope: StoredScope, ownerId: string, rows: Vari
  * Applies variables read from an exported file. Secret values are never written to files, so for those
  * the value already stored locally is kept.
  */
+export function collectionVariableStatements(collectionId: string, incoming: VariableRow[] | undefined): Array<{ sql: string; params: unknown[] }> {
+  if (!incoming) return []
+  const local = new Map(listVariables('collection', collectionId).map((v) => [v.key, v]))
+  const rows = cleanVariables(incoming.map((v) => (v.isSecret ? { ...v, value: local.get(v.key)?.value ?? '' } : v)))
+  return [
+    { sql: 'DELETE FROM variables WHERE scope = ? AND owner_id = ?', params: ['collection', collectionId] },
+    ...rows.map((r, i) => ({
+      sql: 'INSERT INTO variables (id, scope, owner_id, key, value, is_secret, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      params: [crypto.randomUUID(), 'collection', collectionId, r.key, r.value, r.isSecret ? 1 : 0, i],
+    })),
+  ]
+}
+
 export function importCollectionVariables(collectionId: string, incoming: VariableRow[] | undefined): void {
   if (!incoming) return
-  const local = new Map(listVariables('collection', collectionId).map((v) => [v.key, v]))
-  replaceVariables('collection', collectionId, incoming.map((v) => (v.isSecret ? { ...v, value: local.get(v.key)?.value ?? '' } : v)))
+  runTransaction(collectionVariableStatements(collectionId, incoming))
 }
 
 /** Collection variables for a file. Secret values stay out of the export. */
