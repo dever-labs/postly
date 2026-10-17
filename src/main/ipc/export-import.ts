@@ -397,7 +397,10 @@ export function registerExportImportHandlers(): void {
   ipcMain.handle('postly:import:parse-folder', (_event, args: { files?: Array<{ path?: unknown; text?: unknown }> }) => {
     try {
       if (!Array.isArray(args?.files)) return { error: 'No files provided.' }
-      const files = args.files.filter((f) => typeof f?.path === 'string' && typeof f.text === 'string') as Array<{ path: string; text: string }>
+      if (args.files.some((f) => typeof f?.path !== 'string' || typeof f.text !== 'string')) {
+        return { error: 'Each file must include string path and text.' }
+      }
+      const files = args.files as Array<{ path: string; text: string }>
       return { data: previewFolder(files) }
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) }

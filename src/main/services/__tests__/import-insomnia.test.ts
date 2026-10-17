@@ -251,6 +251,77 @@ describe('Insomnia v5 import', () => {
     expect(preview.warnings.join()).not.toMatch(/no requests/)
   })
 
+  it('splits mixed v5 collection-plus-spec files into API and spec collections', async () => {
+    const preview = await previewImport(minimalV5(`  - url: https://x.test/upload
+    name: Upload
+    meta:
+      id: req_upload
+    method: POST
+    authentication:
+      type: oauth2
+      grantType: implicit
+      authorizationUrl: https://auth.example.com/authorize
+      accessTokenUrl: https://auth.example.com/token
+      clientId: client-id
+      clientSecret: client-secret
+      scope: read
+      redirectUrl: https://app.example.com/callback
+    body:
+      mimeType: multipart/form-data
+      params:
+        - name: file
+          type: file
+          fileName: /workspace/file.txt
+        - name: note
+          value: hi
+spec:
+  contents:
+    openapi: 3.0.3
+    info:
+      title: Mixed Spec
+      version: 1.0.0
+    paths:
+      /ping:
+        get:
+          responses:
+            "200":
+              description: ok
+cookieJar:
+  cookies:
+    - key: sid
+      value: cookie
+testSuites:
+  - tests:
+      - name: one
+environments:
+  subEnvironments:
+    - name: Dev
+`))
+    expect(preview.collections.map((c) => c.collection.name)).toEqual(['V5', 'V5 (API spec)'])
+    const request = preview.collections[0].collection.requests[0]
+    expect(request.auth).toEqual({
+      type: 'oauth2',
+      config: {
+        grantType: 'implicit',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        authUrl: 'https://auth.example.com/authorize',
+        tokenUrl: 'https://auth.example.com/token',
+        scopes: 'read',
+        redirectUri: 'https://app.example.com/callback',
+      },
+    })
+    expect(request.bodyType).toBe('form-data')
+    expect(rows(JSON.parse(request.bodyContent)).map((row) => [row.key, row.value, row.fieldType ?? 'text'])).toEqual([
+      ['file', '/workspace/file.txt', 'file'],
+      ['note', 'hi', 'text'],
+    ])
+    expect(preview.collections[1].requests).toBeGreaterThan(0)
+    expect(preview.warnings.join('\n')).toMatch(/The cookie jar was not imported/)
+    expect(preview.warnings.join('\n')).toMatch(/1 unit test was not imported/)
+    expect(preview.warnings.join('\n')).toMatch(/1 sub-environment was not imported/)
+  })
+
   it('explains environment and other Insomnia file types', async () => {
     await expect(previewImport(fixture('real-insomnia-v5-environment.yaml'))).rejects.toThrow(/environment file/)
     await expect(previewImport('type: mcpClient.insomnia/5.0\nname: x\n')).rejects.toThrow(/not supported/)
@@ -274,6 +345,25 @@ spec:
 `))
     expect(preview.collections).toHaveLength(1)
     expect(preview.warnings.join('\n')).toMatch(/embedded API spec was skipped/)
+  })
+
+  it('warns about v5 gRPC requests and empty workspaces', async () => {
+    const preview = await previewImport(`
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: Empty
+meta:
+  id: wrk_empty
+collection:
+  - name: Rpc
+    meta:
+      id: grpc_1
+    protoMethodName: Ping
+    protoFileId: proto_1
+`)
+    expect(preview.collections[0].requests).toBe(0)
+    expect(preview.warnings.join('\n')).toMatch(/"Rpc": gRPC requests are not imported/)
+    expect(preview.warnings.join('\n')).toMatch(/The workspace has no requests/)
   })
 
   it('throws quickly on aliased YAML collection bombs', async () => {

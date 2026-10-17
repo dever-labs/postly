@@ -349,7 +349,7 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
   }
   if (subEnvironments > 0) warnings.push(`${subEnvironments} sub-environment${subEnvironments === 1 ? ' was' : 's were'} not imported (for example Dev or Production); only the base environment became collection variables.`)
   if (hasCookies) warnings.push('The cookie jar was not imported.')
-  if (tests > 0) warnings.push(`${tests} unit test${tests === 1 ? '' : 's'} were not imported.`)
+  if (tests > 0) warnings.push(`${tests} unit test${tests === 1 ? ' was' : 's were'} not imported.`)
   for (const [key, value] of pathVariables) if (!variables.has(key)) variables.set(key, value)
 
   return {

@@ -2,10 +2,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseRules } from '../../../shared/extract'
+import type { ExportCollection, ExportFolder, ExportRequest } from '../../ipc/export-import'
 import { convertBrunoYamlFiles, isBrunoYamlFolder } from '../import-bruno-yaml'
 
 const FIX = path.join(__dirname, 'fixtures', 'bruno-yaml')
 const rows = (v: string) => JSON.parse(v) as Array<{ key: string; value: string; enabled: boolean; fieldType?: string }>
+type RequestTree = Pick<ExportCollection, 'requests' | 'folders'> | Pick<ExportFolder, 'requests' | 'folders'>
+const allRequests = (collection: RequestTree): ExportRequest[] => [
+  ...collection.requests,
+  ...collection.folders.flatMap((folder) => allRequests(folder)),
+]
 
 function folder(name: string): Array<{ path: string; text: string }> {
   const walk = (dir: string): Array<{ path: string; text: string }> =>
@@ -145,11 +151,366 @@ describe('Bruno YAML import', () => {
     expect(entry.warnings.join('\n')).toMatch(/binary body was not imported/)
   })
 
+  it('covers remaining auth flows, body modes, selected variants, and aggregated warnings', () => {
+    const [entry] = convertBrunoYamlFiles([
+      {
+        path: 'picked/root/opencollection.yml',
+        text: `opencollection: "1.0.0"
+info:
+  name: Edge Cases
+request:
+  variables:
+    - name: pickedValue
+      value:
+        - value: old
+        - value: chosen
+          selected: true
+    - name: vaultSecret
+      secretName: api-token
+    - name: ignored
+      value: never
+      disabled: true
+  settings:
+    http:
+      followRedirects: "false"
+      maxRedirects: "5"
+      timeout: "900"
+    graphql:
+      followRedirects: nope
+      maxRedirects: -1
+      timeout: 0
+      omitHeaders: strip
+`,
+      },
+      {
+        path: 'picked/root/folder.yml',
+        text: `info:
+  name: Top Folder
+request:
+  auth: inherit
+  variables:
+    - name: folderVar
+      value: folder-value
+    - name: dynamicVar
+      value: "{{ $customEdge }}"
+  settings:
+    http:
+      followRedirects: true
+docs:
+  content: folder docs
+`,
+      },
+      {
+        path: 'picked/root/folder/unsupported-flow.yml',
+        text: `info:
+  name: Unsupported Flow
+  type: http
+http:
+  method: GET
+  url: https://edge.example.com/unsupported
+  auth:
+    type: oauth2
+    flow: device_code
+`,
+      },
+      {
+        path: 'picked/root/folder/auth-code.yml',
+        text: `info:
+  name: Auth Code
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/code
+  auth:
+    type: oauth2
+    flow: authorization_code
+    authorizationUrl: https://auth.example.com/authorize
+    accessTokenUrl: https://auth.example.com/token
+    callbackUrl: postly://callback
+    scope: read profile
+    state: abc
+    credentials:
+      clientId: web
+      clientSecret: secret
+`,
+      },
+      {
+        path: 'picked/root/folder/client-credentials.yml',
+        text: `info:
+  name: Client Credentials
+  type: http
+http:
+  method: GET
+  url: https://edge.example.com/client
+  auth:
+    type: oauth2
+    flow: client_credentials
+    accessTokenUrl: https://auth.example.com/token
+    credentials:
+      clientId: service
+      clientSecret: service-secret
+`,
+      },
+      {
+        path: 'picked/root/folder/implicit.yml',
+        text: `info:
+  name: Implicit
+  type: http
+http:
+  method: GET
+  url: https://edge.example.com/implicit
+  auth:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: https://auth.example.com/authorize
+    callbackUrl: postly://implicit
+    credentials:
+      clientId: native
+`,
+      },
+      {
+        path: 'picked/root/folder/hawk.yml',
+        text: `info:
+  name: Hawk
+  type: http
+http:
+  method: GET
+  url: https://edge.example.com/hawk
+  auth:
+    type: hawk
+`,
+      },
+      {
+        path: 'picked/root/folder/text.yml',
+        text: `info:
+  name: Text Selected
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/text
+  body:
+    - body:
+        type: text
+        data: old
+    - selected: true
+      body:
+        type: text
+        data: chosen
+`,
+      },
+      {
+        path: 'picked/root/folder/xml.yml',
+        text: `info:
+  name: XML Body
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/xml
+  body:
+    type: xml
+    data: "<root />"
+`,
+      },
+      {
+        path: 'picked/root/folder/sparql.yml',
+        text: `info:
+  name: Sparql Body
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/sparql
+  body:
+    type: sparql
+    data: "SELECT * WHERE { ?s ?p ?o }"
+`,
+      },
+      {
+        path: 'picked/root/folder/none.yml',
+        text: `info:
+  name: No Body
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/none
+  body:
+    type: none
+`,
+      },
+      {
+        path: 'picked/root/folder/multipart.yml',
+        text: `info:
+  name: Multipart Missing
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/multipart
+  body:
+    type: multipart-form
+    data:
+      - name: upload
+        type: file
+        contentType: text/plain
+      - name: title
+        type: text
+        value: hello
+`,
+      },
+      {
+        path: 'picked/root/folder/graphql.yml',
+        text: `info:
+  name: GraphQL Object Vars
+  type: graphql
+graphql:
+  url: https://edge.example.com/graphql
+  body:
+    query: query Users { users { id } }
+    variables:
+      limit: 1
+runtime:
+  actions:
+    - type: set-variable
+      selector:
+        expression: res.status
+      variable:
+        name: statusCode
+    - type: set-variable
+      selector:
+        expression: res.headers["x-trace"]
+      variable:
+        name: trace
+    - type: set-variable
+      selector:
+        expression: res.headers.bad.path
+      variable:
+        name: badHeader
+`,
+      },
+      {
+        path: 'picked/root/folder/not-an-object.yml',
+        text: '- just\n- a list\n',
+      },
+      {
+        path: 'picked/root/environments/prod.yml',
+        text: 'vars:\n  token: prod\n',
+      },
+    ])
+
+    expect(entry.collection.name).toBe('Edge Cases')
+    expect(entry.collection.network).toEqual({ followRedirects: false, maxRedirects: 5, timeout: 900 })
+    expect(entry.collection.variables).toEqual(expect.arrayContaining([
+      { key: 'pickedValue', value: 'chosen', isSecret: false },
+      { key: 'vaultSecret', value: '', isSecret: true },
+      { key: 'folderVar', value: 'folder-value', isSecret: false },
+      { key: 'dynamicVar', value: '{{ $customEdge }}', isSecret: false },
+    ]))
+
+    const requests = new Map(allRequests(entry.collection).map((request) => [request.name, request] as const))
+    expect(requests.get('Auth Code')).toMatchObject({
+      method: 'POST',
+      auth: {
+        type: 'oauth2',
+        config: {
+          grantType: 'authorization_code',
+          clientId: 'web',
+          clientSecret: 'secret',
+          authUrl: 'https://auth.example.com/authorize',
+          tokenUrl: 'https://auth.example.com/token',
+          scopes: 'read profile',
+          redirectUri: 'postly://callback',
+        },
+      },
+    })
+    expect(requests.get('Client Credentials')).toMatchObject({
+      auth: {
+        type: 'oauth2',
+        config: {
+          grantType: 'client_credentials',
+          clientId: 'service',
+          clientSecret: 'service-secret',
+          authUrl: '',
+          tokenUrl: 'https://auth.example.com/token',
+          scopes: '',
+          redirectUri: '',
+        },
+      },
+    })
+    expect(requests.get('Implicit')).toMatchObject({
+      auth: {
+        type: 'oauth2',
+        config: {
+          grantType: 'implicit',
+          clientId: 'native',
+          clientSecret: '',
+          authUrl: 'https://auth.example.com/authorize',
+          tokenUrl: '',
+          scopes: '',
+          redirectUri: 'postly://implicit',
+        },
+      },
+    })
+    expect(requests.get('Unsupported Flow')).toMatchObject({ auth: { type: 'none', config: {} } })
+    expect(requests.get('Hawk')).toMatchObject({ auth: { type: 'none', config: {} } })
+    expect(requests.get('Text Selected')).toMatchObject({ bodyType: 'raw-text', bodyContent: 'chosen' })
+    expect(requests.get('XML Body')).toMatchObject({ bodyType: 'raw-xml', bodyContent: '<root />' })
+    expect(requests.get('Sparql Body')).toMatchObject({ bodyType: 'raw-text', bodyContent: 'SELECT * WHERE { ?s ?p ?o }' })
+    expect(requests.get('No Body')).toMatchObject({ bodyType: 'none', bodyContent: '' })
+    expect(requests.get('Multipart Missing')).toMatchObject({ bodyType: 'form-data' })
+    expect(rows(requests.get('Multipart Missing')?.bodyContent as string).map((row) => [row.key, row.value, row.fieldType ?? 'text'])).toEqual([
+      ['title', 'hello', 'text'],
+    ])
+    expect(requests.get('GraphQL Object Vars')).toMatchObject({ bodyType: 'graphql' })
+    expect(JSON.parse(requests.get('GraphQL Object Vars')?.bodyContent as string)).toEqual({
+      query: 'query Users { users { id } }',
+      variables: '{"limit":1}',
+    })
+    expect(parseRules(requests.get('GraphQL Object Vars')?.protocolConfig.extractRules as string).map((rule) => [rule.source, rule.expression, rule.variable])).toEqual([
+      ['status', '', 'statusCode'],
+      ['header', 'x-trace', 'trace'],
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/"Unsupported Flow": OAuth 2.0 grant type "device_code" is not supported/)
+    expect(entry.warnings.join('\n')).toMatch(/"Hawk": "hawk" authentication is not supported/)
+    expect(entry.warnings.join('\n')).toMatch(/"Multipart Missing": one or more multipart file fields were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/"GraphQL Object Vars": 1 post-response action could not be converted \(badHeader\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(prod\)/)
+    expect(entry.warnings.join('\n')).toMatch(/2 folder variables were imported as collection variables/)
+    expect(entry.warnings.join('\n')).toMatch(/Dynamic variables Postly does not provide are used and will stay unresolved: \{\{\$customEdge\}\}\./)
+    expect(entry.warnings.join('\n')).toMatch(/OAuth 2.0 settings were not imported: state\./)
+    expect(entry.warnings.join('\n')).toMatch(/Bruno request settings were not imported: followRedirects \(invalid values\), maxRedirects \(invalid values\), omitHeaders, timeout \(non-positive or out-of-range values\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/"folder\/not-an-object.yml": expected a YAML object\./)
+    expect(entry.warnings.join('\n')).toMatch(/Documentation blocks were not imported/)
+  })
+
+  it('splits nested roots and keeps files with the closest root', () => {
+    const entries = convertBrunoYamlFiles([
+      { path: 'picked/root/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Root\n' },
+      { path: 'picked/root/root.yml', text: 'info:\n  name: Root Request\n  type: http\nhttp:\n  method: GET\n  url: https://root.test\n' },
+      { path: 'picked/root/nested/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Nested\n' },
+      { path: 'picked/root/nested/child.yml', text: 'info:\n  name: Nested Request\n  type: http\nhttp:\n  method: GET\n  url: https://nested.test\n' },
+      { path: 'picked/root/nested/deeper/grandchild.yml', text: 'info:\n  name: Deep Request\n  type: http\nhttp:\n  method: GET\n  url: https://deep.test\n' },
+    ])
+
+    expect(entries).toHaveLength(2)
+    const byName = new Map(entries.map((entry) => [entry.collection.name, entry.collection] as const))
+    expect(allRequests(byName.get('Root') as ExportCollection).map((request) => request.name)).toEqual(['Root Request'])
+    expect(allRequests(byName.get('Nested') as ExportCollection).map((request) => request.name)).toEqual(['Nested Request', 'Deep Request'])
+  })
+
   it('applies the import budget to deeply nested trees', () => {
     const deep = Array.from({ length: 66 }, (_, index) => `f${index}`).join('/')
     expect(() => convertBrunoYamlFiles([
       { path: 'c/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Budget\n' },
       { path: `c/${deep}/request.yml`, text: 'info:\n  name: R\n  type: http\nhttp:\n  method: GET\n  url: https://x.test\n' },
     ])).toThrow(/nested deeper than 64 levels/)
+  })
+
+  it('fails when the request count exceeds the import node limit', () => {
+    const files = [
+      { path: 'c/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Too Many\n' },
+      ...Array.from({ length: 20_001 }, (_, index) => ({
+        path: `c/r-${index}.yml`,
+        text: `info:\n  name: R${index}\n  type: http\nhttp:\n  method: GET\n  url: https://limit.test/${index}\n`,
+      })),
+    ]
+    expect(() => convertBrunoYamlFiles(files)).toThrow(/more than 20000 requests and folders/i)
   })
 })
