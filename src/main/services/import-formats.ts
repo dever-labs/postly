@@ -1,10 +1,11 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import type { ExportCollection, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
+import { convertBrunoExport, convertBrunoFiles, isBrunoExport, isBrunoYamlCollection, type BrunoFile } from './import-bruno'
 import { convertInsomnia, insomniaKind } from './import-insomnia'
 import { convertPostman, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
 
-export type ImportFormat = 'postly' | 'openapi' | 'postman' | 'insomnia'
+export type ImportFormat = 'postly' | 'openapi' | 'postman' | 'insomnia' | 'bruno'
 
 export interface ImportPreviewCollection {
   collection: ExportCollection
@@ -98,7 +99,27 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     }
     return { format: 'insomnia', collections: entries, warnings }
   }
+  if (isBrunoExport(obj)) {
+    const result = convertBrunoExport(obj)
+    return { format: 'bruno', collections: [summarize(result.collection)], warnings: result.warnings }
+  }
   if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
-  throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
+  throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, Bruno JSON export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
+}
+
+export const MAX_BRUNO_FILES = 5000
+
+/** Converts the files of a Bruno collection folder (.bru, bruno.json) without touching the database. */
+export function previewBrunoFolder(files: BrunoFile[]): ImportPreview {
+  if (files.length > MAX_BRUNO_FILES) throw new Error(`The folder has more than ${MAX_BRUNO_FILES} Bruno files.`)
+  if (files.reduce((n, f) => n + f.text.length, 0) > MAX_IMPORT_BYTES) throw new Error('The folder is larger than 20 MB.')
+  const entries = convertBrunoFiles(files)
+  if (entries.length === 0) {
+    throw new Error(isBrunoYamlCollection(files)
+      ? 'This Bruno collection uses the YAML (OpenCollection) format, which is not supported yet. In Bruno, use "Export collection" to save it as a Bruno JSON file and import that.'
+      : 'No Bruno (.bru) files were found in that folder.')
+  }
+  const warnings = entries.flatMap((e) => (entries.length > 1 ? e.warnings.map((w) => `${e.collection.name}: ${w}`) : e.warnings))
+  return { format: 'bruno', collections: entries.map((e) => summarize(e.collection)), warnings }
 }

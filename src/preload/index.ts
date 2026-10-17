@@ -228,6 +228,7 @@ const api = {
     import: () => ipcRenderer.invoke('postly:import'),
     importCollections: (data: { collections: unknown[] }) => ipcRenderer.invoke('postly:import:collections', data),
     parse: (data: { text: string; sourceUrl?: string }) => ipcRenderer.invoke('postly:import:parse', data),
+    parseFolder: (data: { files: Array<{ path: string; text: string }> }) => ipcRenderer.invoke('postly:import:parse-folder', data),
     fetchUrl: (data: { url: string }) => ipcRenderer.invoke('postly:import:fetch-url', data),
   },
   updater: {

@@ -1,8 +1,12 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { test, expect } from './fixtures'
 
 const stamp = Date.now()
 const postmanName = `Postman ${stamp}`
 const insomniaName = `Insomnia ${stamp}`
+const brunoName = `Bruno ${stamp}`
 
 const POSTMAN = {
   info: { name: postmanName, schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
@@ -48,13 +52,13 @@ test.afterAll(async ({ window }) => {
   await window.evaluate(async (names: string[]) => {
     const result = await window.api.folders.list() as { data?: Array<{ id: string; name: string; parentId?: string; parent_id?: string }> }
     for (const f of result.data ?? []) if (!(f.parentId ?? f.parent_id) && names.includes(f.name)) await window.api.folders.delete({ id: f.id })
-  }, [postmanName, insomniaName])
+  }, [postmanName, insomniaName, brunoName])
 })
 
 test.describe('Import Postman and Insomnia', () => {
   test('imports a Postman collection with its folders, variables and warnings', async ({ window }) => {
     await window.getByTestId('btn-import').click()
-    await window.locator('input[type="file"]').setInputFiles({ name: 'c.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(POSTMAN)) })
+    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({ name: 'c.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(POSTMAN)) })
     await expect(window.getByTestId('import-format')).toContainText('Postman')
     await expect(window.getByText('1 folder · 1 request')).toBeVisible()
     await expect(window.getByTestId('import-warnings')).toContainText('pre-request script')
@@ -76,7 +80,7 @@ test.describe('Import Postman and Insomnia', () => {
 
   test('imports an Insomnia v5 file and reports what was left out', async ({ window }) => {
     await window.getByTestId('btn-import').click()
-    await window.locator('input[type="file"]').setInputFiles({ name: 'i.yaml', mimeType: 'application/yaml', buffer: Buffer.from(INSOMNIA) })
+    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({ name: 'i.yaml', mimeType: 'application/yaml', buffer: Buffer.from(INSOMNIA) })
     await expect(window.getByTestId('import-format')).toContainText('Insomnia')
     await expect(window.getByTestId('import-warnings')).toContainText('Scripts were not imported')
     await expect(window.getByTestId('import-warnings')).toContainText('sub-environment')
@@ -87,7 +91,20 @@ test.describe('Import Postman and Insomnia', () => {
 
   test('explains a Postman environment file', async ({ window }) => {
     await window.getByTestId('btn-import').click()
-    await window.locator('input[type="file"]').setInputFiles({ name: 'env.json', mimeType: 'application/json', buffer: Buffer.from('{"name":"E","values":[],"_postman_variable_scope":"environment"}') })
+    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({ name: 'env.json', mimeType: 'application/json', buffer: Buffer.from('{"name":"E","values":[],"_postman_variable_scope":"environment"}') })
     await expect(window.getByTestId('import-error')).toContainText('Postman environment')
+  })
+
+  test('imports a Bruno collection folder', async ({ window }) => {
+    await window.getByTestId('btn-import').click()
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bruno-'))
+    fs.writeFileSync(path.join(dir, 'bruno.json'), JSON.stringify({ version: '1', name: brunoName, type: 'collection' }))
+    fs.writeFileSync(path.join(dir, 'ping.bru'), 'meta {\n  name: Ping\n  type: http\n  seq: 1\n}\n\nget {\n  url: https://api.example.test/ping\n  body: none\n  auth: none\n}\n\nscript:pre-request {\n  console.log(1)\n}\n')
+    await window.getByTestId('import-folder-input').setInputFiles(dir)
+    await expect(window.getByTestId('import-format')).toContainText('Bruno')
+    await expect(window.getByTestId('import-warnings')).toContainText('Scripts were not imported')
+    await window.getByRole('button', { name: /Import 1 collection/ }).click()
+    await expect(window.getByRole('treeitem', { name: new RegExp(`^${brunoName}`) })).toBeVisible()
+    fs.rmSync(dir, { recursive: true, force: true })
   })
 })
