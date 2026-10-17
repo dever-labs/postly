@@ -124,7 +124,8 @@ export function previewFolder(files: BrunoFile[]): ImportPreview {
   if (files.length > MAX_FOLDER_FILES) throw new Error(`The folder has more than ${MAX_FOLDER_FILES} collection files.`)
   if (files.reduce((n, f) => n + f.text.length, 0) > MAX_IMPORT_BYTES) throw new Error('The folder is larger than 20 MB.')
   let format: ImportFormat = 'bruno'
-  let entries = convertBrunoFiles(files)
+  const hasBruFiles = files.some((file) => /\.bru$/i.test(file.path))
+  let entries = !hasBruFiles && isBrunoYamlFolder(files) ? convertBrunoYamlFiles(files) : convertBrunoFiles(files)
   if (entries.length === 0 && isBrunoYamlFolder(files)) entries = convertBrunoYamlFiles(files)
   if (entries.length === 0 && isPostmanV3Folder(files)) {
     format = 'postman'

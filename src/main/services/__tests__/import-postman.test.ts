@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { previewImport } from '../import-formats'
-import { convertPostmanScripts } from '../import-postman'
+import { convertPostmanScripts, isPostmanCollection } from '../import-postman'
 import { parseRules } from '../../../shared/extract'
 import type { ExportCollection, ExportRequest } from '../../ipc/export-import'
 
@@ -301,9 +301,59 @@ describe('Postman requests', () => {
 })
 
 describe('Postman detection', () => {
+  it('accepts Postman hosts and rejects malformed schemas', () => {
+    expect(isPostmanCollection({ info: { schema: 'https://schema.postman.com/json/collection/v2.1.0/collection.json' } })).toBe(true)
+    expect(isPostmanCollection({ info: { schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' } })).toBe(true)
+    expect(isPostmanCollection({ info: { schema: 'not a valid url' } })).toBe(false)
+    expect(isPostmanCollection({ info: { schema: 'https://example.com/collection.json' } })).toBe(false)
+  })
+
   it('explains environment files and v1 collections', async () => {
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Env', values: [], _postman_variable_scope: 'environment' }))).rejects.toThrow(/environment file/)
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Old', requests: [] }))).rejects.toThrow(/v1/)
+  })
+})
+
+describe('additional Postman edge cases', () => {
+  it('supports JSON.parse(responseBody) aliases and warns about unsupported setters', () => {
+    const { rules, warnings } = convertPostmanScripts('Alias', test([
+      'const parsed = JSON.parse(responseBody);',
+      'pm.collectionVariables.set("client-id", parsed["client-id"]);',
+      'pm.globals.set("globalOnly", parsed.token);',
+      'pm.variables.set("localOnly", parsed.token);',
+    ]))
+
+    expect(rules.map((rule) => [rule.source, rule.expression, rule.variable, rule.scope])).toEqual([
+      ['json', '$["client-id"]', 'client-id', 'collection'],
+    ])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/2 script lines could not be converted/)
+  })
+
+  it('ignores invalid protocolProfileBehavior values and non-request items', async () => {
+    const preview = await previewImport(JSON.stringify({
+      info: { name: 'C', schema: SCHEMA },
+      variable: [{ key: '', value: 'ignored' }, { key: 'root', value: '1' }],
+      protocolProfileBehavior: { followRedirects: 'sometimes', maxRedirects: 'NaN', disableBodyPruning: true },
+      item: [
+        { name: 'Not a request' },
+        {
+          name: 'Binary',
+          variable: [{ key: '', value: 'ignored' }, { key: 'itemOnly', value: '2' }],
+          request: { method: 'POST', url: 'http://x.test', body: { mode: 'file', file: {} } },
+        },
+      ],
+    }))
+
+    expect(preview.collections[0].collection.variables).toEqual([
+      { key: 'root', value: '1', isSecret: false },
+      { key: 'itemOnly', value: '2', isSecret: false },
+    ])
+    expect(preview.collections[0].collection.network).toBeUndefined()
+    expect(preview.collections[0].collection.requests[0]).toMatchObject({ bodyType: 'binary', bodyContent: '' })
+    expect(preview.warnings.join('\n')).toMatch(/1 item variable was imported as collection variables/)
+    expect(preview.warnings.join('\n')).toMatch(/protocolProfileBehavior was imported from 1 collection\./)
+    expect(preview.warnings.join('\n')).toMatch(/Ignored keys: disableBodyPruning, followRedirects, maxRedirects\./)
   })
 })
 

@@ -395,3 +395,93 @@ describe('paths as sent by the folder picker', () => {
     expect(entry.warnings.join('\n')).not.toContain('workspace/postman')
   })
 })
+
+describe('additional Postman v3 edge cases', () => {
+  it('imports loose request files without a workspace definition and still counts environment files', () => {
+    const [entry] = convertPostmanV3Files([
+      { path: 'picked/postman/environments/dev.yaml', text: '$kind: environment\nname: Dev\n' },
+      { path: 'picked/root.request.yaml', text: '$kind: http-request\nname: Root\nurl: https://root.test\nmethod: GET\n' },
+      {
+        path: 'picked/sub/search.request.yaml',
+        text: '$kind: graphql-request\nname: Search\nurl: https://root.test/graphql\nquery: query Search { ping }\nvariables: \'{"page":1}\'\n',
+      },
+    ])
+
+    expect(entry.collection.name).toBe('Imported Postman v3 collection')
+    expect(entry.collection.requests[0]).toMatchObject({ name: 'Root', method: 'GET', url: 'https://root.test' })
+    expect(entry.collection.folders[0].requests[0]).toMatchObject({ name: 'Search', bodyType: 'graphql' })
+    expect(JSON.parse(entry.collection.folders[0].requests[0].bodyContent)).toEqual({ query: 'query Search { ping }', variables: '{"page":1}' })
+    expect(entry.warnings.join('\n')).toMatch(/1 Postman environment file was found but environments are not imported\./)
+  })
+
+  it('falls back to the first matching auth entry and tolerates invalid request settings', () => {
+    const [entry] = convertPostmanV3Files([{
+      path: 'collection.yaml',
+      text: JSON.stringify({
+        $kind: 'collection',
+        name: 'Conditional auth',
+        auth: { type: 'inherit' },
+        items: [{
+          $kind: 'http-request',
+          name: 'Choose auth',
+          url: 'https://inline.example.com/items',
+          auth: [
+            {
+              type: 'bearer',
+              rules: [{ key: 'url', value: 'https://other.example.com/items' }],
+              credentials: [{ key: 'token', value: 'miss' }],
+            },
+            {
+              type: 'basic',
+              credentials: [{ key: 'username', value: 'chosen-user' }, { key: 'password', value: 'chosen-pass' }],
+            },
+          ],
+          settings: { strictSSL: true, followRedirects: true, maxRedirects: 'NaN' },
+          body: { type: 'custom', content: 'keep me as text' },
+        }, {
+          $kind: 'websocket-request',
+          name: 'Socket',
+        }],
+      }),
+    }])
+
+    expect(entry.collection.auth).toEqual({ type: 'none', config: {} })
+    expect(entry.collection.requests[0]).toMatchObject({
+      name: 'Choose auth',
+      auth: { type: 'basic', config: { username: 'chosen-user', password: 'chosen-pass' } },
+      ssl: 'enabled',
+      network: { followRedirects: true },
+      bodyType: 'raw-text',
+      bodyContent: 'keep me as text',
+    })
+    expect(entry.warnings.join('\n')).toMatch(/conditional auth rules are not supported; only one credential set was imported\./)
+    expect(entry.warnings.join('\n')).toMatch(/Unsupported Postman request kinds were skipped: 1 WebSocket request\./)
+  })
+
+  it('reads .yml workspace definitions, counts example files, and warns about binary uploads', () => {
+    const files = [
+      { path: 'postman/collections/Space/.resources/definition.yml', text: '$kind: collection\nname: Space\nscripts:\n  - type: beforeRequest\n    code: console.log(1)\n' },
+      { path: 'postman/collections/Space/Upload.request.yaml', text: '$kind: http-request\nname: Upload\nurl: https://space.example.com/upload\nmethod: POST\nsettings:\n  strictSSL: false\n  maxRedirects: "3"\nbody:\n  type: file\n  content:\n    src: payload.bin\n' },
+      { path: 'postman/collections/Space/.resources/Upload.resources/examples/created.example.yaml', text: 'status: 201\n' },
+    ]
+
+    expect(isPostmanV3Folder(files)).toBe(true)
+    const [entry] = convertPostmanV3Files(files)
+    expect(entry.collection.name).toBe('Space')
+    expect(entry.collection.requests[0]).toMatchObject({
+      name: 'Upload',
+      ssl: 'disabled',
+      network: { maxRedirects: 3 },
+      bodyType: 'binary',
+      bodyContent: '',
+    })
+    expect(entry.warnings.join('\n')).toMatch(/1 collection script scope was not imported\./)
+    expect(entry.warnings.join('\n')).toMatch(/1 saved response example across 1 request were not imported\./)
+    expect(entry.warnings.join('\n')).toMatch(/"Upload": the file for the binary body was not imported/)
+  })
+
+  it('returns no collections for an unreadable single file collection candidate', () => {
+    expect(convertPostmanV3Files([{ path: 'collection.yaml', text: '   \n' }])).toEqual([])
+    expect(isPostmanV3Folder([{ path: 'collection.yaml', text: '   \n' }])).toBe(false)
+  })
+})

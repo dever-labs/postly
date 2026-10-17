@@ -113,6 +113,7 @@ function authValue(auth: Obj, key: string): string {
   const credentials = Array.isArray(auth.credentials) ? auth.credentials : []
   const direct = credentials.find((entry) => isObj(entry) && entry.key === key)
   if (direct && !isObj(direct.value)) return str(direct.value)
+  if (isObj(auth.credentials)) return str(auth.credentials[key])
   const nested = auth[str(auth.type)]
   if (Array.isArray(nested)) {
     const row = nested.find((entry) => isObj(entry) && entry.key === key)

@@ -478,6 +478,13 @@ vars:post-response {
     expect(() => previewFolder([{ path: 'x/readme.md', text: '' }])).toThrow(/No Bruno/)
   })
 
+  it('returns no collections when the selected folder has no Bruno files after ignored directories are removed', () => {
+    expect(convertBrunoFiles([
+      { path: '.git/request.bru', text: requestText() },
+      { path: 'node_modules/ignored/request.bru', text: requestText() },
+    ])).toEqual([])
+  })
+
   it('reads the YAML (OpenCollection) format', () => {
     const preview = previewFolder([
       { path: 'c/opencollection.yml', text: ['opencollection: 1.0.0', 'info:', '  name: Y', ''].join('\n') },
@@ -695,5 +702,92 @@ describe('Bruno JSON export', () => {
       cursor = next
     }
     expect(() => convertBrunoExport(doc)).toThrow(/nested deeper than 64 levels/)
+  })
+
+  it('keeps export-only warnings, unsupported items, and missing multipart files specific to JSON exports', () => {
+    const entry = convertBrunoExport({
+      name: 'Export edge cases',
+      version: 1,
+      root: {
+        tags: ['root'],
+        request: {
+          headers: [{ name: 'X-Root', value: '1', enabled: true }],
+          vars: { req: [{ name: 'rootVar', value: 'rv', enabled: true }] },
+          script: { req: 'console.log(1)' },
+          docs: 'Root docs',
+        },
+      },
+      items: [{
+        type: 'folder',
+        name: 'API',
+        seq: 1,
+        root: {
+          tags: ['folder'],
+          request: {
+            headers: [{ name: 'X-Folder', value: '1', enabled: true }],
+            vars: { req: [{ name: 'folderVar', value: 'fv', enabled: true }] },
+            script: { req: 'console.log(2)' },
+            docs: 'Folder docs',
+          },
+        },
+        items: [
+          {
+            type: 'graphql-request',
+            name: 'Graph',
+            seq: 1,
+            request: {
+              url: 'https://graphql.example.com',
+              body: { mode: 'graphql', graphql: { query: 'query Ping { ping }', variables: '{"id":1}' } },
+              auth: { mode: 'none' },
+            },
+          },
+          {
+            type: 'http',
+            name: 'Upload',
+            seq: 2,
+            request: {
+              method: 'POST',
+              url: 'https://upload.example.com',
+              body: {
+                mode: 'multipartForm',
+                multipartForm: [
+                  { name: 'file', type: 'file', value: [], enabled: true },
+                  { name: 'caption', value: 'hello', contentType: 'text/plain', enabled: true },
+                ],
+              },
+              vars: {
+                res: [{ name: 'trace', value: 'res.headers["x-trace"]', enabled: true }],
+              },
+            },
+          },
+          {
+            type: 'grpc-request',
+            name: 'Rpc',
+            seq: 3,
+            request: {},
+          },
+        ],
+      }],
+      environments: [{ name: 'Dev' }],
+      brunoConfig: {},
+    })
+
+    const api = entry.collection.folders[0]
+    expect(api.requests[0]).toMatchObject({ name: 'Graph', bodyType: 'graphql', auth: { type: 'none', config: {} } })
+    expect(api.requests[1].bodyType).toBe('form-data')
+    expect(rows(api.requests[1].bodyContent).map((row) => [row.key, row.value, row.fieldType ?? 'text'])).toEqual([
+      ['caption', 'hello', 'text'],
+    ])
+    expect(parseRules(String(api.requests[1].protocolConfig[EXTRACT_RULES_KEY]))).toMatchObject([
+      { source: 'header', expression: 'x-trace', variable: 'trace' },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/Collection: its headers were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/Folder "API": its headers were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/Scripts were not imported for 2 items \(Collection, Folder "API"\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(Dev\)/)
+    expect(entry.warnings.join('\n')).toMatch(/"Rpc": only HTTP and GraphQL requests are imported\./)
+    expect(entry.warnings.join('\n')).toMatch(/one or more multipart file fields were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/Multipart part content types were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/Tags on the collection, folders, or requests were not imported\./)
   })
 })

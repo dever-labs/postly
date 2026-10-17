@@ -495,6 +495,335 @@ runtime:
     expect(allRequests(byName.get('Nested') as ExportCollection).map((request) => request.name)).toEqual(['Nested Request', 'Deep Request'])
   })
 
+  it('covers fallback variants, inferred request types, and inherited settings', () => {
+    const [entry] = convertBrunoYamlFiles([
+      {
+        path: 'picked/root/opencollection.yml',
+        text: `opencollection: "1.0.0"
+info:
+  summary: Summary only
+request:
+  auth:
+    type: none
+  variables:
+    - name: boolVar
+      value: true
+    - name: numVar
+      value: 7
+    - name: firstVariant
+      value:
+        - value: first
+    - name: dataVariant
+      value:
+        data: embedded
+  settings:
+    http: inherit
+    graphql:
+      followRedirects: true
+      maxRedirects: 3
+      timeout: 600
+`,
+      },
+      {
+        path: 'picked/root/folder.yml',
+        text: `info:
+  name: Folder
+request:
+  auth: inherit
+  settings:
+    http: inherit
+docs:
+  content: folder docs
+`,
+      },
+      {
+        path: 'picked/root/http-default.yml',
+        text: `http:
+  url: https://edge.example.com/users/{user-id}?inline=1
+  params:
+    - name: user-id
+      type: path
+      value: "12"
+    - name: q
+      value: ok
+      disabled: true
+  body:
+    - body:
+        type: json
+        json: '{"picked":true}'
+    - body:
+        type: text
+        data: ignored
+runtime:
+  actions:
+    - type: open-url
+      phase: after-response
+`,
+      },
+      {
+        path: 'picked/root/graphql-default.yml',
+        text: `graphql:
+  url: https://edge.example.com/graphql
+  body:
+    query: query Ping { ping }
+    variables:
+      limit: 1
+runtime:
+  scripts:
+    - type: tests
+      code: expect(true).toBe(true)
+`,
+      },
+      {
+        path: 'picked/root/socket.yml',
+        text: `websocket:
+  url: wss://edge.example.com/socket
+`,
+      },
+    ])
+
+    expect(entry.collection.name).toBe('root')
+    expect(entry.collection.description).toBe('Summary only')
+    expect(entry.collection.auth).toEqual({ type: 'none', config: {} })
+    expect(entry.collection.network).toEqual({ followRedirects: true, maxRedirects: 3, timeout: 600 })
+    expect(entry.collection.variables).toEqual(expect.arrayContaining([
+      { key: 'boolVar', value: 'true', isSecret: false },
+      { key: 'numVar', value: '7', isSecret: false },
+      { key: 'firstVariant', value: 'first', isSecret: false },
+      { key: 'dataVariant', value: 'embedded', isSecret: false },
+    ]))
+
+    const requests = new Map(allRequests(entry.collection).map((request) => [request.name, request] as const))
+    expect(requests.get('http-default')).toMatchObject({
+      method: 'GET',
+      url: 'https://edge.example.com/users/{user-id}',
+      bodyType: 'raw-json',
+      auth: { type: 'inherit', config: {} },
+    })
+    expect(JSON.parse(requests.get('http-default')?.bodyContent as string)).toEqual({ picked: true })
+    expect(rows(JSON.stringify(requests.get('http-default')?.params)).map((param) => [param.key, param.value, param.enabled])).toEqual([
+      ['q', 'ok', false],
+    ])
+    expect(requests.get('graphql-default')).toMatchObject({
+      method: 'POST',
+      bodyType: 'graphql',
+    })
+    expect(JSON.parse(requests.get('graphql-default')?.bodyContent as string)).toEqual({
+      query: 'query Ping { ping }',
+      variables: '{"limit":1}',
+    })
+
+    expect(entry.warnings.join('\n')).toMatch(/Documentation blocks were not imported for 1 item \(Folder "Folder"\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/Scripts were not imported for 1 item \("graphql-default"\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/Actions other than after-response variable setters were not imported for 1 request \("http-default" \(1\)\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/Only HTTP and GraphQL requests were imported; 1 request was skipped \(socket\)\./)
+  })
+
+  it('covers secret markers, selected variants, oauth drops, and malformed folder defaults', () => {
+    const [entry] = convertBrunoYamlFiles([
+      {
+        path: 'picked/root/opencollection.yml',
+        text: `opencollection: "1.0.0"
+request:
+  headers:
+    - name: X-Root
+      value: "1"
+  variables:
+    - name: pathSecret
+      path: /secret/path
+    - name: vaultSecret
+      vaultName: main
+    - name: projectSecret
+      projectId: project-1
+    - name: duplicate
+      value: root
+  actions:
+    - type: set-variable
+      selector:
+        expression: res.status
+      variable:
+        name: rootStatus
+  scripts:
+    - type: before-request
+      code: console.log(1)
+  auth: inherit
+`,
+      },
+      {
+        path: 'picked/root/folder.yml',
+        text: '- malformed\n',
+      },
+      {
+        path: 'picked/root/oauth.yml',
+        text: `info:
+  name: OAuth Request
+  type: http
+http:
+  method: POST
+  url: https://edge.example.com/oauth
+  auth:
+    type: oauth2
+    flow: resource_owner_password_credentials
+    authorizationUrl: https://auth.example.com/authorize
+    accessTokenUrl: https://auth.example.com/token
+    callbackUrl: postly://callback
+    scope: read
+    pkce:
+      disabled: false
+      method: S256
+    credentials:
+      clientId: cli
+      clientSecret: sec
+      placement: header
+      id: cred-1
+    tokenConfig:
+      id: tok-1
+      placement:
+        in: header
+      source: cache
+    settings:
+      autoFetchToken: true
+      autoRefreshToken: true
+    resourceOwner:
+      username: demo
+      password: pass
+    additionalParameters:
+      authorizationRequest:
+        - name: audience
+          value: api
+      refreshTokenRequest:
+        - name: refresh
+          value: "1"
+  body:
+    type: multipartForm
+    multipartForm:
+      - name: file
+        type: file
+        value: one.txt
+      - name: missing
+        type: file
+        value: []
+      - name: note
+        value: hi
+  settings:
+    followRedirects: inherit
+    maxRedirects: inherit
+    timeout: inherit
+    omitHeaders: inherit
+    customFlag: true
+runtime:
+  variables:
+    - name: duplicate
+      value: request
+    - name: runtimeSecret
+      secretName: api-token
+  scripts:
+    - type: after-response
+      code: console.log(1)
+  assertions:
+    - type: status
+  actions:
+    - type: set-variable
+      selector:
+        expression: res.body.items[0]
+      variable:
+        name: firstItem
+    - type: set-variable
+      phase: before-request
+      selector:
+        expression: res.status
+      variable:
+        name: skipped
+`,
+      },
+      {
+        path: 'picked/root/graphql-picked.yml',
+        text: `info:
+  name: GraphQL Picked
+  type: graphql
+graphql:
+  url: https://edge.example.com/graphql
+  body:
+    - body:
+        query: query Old { old }
+        variables: old
+    - selected: true
+      body:
+        query: query New { new }
+        variables:
+          ok: true
+`,
+      },
+    ])
+
+    expect(entry.collection.auth).toEqual({ type: 'none', config: {} })
+    expect(entry.collection.variables).toEqual(expect.arrayContaining([
+      { key: 'pathSecret', value: '', isSecret: true },
+      { key: 'vaultSecret', value: '', isSecret: true },
+      { key: 'projectSecret', value: '', isSecret: true },
+      { key: 'duplicate', value: 'root', isSecret: false },
+      { key: 'runtimeSecret', value: '', isSecret: true },
+    ]))
+
+    const requests = new Map(allRequests(entry.collection).map((request) => [request.name, request] as const))
+    expect(requests.get('OAuth Request')).toMatchObject({
+      bodyType: 'form-data',
+      auth: {
+        type: 'oauth2',
+        config: {
+          grantType: 'password',
+          clientId: 'cli',
+          clientSecret: 'sec',
+          authUrl: 'https://auth.example.com/authorize',
+          tokenUrl: 'https://auth.example.com/token',
+          scopes: 'read',
+          redirectUri: 'postly://callback',
+        },
+      },
+    })
+    expect(rows(requests.get('OAuth Request')?.bodyContent as string).map((row) => [row.key, row.value, row.fieldType ?? 'text'])).toEqual([
+      ['file', 'one.txt', 'file'],
+      ['note', 'hi', 'text'],
+    ])
+    expect(parseRules(requests.get('OAuth Request')?.protocolConfig.extractRules as string).map((rule) => [rule.source, rule.expression, rule.variable])).toEqual([
+      ['json', '$.items[0]', 'firstItem'],
+    ])
+    expect(JSON.parse(requests.get('GraphQL Picked')?.bodyContent as string)).toEqual({
+      query: 'query New { new }',
+      variables: '{"ok":true}',
+    })
+
+    expect(entry.warnings.join('\n')).toMatch(/"folder\.yml": expected a YAML object\./)
+    expect(entry.warnings.join('\n')).toMatch(/Inherited headers were not imported for 1 item \(Collection\)/)
+    expect(entry.warnings.join('\n')).toMatch(/Collection or folder post-response actions were not imported for 1 item \(Collection\)/)
+    expect(entry.warnings.join('\n')).toMatch(/Scripts were not imported for 2 items \(Collection, "OAuth Request"\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/Tests and assertions were not imported for 1 request\./)
+    expect(entry.warnings.join('\n')).toMatch(/1 request variable were imported as collection variables; first value won when names collided\./)
+    expect(entry.warnings.join('\n')).toMatch(/one or more multipart file fields were not imported/)
+    expect(entry.warnings.join('\n')).toMatch(/OAuth 2\.0 settings were not imported: PKCE, credentials placement \/ saved credentials, token placement \/ saved token source, automatic token fetch \/ refresh, additional auth\/token\/refresh parameters, password grant username \/ password\./)
+    expect(entry.warnings.join('\n')).toMatch(/Actions other than after-response variable setters were not imported for 1 request \("OAuth Request" \(1\)\)\./)
+    expect(entry.warnings.join('\n')).toMatch(/Unknown OpenCollection keys were ignored: oauth\.yml \(http\.settings\)\./)
+  })
+
+  it('returns nothing without a root file and falls back when the root YAML is not an object', () => {
+    expect(convertBrunoYamlFiles([
+      { path: 'picked/request.yml', text: 'info:\n  name: Loose\n  type: http\nhttp:\n  method: GET\n  url: https://x.test\n' },
+    ])).toEqual([])
+
+    const [entry] = convertBrunoYamlFiles([
+      { path: 'picked/root/opencollection.yml', text: '- root\n- list\n' },
+      { path: 'picked/root/sub/request.yml', text: 'info:\n  name: Nested\n  type: http\nhttp:\n  method: GET\n  url: https://nested.test\n' },
+      { path: 'picked/root/environments/dev.yml', text: 'vars:\n  token: dev\n' },
+      { path: 'picked/root/readme.txt', text: 'ignored\n' },
+    ])
+
+    expect(entry.collection.name).toBe('root')
+    expect(entry.collection.requests).toEqual([])
+    expect(entry.collection.folders[0].name).toBe('sub')
+    expect(entry.collection.folders[0].requests[0]).toMatchObject({ name: 'Nested', url: 'https://nested.test' })
+    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(dev\)/)
+  })
+
   it('applies the import budget to deeply nested trees', () => {
     const deep = Array.from({ length: 66 }, (_, index) => `f${index}`).join('/')
     expect(() => convertBrunoYamlFiles([
