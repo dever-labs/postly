@@ -325,7 +325,8 @@ describe('script parsing limits', () => {
 })
 
 describe('Postman collection v3', () => {
-  it('explains that the multi-file Git format is unsupported', async () => {
-    await expect(previewImport('$kind: collection\nname: x\n')).rejects.toThrow(/v3/)
+  it('imports a single-file v3 collection', async () => {
+    const preview = await previewImport(['$kind: collection', 'name: x', ''].join('\n'))
+    expect(preview.format).toBe('postman')
   })
 })

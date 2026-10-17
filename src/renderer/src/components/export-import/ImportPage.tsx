@@ -118,7 +118,7 @@ export function ImportPage() {
     // Only the files Bruno collections are made of are read, and never dependency or VCS folders
     const relevant = picked.filter((f) => {
       const path = f.webkitRelativePath || f.name
-      return /\.bru$|(^|\/)bruno\.json$|(^|\/)opencollection\.ya?ml$/.test(path) && !path.split('/').some((seg) => seg === 'node_modules' || seg === '.git')
+      return /\.(bru|ya?ml)$|(^|\/)bruno\.json$/.test(path) && !path.split('/').some((seg) => seg === 'node_modules' || seg === '.git')
     })
     if (relevant.some((f) => f.size > MAX_FOLDER_FILE_BYTES)) {
       setParseError('A file in the folder is larger than 2 MB.')
@@ -203,7 +203,7 @@ export function ImportPage() {
             ref={folderInputRef}
             type="file"
             data-testid="import-folder-input"
-            aria-label="Bruno collection folder"
+            aria-label="Collection folder"
             // webkitdirectory is not in React's input typings
             {...{ webkitdirectory: '' }}
             className="hidden"
@@ -256,7 +256,7 @@ export function ImportPage() {
               className="mt-3 flex items-center gap-2 text-xs text-th-text-subtle hover:text-th-text-primary"
             >
               <FolderOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
-              …or choose a Bruno collection folder (.bru files)
+              …or choose a collection folder (Bruno .bru / YAML, or Postman v3)
             </button>
           )}
           {parseError && <p role="alert" data-testid="import-error" className="mt-2 text-xs text-red-400 light:text-red-800">{parseError}</p>}

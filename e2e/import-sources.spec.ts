@@ -107,4 +107,19 @@ test.describe('Import Postman and Insomnia', () => {
     await expect(window.getByRole('treeitem', { name: new RegExp(`^${brunoName}`) })).toBeVisible()
     fs.rmSync(dir, { recursive: true, force: true })
   })
+
+  const fixtures = path.join(__dirname, '..', 'src', 'main', 'services', '__tests__', 'fixtures')
+
+  test('imports a Postman v3 (Native Git) folder', async ({ window }) => {
+    await window.getByTestId('btn-import').click()
+    await window.getByTestId('import-folder-input').setInputFiles(path.join(fixtures, 'postman-v3', 'workspace'))
+    await expect(window.getByTestId('import-format')).toContainText('Postman')
+    await expect(window.getByTestId('import-warnings')).toBeVisible()
+  })
+
+  test('imports a Bruno YAML (OpenCollection) folder', async ({ window }) => {
+    await window.getByTestId('btn-import').click()
+    await window.getByTestId('import-folder-input').setInputFiles(path.join(fixtures, 'bruno-yaml', 'spec-complex'))
+    await expect(window.getByTestId('import-format')).toContainText('Bruno')
+  })
 })

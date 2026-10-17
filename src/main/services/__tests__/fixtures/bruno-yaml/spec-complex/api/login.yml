@@ -1,0 +1,91 @@
+info:
+  name: Login
+  type: http
+  seq: 2
+  description: Login request
+http:
+  method: POST
+  url: https://api.example.com/users/:id?debug=true
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Off
+      value: off
+      disabled: true
+  params:
+    - name: id
+      value: "42"
+      type: path
+    - name: q
+      value: search
+      type: query
+    - name: extra
+      value: x
+      type: query
+      disabled: true
+  body:
+    type: json
+    data: |
+      {"email":"a@example.com"}
+  auth:
+    type: oauth2
+    flow: resource_owner_password_credentials
+    accessTokenUrl: https://auth.example.com/token
+    refreshTokenUrl: https://auth.example.com/refresh
+    credentials:
+      clientId: client
+      clientSecret: secret
+      placement: body
+    resourceOwner:
+      username: alice
+      password: pw
+    scope: read write
+    tokenConfig:
+      placement:
+        header: X-Auth
+runtime:
+  variables:
+    - name: requestVar
+      value: request-value
+    - name: shadow
+      value: req-shadow
+  scripts:
+    - type: before-request
+      code: console.log('pre')
+    - type: tests
+      code: expect(true).toBe(true)
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        method: jsonq
+        expression: res.body.token
+      variable:
+        name: savedToken
+        scope: runtime
+    - type: set-variable
+      phase: after-response
+      selector:
+        method: jsonq
+        expression: $.bad
+      variable:
+        name: unsupportedExpr
+        scope: runtime
+    - type: set-variable
+      phase: before-request
+      selector:
+        method: jsonq
+        expression: $.ignore
+      variable:
+        name: ignoreMe
+        scope: runtime
+settings:
+  followRedirects: false
+  timeout: 1500
+  forwardAuthorizationHeader: false
+docs: Login docs
+mystery: 1

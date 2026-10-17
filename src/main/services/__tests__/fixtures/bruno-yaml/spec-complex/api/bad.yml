@@ -1,0 +1,10 @@
+info:
+  name: Broken
+  type: http
+http:
+  method: GET
+  url: https://broken.example.com
+  headers:
+    - name: X-Bad
+      value: nope
+    broken

@@ -1,0 +1,6 @@
+info:
+  name: Rpc
+  type: grpc
+grpc:
+  url: https://api.example.com
+  method: demo.Service/Call

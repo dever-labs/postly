@@ -1,0 +1,12 @@
+$kind: folder
+name: Users
+description: User operations
+variables:
+  - key: folderOnly
+    value: from-folder
+scripts:
+  - type: http:afterResponse
+    code: console.log('folder')
+auth:
+  type: noauth
+folderExtra: ignored

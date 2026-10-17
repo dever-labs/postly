@@ -1,8 +1,10 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import type { ExportCollection, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
-import { convertBrunoExport, convertBrunoFiles, isBrunoExport, isBrunoYamlCollection, type BrunoFile } from './import-bruno'
+import { convertBrunoExport, convertBrunoFiles, isBrunoExport, type BrunoFile } from './import-bruno'
+import { convertBrunoYamlFiles, isBrunoYamlFolder } from './import-bruno-yaml'
 import { convertInsomnia, insomniaKind } from './import-insomnia'
+import { convertPostmanV3Files, isPostmanV3Folder } from './import-postman-v3'
 import { convertPostman, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
 
 export type ImportFormat = 'postly' | 'openapi' | 'postman' | 'insomnia' | 'bruno'
@@ -105,22 +107,29 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
   }
   if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
-  if (obj.$kind === 'collection') throw new Error('This is a Postman collection v3 (multi-file Git format), which is not supported yet. In Postman, export the collection as Collection v2.1 JSON instead.')
+  if (obj.$kind === 'collection') {
+    const entries = convertPostmanV3Files([{ path: 'collection.yaml', text }])
+    if (entries.length > 0) return { format: 'postman', collections: entries.map((e) => summarize(e.collection)), warnings: multi(entries) }
+  }
   throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, Bruno JSON export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
 }
 
-export const MAX_BRUNO_FILES = 5000
+export const MAX_FOLDER_FILES = 5000
 
-/** Converts the files of a Bruno collection folder (.bru, bruno.json) without touching the database. */
-export function previewBrunoFolder(files: BrunoFile[]): ImportPreview {
-  if (files.length > MAX_BRUNO_FILES) throw new Error(`The folder has more than ${MAX_BRUNO_FILES} Bruno files.`)
+const multi = (entries: Array<{ collection: ExportCollection; warnings: string[] }>) =>
+  entries.flatMap((e) => (entries.length > 1 ? e.warnings.map((w) => `${e.collection.name}: ${w}`) : e.warnings))
+
+/** Converts the files of a Bruno (.bru or YAML) or Postman v3 collection folder without touching the database. */
+export function previewFolder(files: BrunoFile[]): ImportPreview {
+  if (files.length > MAX_FOLDER_FILES) throw new Error(`The folder has more than ${MAX_FOLDER_FILES} collection files.`)
   if (files.reduce((n, f) => n + f.text.length, 0) > MAX_IMPORT_BYTES) throw new Error('The folder is larger than 20 MB.')
-  const entries = convertBrunoFiles(files)
-  if (entries.length === 0) {
-    throw new Error(isBrunoYamlCollection(files)
-      ? 'This Bruno collection uses the YAML (OpenCollection) format, which is not supported yet. In Bruno, use "Export collection" to save it as a Bruno JSON file and import that.'
-      : 'No Bruno (.bru) files were found in that folder.')
+  let format: ImportFormat = 'bruno'
+  let entries = convertBrunoFiles(files)
+  if (entries.length === 0 && isBrunoYamlFolder(files)) entries = convertBrunoYamlFiles(files)
+  if (entries.length === 0 && isPostmanV3Folder(files)) {
+    format = 'postman'
+    entries = convertPostmanV3Files(files)
   }
-  const warnings = entries.flatMap((e) => (entries.length > 1 ? e.warnings.map((w) => `${e.collection.name}: ${w}`) : e.warnings))
-  return { format: 'bruno', collections: entries.map((e) => summarize(e.collection)), warnings }
+  if (entries.length === 0) throw new Error('No Bruno (.bru or YAML) or Postman v3 collection files were found in that folder.')
+  return { format, collections: entries.map((e) => summarize(e.collection)), warnings: multi(entries) }
 }

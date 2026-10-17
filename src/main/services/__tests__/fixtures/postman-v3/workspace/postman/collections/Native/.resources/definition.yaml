@@ -1,0 +1,17 @@
+$kind: collection
+name: Native Git Sample
+description: Collection from Postman Native Git
+variables:
+  - key: baseUrl
+    value: https://api.example.com
+  - key: secretToken
+    secret: true
+scripts:
+  - type: http:beforeRequest
+    code: console.log('collection')
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{secretToken}}'
+extraRoot: ignored

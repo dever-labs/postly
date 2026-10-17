@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseBru } from '../bru-lang'
-import { previewBrunoFolder, previewImport } from '../import-formats'
+import { previewFolder, previewImport } from '../import-formats'
 import { convertBrunoExport, convertBrunoFiles } from '../import-bruno'
 
 const FIX = path.join(__dirname, 'fixtures', 'bruno')
@@ -75,7 +75,7 @@ describe('Bruno folder import', () => {
   })
 
   it('maps graphql, multipart, binary and digest requests and warns about environments', () => {
-    const preview = previewBrunoFolder(folder('real-testbench'))
+    const preview = previewFolder(folder('real-testbench'))
     expect(preview.format).toBe('bruno')
     const reqs = convertBrunoFiles(folder('real-testbench'))[0].collection.requests
     const byName = (n: string) => reqs.find((r) => r.name === n)
@@ -177,11 +177,15 @@ body:multipart-form {
   })
 
   it('rejects a folder with no Bruno files', () => {
-    expect(() => previewBrunoFolder([{ path: 'x/readme.md', text: '' }])).toThrow(/No Bruno/)
+    expect(() => previewFolder([{ path: 'x/readme.md', text: '' }])).toThrow(/No Bruno/)
   })
 
-  it('explains that the YAML format is unsupported', () => {
-    expect(() => previewBrunoFolder([{ path: 'c/opencollection.yml', text: 'opencollection: 1.0.0' }])).toThrow(/YAML/)
+  it('reads the YAML (OpenCollection) format', () => {
+    const preview = previewFolder([
+      { path: 'c/opencollection.yml', text: ['opencollection: 1.0.0', 'info:', '  name: Y', ''].join('\n') },
+      { path: 'c/ping.yml', text: ['info:', '  name: Ping', '  type: http', 'http:', '  method: GET', '  url: https://x.test', ''].join('\n') },
+    ])
+    expect(preview.format).toBe('bruno')
   })
 
   it('applies the import budget to folder trees', () => {

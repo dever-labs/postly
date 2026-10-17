@@ -1,0 +1,5 @@
+info:
+  name: Socket
+  type: websocket
+websocket:
+  url: wss://api.example.com/socket
