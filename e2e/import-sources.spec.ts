@@ -33,7 +33,7 @@ const brunoYamlName = `Bruno YAML ${stamp}`
 const postmanV3Name = `Postman v3 ${stamp}`
 
 const fixtures = path.join(__dirname, '..', 'src', 'main', 'services', '__tests__', 'fixtures')
-const generated = path.join(__dirname, `.generated-import-sources-${stamp}`)
+const generated = path.join(__dirname, '.generated-import-sources')
 
 const POSTMAN = {
   info: { name: postmanName, schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },

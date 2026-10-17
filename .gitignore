@@ -39,3 +39,4 @@ test-results/
 
 # Downloaded test binaries
 bin/
+e2e/.generated-import-sources*/
