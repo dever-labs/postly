@@ -593,9 +593,19 @@ function convertSingleFileCollection(file: ParsedFile, budget: ImportBudget): { 
   return { collection, warnings: pushSharedWarnings(collection, ctx, { examples: 0, requests: 0 }) }
 }
 
+const LAYOUT_ROOTS = new Set(['postman', 'collections', 'environments', '.resources'])
+
+/** Folder pickers prefix every path with the picked folder's name; layout detection needs it removed. */
+function stripPickedFolder(paths: string[]): string[] {
+  const first = paths[0]?.split('/')[0]
+  if (!first || LAYOUT_ROOTS.has(first) || !paths.every((p) => p.includes('/') && p.split('/')[0] === first)) return paths
+  return paths.map((p) => p.slice(first.length + 1))
+}
+
 function parseFiles(files: PostmanV3File[]): ParsedFile[] {
-  return files.map((file) => {
-    const normalized: ParsedFile = { path: normalizePath(file.path), text: file.text }
+  const paths = stripPickedFolder(files.map((f) => normalizePath(f.path)))
+  return files.map((file, i) => {
+    const normalized: ParsedFile = { path: paths[i], text: file.text }
     if (!isYamlPath(normalized.path)) return normalized
     try {
       normalized.doc = parseYaml(normalized.text)

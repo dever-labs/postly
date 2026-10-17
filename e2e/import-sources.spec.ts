@@ -114,7 +114,8 @@ test.describe('Import Postman and Insomnia', () => {
     await window.getByTestId('btn-import').click()
     await window.getByTestId('import-folder-input').setInputFiles(path.join(fixtures, 'postman-v3', 'workspace'))
     await expect(window.getByTestId('import-format')).toContainText('Postman')
-    await expect(window.getByTestId('import-warnings')).toBeVisible()
+    await expect(window.getByText('Native Git Sample')).toBeVisible()
+    await expect(window.getByTestId('import-warnings')).toContainText('environment')
   })
 
   test('imports a Bruno YAML (OpenCollection) folder', async ({ window }) => {

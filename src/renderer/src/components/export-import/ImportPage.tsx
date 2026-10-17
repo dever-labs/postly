@@ -116,9 +116,13 @@ export function ImportPage() {
     if (picked.length === 0) return
     setParseError('')
     // Only the files Bruno collections are made of are read, and never dependency or VCS folders
+    const pathOf = (f: File) => f.webkitRelativePath || f.name
     const relevant = picked.filter((f) => {
-      const path = f.webkitRelativePath || f.name
-      return /\.(bru|ya?ml)$|(^|\/)bruno\.json$/.test(path) && !path.split('/').some((seg) => seg === 'node_modules' || seg === '.git')
+      const path = pathOf(f)
+      if (path.split('/').some((seg) => seg === 'node_modules' || seg === '.git' || seg === '.github')) return false
+      // Unrelated YAML (CI configs, lockfiles, large specs) must not block a collection import
+      if (/\.ya?ml$/.test(path)) return f.size <= MAX_FOLDER_FILE_BYTES
+      return /\.bru$|(^|\/)bruno\.json$/.test(path)
     })
     if (relevant.some((f) => f.size > MAX_FOLDER_FILE_BYTES)) {
       setParseError('A file in the folder is larger than 2 MB.')

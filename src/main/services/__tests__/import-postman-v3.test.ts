@@ -92,3 +92,13 @@ describe('convertPostmanV3Files', () => {
     ])).toThrow(/nested deeper than 64 levels/i)
   })
 })
+
+describe('paths as sent by the folder picker', () => {
+  it('detects the layout when every path starts with the picked folder name', () => {
+    const files = folder('workspace').map((f) => ({ ...f, path: `workspace/${f.path}` }))
+    const [entry] = convertPostmanV3Files(files)
+    expect(entry.collection.name).toBe('Native Git Sample')
+    expect(entry.warnings.join('\n')).toMatch(/environment/i)
+    expect(entry.warnings.join('\n')).not.toContain('workspace/postman')
+  })
+})
