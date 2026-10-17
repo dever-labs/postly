@@ -1,9 +1,10 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import type { ExportCollection, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
+import { convertInsomnia, insomniaKind } from './import-insomnia'
 import { convertPostman, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
 
-export type ImportFormat = 'postly' | 'openapi' | 'postman'
+export type ImportFormat = 'postly' | 'openapi' | 'postman' | 'insomnia'
 
 export interface ImportPreviewCollection {
   collection: ExportCollection
@@ -40,10 +41,10 @@ function parseText(text: string): unknown {
   try {
     return JSON.parse(trimmed)
   } catch (jsonError) {
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) throw new Error(`Invalid JSON: ${(jsonError as Error).message}`, { cause: jsonError })
     try {
       return yamlLoad(trimmed, { schema: CORE_SCHEMA.withTags(mergeTag) })
     } catch (yamlError) {
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) throw new Error(`Invalid JSON: ${(jsonError as Error).message}`, { cause: yamlError })
       throw new Error(`Could not read the file as JSON or YAML: ${(yamlError as Error).message}`, { cause: yamlError })
     }
   }
@@ -72,7 +73,32 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     const result = convertPostman(obj)
     return { format: 'postman', collections: [summarize(result.collection)], warnings: result.warnings }
   }
+  const insomnia = insomniaKind(obj)
+  if (insomnia === 'environment') throw new Error('This is an Insomnia environment file. Import an Insomnia collection or workspace export instead.')
+  if (insomnia === 'unsupported') throw new Error('This Insomnia file type is not supported. Export a collection or workspace from Insomnia.')
+  if (insomnia) {
+    const entries: ImportPreviewCollection[] = []
+    const warnings: string[] = []
+    const converted = convertInsomnia(obj, insomnia).collections
+    for (const entry of converted) {
+      let { collection } = entry
+      const own = [...entry.warnings]
+      if (entry.spec) {
+        // A design document without requests is its OpenAPI definition
+        try {
+          const spec = await parseOpenApi(parseText(entry.spec) as Record<string, unknown>, options.sourceUrl)
+          collection = { ...spec.collection, name: collection.name }
+          own.push(...spec.warnings)
+        } catch (err) {
+          throw new Error(`The Insomnia design document contains an invalid OpenAPI definition: ${(err as Error).message}`, { cause: err })
+        }
+      }
+      entries.push(summarize(collection))
+      warnings.push(...(converted.length > 1 ? own.map((w) => `${collection.name}: ${w}`) : own))
+    }
+    return { format: 'insomnia', collections: entries, warnings }
+  }
   if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
-  throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
+  throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
 }

@@ -147,7 +147,8 @@ describe('Postman requests', () => {
     const preview = await previewImport(fixture('real-postman-oauth2-v2_1.json'))
     const grants = preview.collections[0].collection.requests.map((r) => r.auth.config.grantType)
     expect(grants).toEqual(['authorization_code', 'authorization_code', 'implicit', 'password', 'client_credentials'])
-    expect(preview.warnings).toEqual([])
+    expect(preview.warnings).toHaveLength(1)
+    expect(preview.warnings[0]).toMatch(/password grant/)
   })
 
   it('reports scripts that were not imported', async () => {

@@ -23,7 +23,7 @@ interface PreviewEntry {
 }
 
 interface ParsedFile {
-  format: 'postly' | 'openapi'
+  format: 'postly' | 'openapi' | 'postman' | 'insomnia'
   collections: PreviewEntry[]
   warnings: string[]
 }
@@ -31,6 +31,8 @@ interface ParsedFile {
 const FORMAT_LABELS: Record<ParsedFile['format'], string> = {
   postly: 'Postly export',
   openapi: 'OpenAPI / Swagger',
+  postman: 'Postman collection',
+  insomnia: 'Insomnia export',
 }
 
 const SOURCE_LABELS: Record<CollectionSource, string> = {
@@ -173,7 +175,7 @@ export function ImportPage() {
               <FolderOpen className="h-8 w-8 text-th-text-muted" />
               <div>
                 <p className="text-sm font-medium text-th-text-secondary">Browse for a file</p>
-                <p className="mt-0.5 text-xs text-th-text-subtle">Postly export (.postly.json), or an OpenAPI 3.x / Swagger 2 document (JSON or YAML)</p>
+                <p className="mt-0.5 text-xs text-th-text-subtle">Postly export (.postly.json), a Postman collection (v2.0 / v2.1), an Insomnia export (v4 / v5), or an OpenAPI 3.x / Swagger 2 document (JSON or YAML)</p>
               </div>
             </button>
           ) : (

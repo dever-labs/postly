@@ -3,15 +3,10 @@ import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../share
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
 import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
 import type { ImportResult } from './import-openapi'
+import { isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 
 // Postman Collection Format v2.0 and v2.1
 
-type Obj = Record<string, unknown>
-type Auth = { type: string; config: Record<string, unknown> }
-
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
-const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : '')
-const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.filter(isObj) : [])
 const text = (v: unknown): string => (typeof v === 'string' ? v : isObj(v) ? str(v.content) : '')
 
 const NO_AUTH: Auth = { type: 'none', config: {} }
@@ -37,8 +32,6 @@ export function isPostmanEnvironment(doc: unknown): boolean {
 export function isPostmanV1Collection(doc: unknown): boolean {
   return isObj(doc) && !isObj(doc.info) && Array.isArray(doc.requests) && typeof doc.name === 'string'
 }
-
-const kv = (key: string, value: unknown, enabled: boolean) => ({ id: crypto.randomUUID(), key, value: str(value), enabled })
 
 // ─── Scripts ─────────────────────────────────────────────────────────────────
 
@@ -133,6 +126,7 @@ function convertAuth(auth: unknown, label: string, warnings: string[]): Auth {
       }
     case 'oauth2': {
       const grant = GRANTS[get('grant_type')] ?? 'authorization_code'
+      if (grant === 'password') warnings.push(`${label}: the username and password of the OAuth 2.0 password grant were not mapped.`)
       return {
         type: 'oauth2',
         config: {
@@ -154,13 +148,6 @@ function convertAuth(auth: unknown, label: string, warnings: string[]): Auth {
 
 // ─── Requests ────────────────────────────────────────────────────────────────
 
-function parseQuery(query: string) {
-  return query.split('&').filter(Boolean).map((pair) => {
-    const eq = pair.indexOf('=')
-    return kv(eq < 0 ? pair : pair.slice(0, eq), eq < 0 ? '' : pair.slice(eq + 1), true)
-  })
-}
-
 function resolveUrl(url: unknown, pathVariables: Map<string, string>): { url: string; params: ReturnType<typeof kv>[] } {
   let raw = ''
   let query: Obj[] | undefined
@@ -178,21 +165,11 @@ function resolveUrl(url: unknown, pathVariables: Map<string, string>): { url: st
     declared = list(url.variable)
   }
 
-  const hash = raw.indexOf('#')
-  if (hash >= 0) raw = raw.slice(0, hash)
-  const q = raw.indexOf('?')
-  const base = q >= 0 ? raw.slice(0, q) : raw
+  const split = splitUrl(raw, pathVariables, declared)
   const params = query
     ? query.filter((p) => str(p.key)).map((p) => kv(str(p.key), p.value, p.disabled !== true))
-    : q >= 0 ? parseQuery(raw.slice(q + 1)) : []
-
-  // Postly has no per-request path variables, so `:id` segments become {{id}} collection variables
-  const m = /^((?:[a-z][a-z0-9+.-]*:\/\/)?[^/]*)(.*)$/i.exec(base)
-  const path = (m?.[2] ?? '').replace(/\/:([A-Za-z_]\w*)(?=\/|$)/g, (_all, name: string) => {
-    if (!pathVariables.has(name)) pathVariables.set(name, str(declared.find((d) => d.key === name)?.value))
-    return `/{{${name}}}`
-  })
-  return { url: `${m?.[1] ?? base}${path}`, params }
+    : split.query !== null ? parseQuery(split.query) : []
+  return { url: split.url, params }
 }
 
 function convertBody(body: unknown, headers: Obj[], label: string, warnings: string[]): { bodyType: string; bodyContent: string } {
