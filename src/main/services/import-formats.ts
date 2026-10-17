@@ -1,8 +1,9 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import type { ExportCollection, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
+import { convertPostman, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
 
-export type ImportFormat = 'postly' | 'openapi'
+export type ImportFormat = 'postly' | 'openapi' | 'postman'
 
 export interface ImportPreviewCollection {
   collection: ExportCollection
@@ -67,5 +68,11 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     }
     return { format: 'openapi', collections: [summarize(result.collection)], warnings: result.warnings }
   }
-  throw new Error('Unrecognised format. Supported: Postly export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
+  if (isPostmanCollection(obj)) {
+    const result = convertPostman(obj)
+    return { format: 'postman', collections: [summarize(result.collection)], warnings: result.warnings }
+  }
+  if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
+  if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
+  throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
 }
