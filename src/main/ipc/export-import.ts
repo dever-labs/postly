@@ -209,8 +209,28 @@ export function buildExport(collectionIds?: string[]): PostlyExportFile {
 
 type Statement = { sql: string; params: unknown[] }
 
-function requestStatements(requests: ExportRequest[], folderId: string, now: number, out: Statement[]): void {
-  for (const [index, request] of requests.entries()) {
+function arrayField<T>(value: unknown, message: string): T[] {
+  if (value == null) return []
+  if (!Array.isArray(value)) throw new Error(message)
+  return value as T[]
+}
+
+function normalizeVariables(value: unknown, message: string): VariableRow[] | undefined {
+  if (value == null) return undefined
+  if (!Array.isArray(value)) throw new Error(message)
+  return value.flatMap((row) => {
+    if (typeof row !== 'object' || row === null) return []
+    const variable = row as Partial<VariableRow>
+    return [{
+      key: typeof variable.key === 'string' ? variable.key : String(variable.key ?? ''),
+      value: typeof variable.value === 'string' ? variable.value : String(variable.value ?? ''),
+      isSecret: !!variable.isSecret,
+    }]
+  })
+}
+
+function requestStatements(requests: unknown, folderId: string, now: number, out: Statement[]): void {
+  for (const [index, request] of arrayField<ExportRequest>(requests, 'Request lists must be arrays.').entries()) {
     out.push({
       sql: `INSERT INTO requests
          (id, folder_id, name, method, url, params, headers, body_type, body_content,
@@ -263,31 +283,34 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
       now,
     ],
   })
-  requestStatements(folder.requests ?? [], folderId, now, out)
+  requestStatements(folder.requests, folderId, now, out)
   // fall back to `groups` for exports created before the folder-tree refactor
-  const children = folder.folders ?? folder.groups ?? []
+  const children = folder.folders != null
+    ? arrayField<ExportFolder>(folder.folders, 'Folder lists must be arrays.')
+    : arrayField<ExportFolder>(folder.groups, 'Folder lists must be arrays.')
   for (const [index, child] of children.entries()) {
     folderStatements(child, folderId, index, now, out)
   }
 }
 
 function environmentStatements(collections: ExportCollection[], now: number): Statement[] {
-  const incoming = collections.flatMap((c) => c.environments ?? [])
-  if (incoming.length === 0) return []
   const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
   const out: Statement[] = []
-  for (const environment of incoming) {
-    const base = String(environment.name ?? '').trim() || 'Imported'
-    let name = base
-    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n})`
-    taken.add(name.toLowerCase())
-    const id = crypto.randomUUID()
-    out.push({ sql: 'INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', params: [id, name, now, now] })
-    for (const variable of cleanVariables(environment.variables ?? [])) {
-      out.push({
-        sql: 'INSERT INTO env_vars (id, env_id, key, value, is_secret) VALUES (?, ?, ?, ?, ?)',
-        params: [crypto.randomUUID(), id, variable.key, variable.value, variable.isSecret ? 1 : 0],
-      })
+  for (const collection of collections) {
+    const incoming = arrayField<ExportEnvironment>(collection.environments, 'Collection environments must be arrays.')
+    for (const environment of incoming) {
+      const base = String(environment.name ?? '').trim() || 'Imported'
+      let name = base
+      for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n})`
+      taken.add(name.toLowerCase())
+      const id = crypto.randomUUID()
+      out.push({ sql: 'INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', params: [id, name, now, now] })
+      for (const variable of cleanVariables(normalizeVariables(environment.variables, 'Environment variables must be arrays.') ?? [])) {
+        out.push({
+          sql: 'INSERT INTO env_vars (id, env_id, key, value, is_secret) VALUES (?, ?, ?, ?, ?)',
+          params: [crypto.randomUUID(), id, variable.key, variable.value, variable.isSecret ? 1 : 0],
+        })
+      }
     }
   }
   return out
@@ -295,9 +318,13 @@ function environmentStatements(collections: ExportCollection[], now: number): St
 
 /** Imports every collection in one transaction: a failure leaves nothing behind. */
 export function importData(data: PostlyExportFile): number {
+  const collections = arrayField<ExportCollection>(data.collections, 'Invalid collections data.')
   const now = Date.now()
   const statements: Statement[] = []
-  for (const [collectionIndex, collection] of data.collections.entries()) {
+  for (const [collectionIndex, collection] of collections.entries()) {
+    if (typeof collection !== 'object' || collection === null) {
+      throw new Error('Each collection must be an object.')
+    }
     const collectionId = crypto.randomUUID()
     statements.push({
       sql: `INSERT INTO folders
@@ -318,17 +345,19 @@ export function importData(data: PostlyExportFile): number {
         now,
       ],
     })
-    statements.push(...collectionVariableStatements(collectionId, collection.variables))
-    requestStatements(collection.requests ?? [], collectionId, now, statements)
+    statements.push(...collectionVariableStatements(collectionId, normalizeVariables(collection.variables, 'Collection variables must be arrays.')))
+    requestStatements(collection.requests, collectionId, now, statements)
     // fall back to `groups` for exports created before the folder-tree refactor
-    const topFolders = collection.folders ?? collection.groups ?? []
+    const topFolders = collection.folders != null
+      ? arrayField<ExportFolder>(collection.folders, 'Folder lists must be arrays.')
+      : arrayField<ExportFolder>(collection.groups, 'Folder lists must be arrays.')
     for (const [folderIndex, folder] of topFolders.entries()) {
       folderStatements(folder, collectionId, folderIndex, now, statements)
     }
   }
-  statements.push(...environmentStatements(data.collections, now))
+  statements.push(...environmentStatements(collections, now))
   runTransaction(statements)
-  return data.collections.length
+  return collections.length
 }
 
 function winFromEvent(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import http from 'node:http'
 import path from 'node:path'
 import initSqlJs, { type Database } from 'sql.js'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -112,6 +113,23 @@ function createSchema(database: Database): void {
     value TEXT NOT NULL DEFAULT '',
     is_secret INTEGER NOT NULL DEFAULT 0
   )`)
+}
+
+async function withServer(
+  handler: http.RequestListener,
+  run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = http.createServer(handler)
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('Could not read listening address')
+  const baseUrl = `http://127.0.0.1:${address.port}`
+
+  try {
+    await run(baseUrl)
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  }
 }
 
 function rows<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
@@ -388,6 +406,83 @@ describe('importData integration', () => {
 
     expect(count('folders')).toBe(1)
     expect(count('requests')).toBe(1)
+    expect(count('environments')).toBe(0)
+    expect(count('env_vars')).toBe(0)
+  })
+})
+
+describe('export/import IPC network and validation handlers', () => {
+  it('follows redirects and returns the fetched text', async () => {
+    await withServer((req, res) => {
+      if (req.url === '/redirect') {
+        res.statusCode = 302
+        res.setHeader('Location', '/openapi.yaml')
+        res.end()
+        return
+      }
+      res.setHeader('Content-Type', 'application/yaml')
+      res.end('openapi: 3.0.0')
+    }, async (baseUrl) => {
+      const result = await invoke('postly:import:fetch-url', { url: `${baseUrl}/redirect` })
+      expect(result).toEqual({ data: { text: 'openapi: 3.0.0' } })
+    })
+  })
+
+  it('returns upstream HTTP failures while fetching URLs', async () => {
+    await withServer((_req, res) => {
+      res.statusCode = 503
+      res.statusMessage = 'Service Unavailable'
+      res.end('try later')
+    }, async (baseUrl) => {
+      const result = await invoke('postly:import:fetch-url', { url: `${baseUrl}/broken` })
+      expect(result).toEqual({ error: 'The server answered 503 Service Unavailable.' })
+    })
+  })
+
+  it('rejects malformed environments without importing anything', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [
+        {
+          name: 'Broken import',
+          description: '',
+          source: 'local',
+          auth: { type: 'none', config: {} },
+          ssl: 'inherit',
+          requests: [],
+          folders: [],
+          environments: { name: 'Prod', variables: [] },
+        },
+      ],
+    })
+
+    expect(result).toEqual({ error: 'Error: Collection environments must be arrays.' })
+    expect(count('folders')).toBe(0)
+    expect(count('requests')).toBe(0)
+    expect(count('variables')).toBe(0)
+    expect(count('environments')).toBe(0)
+    expect(count('env_vars')).toBe(0)
+  })
+
+  it('rejects malformed environment variables without partial imports', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [
+        {
+          name: 'Broken variables',
+          description: '',
+          source: 'local',
+          auth: { type: 'none', config: {} },
+          ssl: 'inherit',
+          requests: [{ ...baseRequest }],
+          folders: [],
+          environments: [{ name: 'Prod', variables: { token: 'x' } }],
+        },
+      ],
+    })
+
+    expect(result).toEqual({ error: 'Error: Environment variables must be arrays.' })
+    expect(count('folders')).toBe(0)
+    expect(count('requests')).toBe(0)
+    expect(count('variables')).toBe(0)
     expect(count('environments')).toBe(0)
     expect(count('env_vars')).toBe(0)
   })

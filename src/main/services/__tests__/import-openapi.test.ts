@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import type { ExportRequest } from '../../ipc/export-import'
 import { previewImport } from '../import-formats'
-import { sampleValue } from '../import-openapi'
+import { convertOpenApi, isOpenApiDocument, sampleValue } from '../import-openapi'
 
 const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf-8')
 
@@ -175,9 +176,11 @@ describe('sampleValue', () => {
   })
 })
 
-const walk = (c: { requests: unknown[]; folders?: unknown[] }, out: Array<Record<string, string>> = []): Array<Record<string, string>> => {
-  out.push(...(c.requests as Array<Record<string, string>>))
-  for (const f of (c.folders ?? []) as Array<{ requests: unknown[]; folders?: unknown[] }>) walk(f, out)
+type RequestTree = { requests: ExportRequest[]; folders?: RequestTree[] }
+
+const walk = (c: RequestTree, out: ExportRequest[] = []): ExportRequest[] => {
+  out.push(...c.requests)
+  for (const f of c.folders ?? []) walk(f, out)
   return out
 }
 
@@ -372,3 +375,170 @@ describe('server environments', () => {
   })
 })
 
+
+
+describe('OpenAPI helper coverage', () => {
+  it('recognises valid OpenAPI or Swagger objects only when paths is an object', () => {
+    expect(isOpenApiDocument({ openapi: '3.0.0', paths: {} })).toBe(true)
+    expect(isOpenApiDocument({ swagger: '2.0', paths: {} })).toBe(true)
+    expect(isOpenApiDocument({ openapi: '3.0.0', paths: [] })).toBe(false)
+    expect(isOpenApiDocument({})).toBe(false)
+  })
+
+  it('builds samples from composed schemas and media examples', async () => {
+    expect(sampleValue({
+      allOf: [
+        { type: 'object', properties: { name: { default: 'Rex' } } },
+        { type: 'object', properties: { age: { type: 'integer' } } },
+      ],
+    })).toEqual({ name: 'Rex', age: 0 })
+    expect(sampleValue({ oneOf: [{ type: 'string', default: 'first' }, { type: 'integer' }] })).toBe('first')
+
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Examples', version: '1' },
+      servers: [{ url: 'https://a.test' }],
+      paths: {
+        '/examples': {
+          post: {
+            requestBody: {
+              content: {
+                'application/problem+json': {
+                  examples: { primary: { value: { from: 'examples' } } },
+                  schema: { type: 'object', properties: { from: { default: 'schema' } } },
+                },
+              },
+            },
+            responses: {},
+          },
+        },
+      },
+    }))
+
+    expect(JSON.parse(walk(preview.collections[0].collection)[0].bodyContent)).toEqual({ from: 'examples' })
+  })
+
+  it('maps server variable enums and relative Swagger 2 base paths', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Servers', version: '1' },
+      servers: [
+        { url: 'https://{stage}.example.com/v1', variables: { stage: { enum: ['beta', 'prod'] } } },
+        { url: 'https://static.example.com/v1', description: 'Static' },
+      ],
+      paths: { '/x': { get: { responses: {} } } },
+    }))
+
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: '{stage}.example.com',
+        variables: [
+          { key: 'baseUrl', value: 'https://{{stage}}.example.com/v1', isSecret: false },
+          { key: 'stage', value: 'beta', isSecret: false },
+        ],
+      },
+      {
+        name: 'Static',
+        variables: [{ key: 'baseUrl', value: 'https://static.example.com/v1', isSecret: false }],
+      },
+    ])
+
+    const swagger = await previewImport(JSON.stringify({
+      swagger: '2.0',
+      info: { title: 'Legacy', version: '1' },
+      basePath: '/api',
+      paths: { '/items': { get: { responses: {} } } },
+    }), { sourceUrl: 'https://legacy.example.com/swagger.json' })
+
+    expect(swagger.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://legacy.example.com/api', isSecret: false })
+  })
+
+  it('warns for unsupported security scheme variants instead of pretending they were imported', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Auth', version: '1' },
+      servers: [{ url: 'https://a.test' }],
+      components: {
+        securitySchemes: {
+          cookieKey: { type: 'apiKey', in: 'cookie', name: 'sid' },
+          missingOauth: { type: 'oauth2', flows: {} },
+          mtls: { type: 'mutualTLS' },
+        },
+      },
+      paths: {
+        '/cookie': { get: { security: [{ cookieKey: [] }], responses: {} } },
+        '/oauth': { get: { security: [{ missingOauth: [] }], responses: {} } },
+        '/mtls': { get: { security: [{ mtls: [] }], responses: {} } },
+      },
+    }))
+
+    expect(walk(preview.collections[0].collection).every((request) => request.auth.type === 'none')).toBe(true)
+    expect(preview.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('API keys sent in cookies are not supported'),
+      expect.stringContaining('defines no usable flow'),
+      expect.stringContaining('Security scheme "mtls" (mutualtls) is not mapped'),
+    ]))
+  })
+
+  it('maps explode styles for object query params and non-JSON media types', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Bodies', version: '1' },
+      servers: [{ url: 'https://a.test' }],
+      webhooks: { ping: { post: { responses: {} } } },
+      paths: {
+        '/query': {
+          get: {
+            parameters: [
+              { name: 'filter', in: 'query', schema: { type: 'object' }, example: { status: 'open', limit: 10 } },
+              { name: 'compact', in: 'query', explode: false, schema: { type: 'object' }, example: { status: 'closed', limit: 5 } },
+            ],
+            responses: {},
+          },
+        },
+        '/xml': {
+          post: {
+            requestBody: { content: { 'application/xml': { example: '<pet id="1" />' } } },
+            responses: {},
+          },
+        },
+        '/text': {
+          post: {
+            requestBody: { content: { 'text/plain': { example: 'plain text' } } },
+            responses: {},
+          },
+        },
+        '/binary': {
+          post: {
+            requestBody: { content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } } },
+            responses: {},
+          },
+        },
+      },
+    }))
+
+    const requests = Object.fromEntries(walk(preview.collections[0].collection).map((request) => [request.name, request] as const))
+    expect((requests['GET /query'].params as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])).toEqual([
+      ['status', 'open'],
+      ['limit', '10'],
+      ['compact', 'status,closed,limit,5'],
+    ])
+    expect(requests['POST /xml']).toMatchObject({ bodyType: 'raw-xml', bodyContent: '<pet id="1" />' })
+    expect(requests['POST /text']).toMatchObject({ bodyType: 'raw-text', bodyContent: 'plain text' })
+    expect(requests['POST /binary'].bodyType).toBe('binary')
+    expect(preview.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('application/pdf is mapped as a binary body'),
+      expect.stringContaining('Webhooks are not imported'),
+    ]))
+  })
+
+  it('can convert a document with empty paths directly', () => {
+    const converted = convertOpenApi({ openapi: '3.0.0', info: { title: 'Empty', version: '1' }, paths: {} })
+    expect(converted.collection.requests).toEqual([])
+    expect(converted.collection.folders).toEqual([])
+    expect(converted.warnings).toEqual(expect.arrayContaining([
+      'No server URL found; set {{baseUrl}} in the collection variables.',
+      'The document has no operations.',
+    ]))
+  })
+})
