@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
+import { useEnvironmentsStore } from '@/store/environments'
 import { useVariablesStore } from '@/store/variables'
 import type { CollectionSource } from '@/types'
 
@@ -21,6 +22,7 @@ interface PreviewEntry {
   collection: ParsedCollection
   folders: number
   requests: number
+  environments?: number
 }
 
 interface ParsedFile {
@@ -173,6 +175,7 @@ export function ImportPage() {
     if (data) {
       await load()
       void useVariablesStore.getState().load()
+      void useEnvironmentsStore.getState().load()
       addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
       clearSelectedItem()
     }
@@ -280,7 +283,7 @@ export function ImportPage() {
                 </ul>
               </div>
             )}
-            {parsedFile.collections.map(({ collection: col, folders, requests }, i) => (
+            {parsedFile.collections.map(({ collection: col, folders, requests, environments = 0 }, i) => (
               <div
                 key={i}
                 className="flex items-start gap-4 rounded-lg border border-th-border bg-th-surface-raised px-4 py-3"
@@ -297,6 +300,7 @@ export function ImportPage() {
                   )}
                   <p className="mt-1 text-xs text-th-text-faint">
                     {folders} folder{folders !== 1 ? 's' : ''} · {requests} request{requests !== 1 ? 's' : ''}
+                    {environments > 0 && ` · ${environments} environment${environments !== 1 ? 's' : ''}`}
                   </p>
                 </div>
 

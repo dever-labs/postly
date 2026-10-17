@@ -13,6 +13,7 @@ export interface ImportPreviewCollection {
   collection: ExportCollection
   folders: number
   requests: number
+  environments: number
 }
 
 export interface ImportPreview {
@@ -35,7 +36,7 @@ function countFolder(folder: { requests?: unknown[]; folders?: ExportFolder[]; g
 }
 
 export function summarize(collection: ExportCollection): ImportPreviewCollection {
-  return { collection, ...countFolder(collection) }
+  return { collection, ...countFolder(collection), environments: collection.environments?.length ?? 0 }
 }
 
 function parseText(text: string): unknown {

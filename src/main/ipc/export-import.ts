@@ -4,7 +4,7 @@ import fs from 'fs'
 import { queryAll, runTransaction } from '../database'
 import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
 import { MAX_IMPORT_BYTES, previewFolder, previewImport } from '../services/import-formats'
-import { collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
+import { cleanVariables, collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
 
@@ -38,6 +38,12 @@ export interface ExportFolder {
   groups?: ExportFolder[]
 }
 
+/** A named set of variables. Environments are global in Postly; importers attach them to the collection they came with. */
+export interface ExportEnvironment {
+  name: string
+  variables: VariableRow[]
+}
+
 export interface ExportCollection {
   name: string
   description: string
@@ -48,6 +54,8 @@ export interface ExportCollection {
   network?: NetworkSettings
   /** Collection-scoped variables. Secret values are exported blank. */
   variables?: VariableRow[]
+  /** Created as global environments next to the collection (imports only; never exported). */
+  environments?: ExportEnvironment[]
   requests: ExportRequest[]
   folders: ExportFolder[]
   /** @deprecated use folders — present in pre-v2 exports for backward compat */
@@ -263,6 +271,26 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
   }
 }
 
+function environmentStatements(collections: ExportCollection[], now: number): Statement[] {
+  const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
+  const out: Statement[] = []
+  for (const environment of collections.flatMap((c) => c.environments ?? [])) {
+    const base = String(environment.name ?? '').trim() || 'Imported'
+    let name = base
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n})`
+    taken.add(name.toLowerCase())
+    const id = crypto.randomUUID()
+    out.push({ sql: 'INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', params: [id, name, now, now] })
+    for (const variable of cleanVariables(environment.variables ?? [])) {
+      out.push({
+        sql: 'INSERT INTO env_vars (id, env_id, key, value, is_secret) VALUES (?, ?, ?, ?, ?)',
+        params: [crypto.randomUUID(), id, variable.key, variable.value, variable.isSecret ? 1 : 0],
+      })
+    }
+  }
+  return out
+}
+
 /** Imports every collection in one transaction: a failure leaves nothing behind. */
 export function importData(data: PostlyExportFile): number {
   const now = Date.now()
@@ -296,6 +324,7 @@ export function importData(data: PostlyExportFile): number {
       folderStatements(folder, collectionId, folderIndex, now, statements)
     }
   }
+  statements.push(...environmentStatements(data.collections, now))
   runTransaction(statements)
   return data.collections.length
 }
