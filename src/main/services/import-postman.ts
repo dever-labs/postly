@@ -3,7 +3,7 @@ import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../share
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
 import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
 import type { ImportResult } from './import-openapi'
-import { isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
+import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 
 // Postman Collection Format v2.0 and v2.1
 
@@ -52,6 +52,7 @@ function valueToRule(expr: string, aliases: Set<string>): Pick<ExtractRule, 'sou
 }
 
 function scriptLines(event: Obj): string[] {
+  if (event.disabled === true) return []
   const exec = isObj(event.script) ? event.script.exec : undefined
   const lines = Array.isArray(exec) ? exec.map(String) : typeof exec === 'string' ? exec.split('\n') : []
   return lines.map((l) => l.replace(/\/\/.*$/, '').trim()).filter(Boolean)
@@ -151,6 +152,18 @@ function convertAuth(auth: unknown, label: string, warnings: string[]): Auth {
 
 // ─── Requests ────────────────────────────────────────────────────────────────
 
+function parseHeaderRows(headers: unknown): Obj[] {
+  if (typeof headers !== 'string') return list(headers)
+  return headers
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const colon = line.indexOf(':')
+      return colon < 0 ? { key: line, value: '' } : { key: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() }
+    })
+}
+
 function resolveUrl(url: unknown, pathVariables: Map<string, string>): { url: string; params: ReturnType<typeof kv>[] } {
   let raw = ''
   let query: Obj[] | undefined
@@ -217,18 +230,86 @@ function hasScript(events: unknown): boolean {
   return list(events).some((e) => scriptLines(e).length > 0)
 }
 
+interface ConvertStats {
+  folderVariables: number
+  itemVariables: number
+  responseExamples: number
+  requestsWithExamples: number
+  protocolProfileScopes: { collection: number; folder: number; item: number }
+  mappedProtocolProfileKeys: Set<string>
+  ignoredProtocolProfileKeys: Set<string>
+}
+
+function addVariablesAtCollectionScope(
+  raw: unknown,
+  scope: 'folder' | 'item',
+  variables: Map<string, { value: string; isSecret: boolean }>,
+  stats: ConvertStats,
+): void {
+  for (const variable of list(raw)) {
+    if (variable.disabled === true) continue
+    const key = str(variable.key)
+    if (!key) continue
+    if (scope === 'folder') stats.folderVariables++
+    else stats.itemVariables++
+    if (!variables.has(key)) variables.set(key, { value: str(variable.value), isSecret: variable.type === 'secret' })
+  }
+}
+
+function parseProtocolProfileBehavior(
+  raw: unknown,
+  scope: keyof ConvertStats['protocolProfileScopes'],
+  stats: ConvertStats,
+): { network?: { followRedirects?: boolean; maxRedirects?: number } } {
+  if (!isObj(raw)) return {}
+  stats.protocolProfileScopes[scope]++
+
+  const network: { followRedirects?: boolean; maxRedirects?: number } = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'followRedirects' && typeof value === 'boolean') {
+      network.followRedirects = value
+      stats.mappedProtocolProfileKeys.add(key)
+      continue
+    }
+    if (key === 'maxRedirects') {
+      const count = typeof value === 'number' && Number.isInteger(value) && value >= 0
+        ? value
+        : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : undefined
+      if (count !== undefined) {
+        network.maxRedirects = count
+        stats.mappedProtocolProfileKeys.add(key)
+        continue
+      }
+    }
+    stats.ignoredProtocolProfileKeys.add(key)
+  }
+
+  return Object.keys(network).length > 0 ? { network } : {}
+}
+
 export function convertPostman(doc: Obj): ImportResult {
   const warnings: string[] = []
   const variables = new Map<string, { value: string; isSecret: boolean }>()
   const pathVariables = new Map<string, string>()
   const dynamic = new Set<string>()
+  const budget = new ImportBudget()
   const info = isObj(doc.info) ? doc.info : {}
+  const stats: ConvertStats = {
+    folderVariables: 0,
+    itemVariables: 0,
+    responseExamples: 0,
+    requestsWithExamples: 0,
+    protocolProfileScopes: { collection: 0, folder: 0, item: 0 },
+    mappedProtocolProfileKeys: new Set<string>(),
+    ignoredProtocolProfileKeys: new Set<string>(),
+  }
 
   const noteDynamic = (value: string) => {
     for (const m of value.matchAll(/\{\{\s*(\$[A-Za-z]+)\s*\}\}/g)) if (!SUPPORTED_DYNAMIC.has(m[1])) dynamic.add(m[1])
   }
 
   for (const v of list(doc.variable)) {
+    if (v.disabled === true) continue
     const key = str(v.key)
     if (key && !variables.has(key)) variables.set(key, { value: str(v.value), isSecret: v.type === 'secret' })
   }
@@ -237,13 +318,18 @@ export function convertPostman(doc: Obj): ImportResult {
     const name = str(item.name) || 'Request'
     const label = `"${name}"`
     const req = isObj(item.request) ? item.request : typeof item.request === 'string' ? { url: item.request } : {}
-    const headerList = list(req.header)
+    const headerList = parseHeaderRows(req.header)
     const { url, params } = resolveUrl(req.url, pathVariables)
     const { bodyType, bodyContent } = convertBody(req.body, headerList, label, warnings)
     const headers = headerList.filter((h) => str(h.key)).map((h) => kv(str(h.key), h.value, h.disabled !== true))
 
     const scripts = convertPostmanScripts(name, item.event)
     warnings.push(...scripts.warnings)
+    addVariablesAtCollectionScope(item.variable, 'item', variables, stats)
+    if (Array.isArray(item.response) && item.response.length > 0) {
+      stats.requestsWithExamples++
+      stats.responseExamples += item.response.length
+    }
 
     for (const value of [url, ...params.map((p) => p.key + p.value), ...headers.map((h) => h.key + h.value), bodyContent]) noteDynamic(value)
 
@@ -258,24 +344,28 @@ export function convertPostman(doc: Obj): ImportResult {
       bodyContent,
       auth: convertAuth(req.auth, label, warnings),
       ssl: 'inherit',
+      ...parseProtocolProfileBehavior(item.protocolProfileBehavior, 'item', stats),
       description: text(req.description) || text(item.description),
       protocolConfig: scripts.rules.length > 0 ? { [EXTRACT_RULES_KEY]: serializeRules(scripts.rules) } : {},
     }
   }
 
-  function convertItems(items: Obj[]): { requests: ExportRequest[]; folders: ExportFolder[] } {
+  function convertItems(items: Obj[], depth = 0): { requests: ExportRequest[]; folders: ExportFolder[] } {
     const requests: ExportRequest[] = []
     const folders: ExportFolder[] = []
     for (const item of items) {
+      budget.take(depth)
       if (Array.isArray(item.item)) {
         const name = str(item.name) || 'Folder'
         if (hasScript(item.event)) warnings.push(`Folder "${name}": its scripts were not imported.`)
+        addVariablesAtCollectionScope(item.variable, 'folder', variables, stats)
         folders.push({
           name,
           description: text(item.description),
           auth: convertAuth(item.auth, `Folder "${name}"`, warnings),
           ssl: 'inherit',
-          ...convertItems(list(item.item)),
+          ...parseProtocolProfileBehavior(item.protocolProfileBehavior, 'folder', stats),
+          ...convertItems(list(item.item), depth + 1),
         })
       } else if (item.request !== undefined) {
         requests.push(convertRequest(item))
@@ -285,12 +375,34 @@ export function convertPostman(doc: Obj): ImportResult {
   }
 
   if (hasScript(doc.event)) warnings.push('Collection-level scripts were not imported.')
+  const collectionProtocolProfile = parseProtocolProfileBehavior(doc.protocolProfileBehavior, 'collection', stats)
   const { requests, folders } = convertItems(list(doc.item))
   if (requests.length === 0 && folders.length === 0) warnings.push('The collection has no requests.')
   if (dynamic.size > 0) {
     warnings.push(`Postman dynamic variables Postly does not provide are used and will stay unresolved: ${[...dynamic].map((d) => `{{${d}}}`).join(', ')}.`)
   }
   for (const [name, value] of pathVariables) if (!variables.has(name)) variables.set(name, { value, isSecret: false })
+  if (stats.folderVariables + stats.itemVariables > 0) {
+    const collapsed = [
+      stats.folderVariables > 0 ? `${stats.folderVariables} folder variable${stats.folderVariables === 1 ? '' : 's'}` : '',
+      stats.itemVariables > 0 ? `${stats.itemVariables} item variable${stats.itemVariables === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' and ')
+    warnings.push(`${collapsed} ${stats.folderVariables + stats.itemVariables === 1 ? 'was' : 'were'} imported as collection variables because Postly only supports collection-scoped variables; collection variables kept priority and the first value won when names collided.`)
+  }
+  if (stats.responseExamples > 0) {
+    warnings.push(`${stats.responseExamples} saved response example${stats.responseExamples === 1 ? '' : 's'} across ${stats.requestsWithExamples} request${stats.requestsWithExamples === 1 ? '' : 's'} were not imported.`)
+  }
+  const protocolProfileTotal = Object.values(stats.protocolProfileScopes).reduce((sum, count) => sum + count, 0)
+  if (protocolProfileTotal > 0) {
+    const scopes = [
+      stats.protocolProfileScopes.collection > 0 ? `${stats.protocolProfileScopes.collection} collection` : '',
+      stats.protocolProfileScopes.folder > 0 ? `${stats.protocolProfileScopes.folder} folder${stats.protocolProfileScopes.folder === 1 ? '' : 's'}` : '',
+      stats.protocolProfileScopes.item > 0 ? `${stats.protocolProfileScopes.item} item${stats.protocolProfileScopes.item === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(', ')
+    const mapped = [...stats.mappedProtocolProfileKeys].sort()
+    const ignored = [...stats.ignoredProtocolProfileKeys].sort()
+    warnings.push(`protocolProfileBehavior was imported from ${scopes}.${mapped.length > 0 ? ` Mapped: ${mapped.join(', ')}.` : ''}${ignored.length > 0 ? ` Ignored keys: ${ignored.join(', ')}.` : ''}`)
+  }
 
   const rootAuth = convertAuth(doc.auth, 'Collection', warnings)
   const collection: ExportCollection = {
@@ -299,6 +411,7 @@ export function convertPostman(doc: Obj): ImportResult {
     source: 'local',
     auth: rootAuth.type === 'inherit' ? { ...NO_AUTH } : rootAuth,
     ssl: 'inherit',
+    ...collectionProtocolProfile,
     variables: [...variables].map(([key, v]) => ({ key, value: v.isSecret ? '' : v.value, isSecret: v.isSecret })),
     requests,
     folders,

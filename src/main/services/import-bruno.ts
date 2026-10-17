@@ -1,9 +1,10 @@
+import crypto from 'crypto'
 import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../shared/extract'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
 import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
-import crypto from 'crypto'
 import { parseBru, type BruBlocks, type BruRow } from './bru-lang'
-import { isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
+import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
+import { MAX_REDIRECT_LIMIT, MAX_TIMEOUT_MS, type NetworkSettings } from './network-settings'
 
 // Bruno collections: a directory of .bru files (bruno.json, collection.bru, folder.bru, requests,
 // environments/*.bru), or the JSON file produced by Bruno's "Export collection".
@@ -22,6 +23,12 @@ const NO_AUTH: Auth = { type: 'none', config: {} }
 const INHERIT: Auth = { type: 'inherit', config: {} }
 const SUPPORTED_DYNAMIC = new Set(DYNAMIC_VARIABLES.map((v) => v.name))
 
+interface MultipartRow extends BruRow {
+  fileType?: boolean
+  contentType?: string
+  values?: string[]
+}
+
 /** One request, whichever way it was stored. */
 interface BruRequest {
   name: string
@@ -35,12 +42,14 @@ interface BruRequest {
   body: Obj
   authMode: string
   auth: Obj
+  settings: Obj
   varsPre: BruRow[]
   varsPost: BruRow[]
   hasScripts: boolean
   hasTests: boolean
   assertions: number
   docs: string
+  hasTags: boolean
 }
 
 /** Settings shared by a folder or the collection. */
@@ -53,6 +62,29 @@ interface BruSettings {
   varsPre: BruRow[]
   hasScripts: boolean
   docs: string
+  hasTags: boolean
+}
+
+interface Tree {
+  settings: BruSettings
+  requests: BruRequest[]
+  folders: Tree[]
+  unsupported: string[]
+}
+
+interface Context {
+  warnings: string[]
+  variables: Map<string, string>
+  pathVariables: Map<string, string>
+  dynamic: Set<string>
+  scripted: string[]
+  tested: string[]
+  preVars: string[]
+  hasTags: boolean
+  unknownBlocks: Set<string>
+  multipartContentTypes: boolean
+  oauthDrops: Set<string>
+  unsupportedSettings: Set<string>
 }
 
 const num = (v: unknown, fallback = 0): number => {
@@ -60,10 +92,25 @@ const num = (v: unknown, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback
 }
 const rowsOf = (v: unknown): BruRow[] => list(v).map((r) => ({ name: str(r.name), value: str(r.value), enabled: r.enabled !== false }))
-
-// ─── .bru → model ────────────────────────────────────────────────────────────
-
 const toDict = (rows: BruRow[] | undefined): Obj => Object.fromEntries((rows ?? []).map((r) => [r.name, r.value]))
+const hasMetaTags = (rows: BruRow[] | undefined): boolean => !!rows?.some((r) => r.name === 'tags' && r.value.trim())
+const emptySettings = (name: string): BruSettings => ({ name, seq: 0, headers: [], authMode: '', auth: {}, varsPre: [], hasScripts: false, docs: '', hasTags: false })
+
+function additionalParametersFromBlocks(b: BruBlocks): Obj | undefined {
+  const read = (name: string, sendIn: string) => (b.dicts.get(name) ?? []).map((row) => ({ ...row, sendIn }))
+  const authorization = [...read('auth:oauth2:additional_params:auth_req:headers', 'headers'), ...read('auth:oauth2:additional_params:auth_req:queryparams', 'queryparams')]
+  const token = [
+    ...read('auth:oauth2:additional_params:access_token_req:headers', 'headers'),
+    ...read('auth:oauth2:additional_params:access_token_req:queryparams', 'queryparams'),
+    ...read('auth:oauth2:additional_params:access_token_req:body', 'body'),
+  ]
+  const refresh = [
+    ...read('auth:oauth2:additional_params:refresh_token_req:headers', 'headers'),
+    ...read('auth:oauth2:additional_params:refresh_token_req:queryparams', 'queryparams'),
+    ...read('auth:oauth2:additional_params:refresh_token_req:body', 'body'),
+  ]
+  return authorization.length > 0 || token.length > 0 || refresh.length > 0 ? { authorization, token, refresh } : undefined
+}
 
 function authFromBlocks(b: BruBlocks): Obj {
   const get = (name: string) => toDict(b.dicts.get(`auth:${name}`))
@@ -79,18 +126,38 @@ function authFromBlocks(b: BruBlocks): Obj {
     oauth1: get('oauth1'),
     apikey: key,
     oauth2: {
-      grantType: o.grant_type, authorizationUrl: o.authorization_url, accessTokenUrl: o.access_token_url, clientId: o.client_id,
-      clientSecret: o.client_secret, scope: o.scope, callbackUrl: o.callback_url,
+      grantType: o.grant_type,
+      authorizationUrl: o.authorization_url,
+      accessTokenUrl: o.access_token_url,
+      refreshTokenUrl: o.refresh_token_url,
+      clientId: o.client_id,
+      clientSecret: o.client_secret,
+      scope: o.scope,
+      callbackUrl: o.callback_url,
+      username: o.username,
+      password: o.password,
+      state: o.state,
+      pkce: o.pkce,
+      credentialsPlacement: o.credentials_placement,
+      credentialsId: o.credentials_id,
+      tokenSource: o.token_source,
+      tokenPlacement: o.token_placement,
+      tokenHeaderPrefix: o.token_header_prefix,
+      tokenQueryKey: o.token_query_key,
+      autoFetchToken: o.auto_fetch_token,
+      autoRefreshToken: o.auto_refresh_token,
+      ...(additionalParametersFromBlocks(b) ? { additionalParameters: additionalParametersFromBlocks(b) } : {}),
     },
   }
 }
 
 function requestFromBru(source: string, fallbackName: string): { request: BruRequest; unknown: string[] } {
   const b = parseBru(source)
-  const meta = toDict(b.dicts.get('meta'))
+  const metaRows = b.dicts.get('meta')
+  const meta = toDict(metaRows)
   const verb = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'connect', 'trace'].find((m) => b.dicts.has(m))
   const http = toDict(b.dicts.get(verb ?? 'http'))
-  const params = (b.dicts.get('params:query') ?? []).map((r) => ({ ...r, type: 'query' }))
+  const params = [...(b.dicts.get('params:query') ?? []), ...(b.dicts.get('query') ?? [])].map((r) => ({ ...r, type: 'query' }))
     .concat((b.dicts.get('params:path') ?? []).map((r) => ({ ...r, type: 'path' })))
   const t = (name: string) => b.texts.get(name) ?? ''
   return {
@@ -113,19 +180,22 @@ function requestFromBru(source: string, fallbackName: string): { request: BruReq
       },
       authMode: str(http.auth) || 'none',
       auth: authFromBlocks(b),
+      settings: toDict(b.dicts.get('settings')),
       varsPre: b.dicts.get('vars:pre-request') ?? [],
       varsPost: b.dicts.get('vars:post-response') ?? [],
       hasScripts: !!(t('script:pre-request').trim() || t('script:post-response').trim()),
       hasTests: !!t('tests').trim(),
       assertions: (b.dicts.get('assert') ?? []).length,
       docs: t('docs'),
+      hasTags: hasMetaTags(metaRows),
     },
   }
 }
 
 function settingsFromBru(source: string, fallbackName: string): BruSettings & { unknown: string[] } {
   const b = parseBru(source)
-  const meta = toDict(b.dicts.get('meta'))
+  const metaRows = b.dicts.get('meta')
+  const meta = toDict(metaRows)
   const mode = toDict(b.dicts.get('auth')).mode
   return {
     name: str(meta.name) || fallbackName,
@@ -136,11 +206,10 @@ function settingsFromBru(source: string, fallbackName: string): BruSettings & { 
     varsPre: b.dicts.get('vars:pre-request') ?? [],
     hasScripts: !!(b.texts.get('script:pre-request')?.trim() || b.texts.get('script:post-response')?.trim() || b.texts.get('tests')?.trim()),
     docs: b.texts.get('docs') ?? '',
+    hasTags: hasMetaTags(metaRows),
     unknown: b.unknown,
   }
 }
-
-// ─── Bruno JSON export → model ───────────────────────────────────────────────
 
 function requestFromExport(item: Obj): BruRequest {
   const r = isObj(item.request) ? item.request : {}
@@ -158,40 +227,58 @@ function requestFromExport(item: Obj): BruRequest {
     headers: rowsOf(r.headers),
     bodyMode: str(body.mode) || 'none',
     body: {
-      json: str(body.json), text: str(body.text), xml: str(body.xml), sparql: str(body.sparql),
+      json: str(body.json),
+      text: str(body.text),
+      xml: str(body.xml),
+      sparql: str(body.sparql),
       graphql: isObj(body.graphql) ? body.graphql : {},
       formUrlEncoded: rowsOf(body.formUrlEncoded),
-      multipartForm: list(body.multipartForm).map((p) => ({ name: str(p.name), value: str(p.value), enabled: p.enabled !== false, fileType: p.type === 'file' })),
+      multipartForm: list(body.multipartForm).map((p) => {
+        const fileType = str(p.type) === 'file'
+        const values = fileType
+          ? Array.isArray(p.value) ? p.value.filter((v): v is string => typeof v === 'string' && v.length > 0) : typeof p.value === 'string' && p.value ? [p.value] : []
+          : undefined
+        return {
+          name: str(p.name),
+          value: fileType ? (values?.[0] ?? '') : str(p.value),
+          enabled: p.enabled !== false,
+          ...(fileType ? { fileType, values } : {}),
+          ...(str(p.contentType) ? { contentType: str(p.contentType) } : {}),
+        }
+      }),
       file: list(body.file),
     },
     authMode: str(auth.mode) || 'none',
     auth,
+    settings: isObj(item.settings) ? item.settings : {},
     varsPre: rowsOf(vars.req),
     varsPost: rowsOf(vars.res),
     hasScripts: !!(str(script.req).trim() || str(script.res).trim()),
     hasTests: !!str(r.tests).trim(),
     assertions: list(r.assertions).length,
     docs: str(r.docs),
+    hasTags: Array.isArray(item.tags) && item.tags.length > 0,
   }
 }
 
 function settingsFromExport(root: unknown, name: string, seq: number): BruSettings {
-  const r = isObj(root) && isObj(root.request) ? root.request : {}
+  const raw = isObj(root) ? root : {}
+  const r = isObj(raw.request) ? raw.request : {}
   const script = isObj(r.script) ? r.script : {}
   const vars = isObj(r.vars) ? r.vars : {}
   const auth = isObj(r.auth) ? r.auth : {}
   return {
-    name, seq,
+    name,
+    seq,
     headers: rowsOf(r.headers),
     authMode: str(auth.mode),
     auth,
     varsPre: rowsOf(vars.req),
     hasScripts: !!(str(script.req).trim() || str(script.res).trim() || str(r.tests).trim()),
     docs: str(r.docs),
+    hasTags: Array.isArray(raw.tags) && raw.tags.length > 0,
   }
 }
-
-// ─── Conversion ──────────────────────────────────────────────────────────────
 
 const POST_VAR = /^\$?res\.(body|status|headers)(.*)$/
 
@@ -209,7 +296,35 @@ function extractRule(row: BruRow): ExtractRule | null {
 
 const GRANTS = new Set(['authorization_code', 'client_credentials', 'password', 'implicit'])
 
-function convertAuth(mode: string, auth: Obj, label: string, warnings: string[]): Auth {
+function hasAdditionalParameters(raw: unknown): boolean {
+  if (!isObj(raw)) return false
+  return ['authorization', 'token', 'refresh'].some((key) => Array.isArray(raw[key]) && raw[key].length > 0)
+}
+
+function boolValue(v: unknown): boolean | undefined {
+  if (typeof v === 'boolean') return v
+  const s = str(v).toLowerCase()
+  return s === 'true' ? true : s === 'false' ? false : undefined
+}
+
+function intValue(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isInteger(v)) return v
+  const s = str(v).trim()
+  return /^-?\d+$/.test(s) ? Number(s) : undefined
+}
+
+function trackOAuthDrops(o: Obj, grant: string, drops: Set<string>) {
+  if (str(o.refreshTokenUrl)) drops.add('refresh token URL')
+  if (str(o.state)) drops.add('state')
+  if (boolValue(o.pkce) === true) drops.add('PKCE')
+  if (str(o.credentialsPlacement) || str(o.credentialsId)) drops.add('credentials placement / saved credentials')
+  if (str(o.tokenPlacement) || str(o.tokenHeaderPrefix) || str(o.tokenQueryKey) || str(o.tokenSource)) drops.add('token placement / prefix / query key')
+  if (o.autoFetchToken !== undefined || o.autoRefreshToken !== undefined) drops.add('automatic token fetch / refresh')
+  if (hasAdditionalParameters(o.additionalParameters)) drops.add('additional auth/token/refresh parameters')
+  if (grant === 'password') drops.add('password grant username / password')
+}
+
+function convertAuth(mode: string, auth: Obj, label: string, ctx: Context): Auth {
   const a = (name: string): Obj => (isObj(auth[name]) ? auth[name] : {})
   switch (mode) {
     case '':
@@ -237,24 +352,65 @@ function convertAuth(mode: string, auth: Obj, label: string, warnings: string[])
       const o = a('oauth2')
       const grant = str(o.grantType) || 'authorization_code'
       if (!GRANTS.has(grant)) {
-        warnings.push(`${label}: OAuth 2.0 grant type "${grant}" is not supported; configure authentication manually.`)
+        ctx.warnings.push(`${label}: OAuth 2.0 grant type "${grant}" is not supported; configure authentication manually.`)
         return { ...NO_AUTH }
       }
-      if (grant === 'password') warnings.push(`${label}: the username and password of the OAuth 2.0 password grant were not mapped.`)
+      trackOAuthDrops(o, grant, ctx.oauthDrops)
       return {
         type: 'oauth2',
-        config: { grantType: grant, clientId: str(o.clientId), clientSecret: str(o.clientSecret), authUrl: str(o.authorizationUrl), tokenUrl: str(o.accessTokenUrl), scopes: str(o.scope), redirectUri: str(o.callbackUrl) },
+        config: {
+          grantType: grant,
+          clientId: str(o.clientId),
+          clientSecret: str(o.clientSecret),
+          authUrl: str(o.authorizationUrl ?? o.authUrl),
+          tokenUrl: str(o.accessTokenUrl ?? o.tokenUrl),
+          scopes: str(o.scope ?? o.scopes),
+          redirectUri: str(o.callbackUrl ?? o.redirectUri),
+        },
       }
     }
     default:
-      warnings.push(`${label}: "${mode}" authentication is not supported; configure it manually.`)
+      ctx.warnings.push(`${label}: "${mode}" authentication is not supported; configure it manually.`)
       return { ...NO_AUTH }
   }
 }
 
-function convertBody(r: BruRequest, label: string, warnings: string[]): { bodyType: string; bodyContent: string } {
+function stripPartContentType(value: string): { value: string; contentType?: string } {
+  const match = /^(.*?)\s*@contentType\((.*?)\)\s*$/s.exec(value)
+  if (!match) return { value }
+  return { value: match[1].trimEnd(), contentType: match[2].trim() || undefined }
+}
+
+function fileValues(value: string): string[] | null {
+  const match = /^@file\((.*?)\)$/s.exec(value.trim())
+  return match ? match[1].split('|').map((v) => v.trim()).filter(Boolean) : null
+}
+
+function mapMultipartRows(raw: unknown, label: string, ctx: Context): Array<ReturnType<typeof kv> & { fieldType?: 'file' }> {
+  const rows = Array.isArray(raw) ? raw as MultipartRow[] : []
+  const out: Array<ReturnType<typeof kv> & { fieldType?: 'file' }> = []
+  let warnedMissingFiles = false
+  for (const part of rows) {
+    const stripped = stripPartContentType(part.value)
+    if (part.contentType || stripped.contentType) ctx.multipartContentTypes = true
+    const paths = part.values?.filter(Boolean) ?? fileValues(stripped.value)
+    if (part.fileType || paths) {
+      if (!paths || paths.length === 0) {
+        if (!warnedMissingFiles) ctx.warnings.push(`${label}: one or more multipart file fields were not imported; pick them again in the Body tab.`)
+        warnedMissingFiles = true
+        continue
+      }
+      out.push(...paths.map((value) => ({ ...kv(part.name, value, part.enabled), fieldType: 'file' as const })))
+      continue
+    }
+    out.push(kv(part.name, stripped.value, part.enabled))
+  }
+  return out
+}
+
+function convertBody(r: BruRequest, label: string, ctx: Context): { bodyType: string; bodyContent: string } {
   const body = r.body
-  const rows = (v: unknown): Array<BruRow & { fileType?: boolean }> => (Array.isArray(v) ? (v as Array<BruRow & { fileType?: boolean }>) : [])
+  const rows = (v: unknown): BruRow[] => (Array.isArray(v) ? v as BruRow[] : [])
   switch (r.bodyMode) {
     case 'json': return { bodyType: 'raw-json', bodyContent: str(body.json) }
     case 'text': return { bodyType: 'raw-text', bodyContent: str(body.text) }
@@ -267,55 +423,67 @@ function convertBody(r: BruRequest, label: string, warnings: string[]): { bodyTy
     case 'formUrlEncoded':
       return { bodyType: 'x-www-form-urlencoded', bodyContent: JSON.stringify(rows(body.formUrlEncoded).map((p) => kv(p.name, p.value, p.enabled))) }
     case 'multipartForm':
-      return {
-        bodyType: 'form-data',
-        bodyContent: JSON.stringify(rows(body.multipartForm).map((p) => {
-          // .bru files mark a file part as `@file(path)`
-          const file = /^@file\((.*?)\)(\s|$)/.exec(p.value)
-          return { ...kv(p.name, file ? file[1] : p.value, p.enabled), ...(file || p.fileType ? { fieldType: 'file' } : {}) }
-        })),
-      }
+      return { bodyType: 'form-data', bodyContent: JSON.stringify(mapMultipartRows(body.multipartForm, label, ctx)) }
     case 'file':
-      warnings.push(`${label}: the file for the binary body was not imported; pick it again in the Body tab.`)
+      ctx.warnings.push(`${label}: the file for the binary body was not imported; pick it again in the Body tab.`)
       return { bodyType: 'binary', bodyContent: '' }
     case 'none':
       return { bodyType: 'none', bodyContent: '' }
     default:
-      warnings.push(`${label}: body type "${r.bodyMode}" is not supported.`)
+      ctx.warnings.push(`${label}: body type "${r.bodyMode}" is not supported.`)
       return { bodyType: 'none', bodyContent: '' }
   }
-}
-
-interface Context {
-  warnings: string[]
-  variables: Map<string, string>
-  pathVariables: Map<string, string>
-  dynamic: Set<string>
-  scripted: string[]
-  tested: string[]
-  preVars: string[]
 }
 
 function noteDynamic(ctx: Context, value: string) {
   for (const m of value.matchAll(/\{\{\s*(\$[A-Za-z]+)\s*\}\}/g)) if (!SUPPORTED_DYNAMIC.has(m[1])) ctx.dynamic.add(m[1])
 }
 
+function networkFromSettings(raw: Obj, ctx: Context): NetworkSettings | undefined {
+  const out: NetworkSettings = {}
+  for (const [key, value] of Object.entries(raw)) {
+    switch (key) {
+      case 'followRedirects': {
+        const parsed = boolValue(value)
+        if (parsed === undefined) ctx.unsupportedSettings.add('followRedirects (invalid values)')
+        else out.followRedirects = parsed
+        break
+      }
+      case 'maxRedirects': {
+        const parsed = intValue(value)
+        if (parsed === undefined || parsed < 0 || parsed > MAX_REDIRECT_LIMIT) ctx.unsupportedSettings.add('maxRedirects (invalid values)')
+        else out.maxRedirects = parsed
+        break
+      }
+      case 'timeout': {
+        const parsed = intValue(value)
+        if (parsed === undefined || parsed <= 0 || parsed > MAX_TIMEOUT_MS) ctx.unsupportedSettings.add('timeout (non-positive or out-of-range values)')
+        else out.timeout = parsed
+        break
+      }
+      default:
+        ctx.unsupportedSettings.add(key)
+        break
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function convertRequest(r: BruRequest, ctx: Context): ExportRequest {
   const label = `"${r.name}"`
-  const { warnings } = ctx
   const declared = r.params.filter((p) => p.type === 'path').map((p) => ({ key: p.name, value: p.value }))
   const split = splitUrl(r.url, ctx.pathVariables, declared)
   const queryRows = r.params.filter((p) => p.type !== 'path')
-  const params = queryRows.length > 0 || split.query === null
-    ? queryRows.map((p) => kv(p.name, p.value, p.enabled))
-    : parseQuery(split.query)
+  const params = queryRows.length > 0 || split.query === null ? queryRows.map((p) => kv(p.name, p.value, p.enabled)) : parseQuery(split.query)
   const headers = r.headers.filter((h) => h.name).map((h) => kv(h.name, h.value, h.enabled))
-  const body = convertBody(r, label, warnings)
-  const auth = convertAuth(r.authMode, r.auth, label, warnings)
+  const body = convertBody(r, label, ctx)
+  const auth = convertAuth(r.authMode, r.auth, label, ctx)
+  const network = networkFromSettings(r.settings, ctx)
 
   if (r.hasScripts) ctx.scripted.push(label)
   if (r.hasTests || r.assertions > 0) ctx.tested.push(label)
   if (r.varsPre.length > 0) ctx.preVars.push(label)
+  if (r.hasTags) ctx.hasTags = true
 
   const rules: ExtractRule[] = []
   const skipped: string[] = []
@@ -324,7 +492,7 @@ function convertRequest(r: BruRequest, ctx: Context): ExportRequest {
     if (rule) rules.push(rule)
     else skipped.push(row.name)
   }
-  if (skipped.length > 0) warnings.push(`${label}: ${skipped.length} post-response variable${skipped.length === 1 ? '' : 's'} could not be converted (${skipped.slice(0, 3).join(', ')}).`)
+  if (skipped.length > 0) ctx.warnings.push(`${label}: ${skipped.length} post-response variable${skipped.length === 1 ? '' : 's'} could not be converted (${skipped.slice(0, 3).join(', ')}).`)
 
   for (const value of [split.url, ...params.map((p) => p.key + p.value), ...headers.map((h) => h.key + h.value), body.bodyContent]) noteDynamic(ctx, value)
 
@@ -339,16 +507,10 @@ function convertRequest(r: BruRequest, ctx: Context): ExportRequest {
     bodyContent: body.bodyContent,
     auth,
     ssl: 'inherit',
+    ...(network ? { network } : {}),
     description: r.docs,
     protocolConfig: rules.length > 0 ? { [EXTRACT_RULES_KEY]: serializeRules(rules) } : {},
   }
-}
-
-interface Tree {
-  settings: BruSettings
-  requests: BruRequest[]
-  folders: Tree[]
-  unsupported: string[]
 }
 
 function convertFolderSettings(s: BruSettings, label: string, ctx: Context): { description: string; auth: Auth } {
@@ -358,7 +520,8 @@ function convertFolderSettings(s: BruSettings, label: string, ctx: Context): { d
     for (const row of s.varsPre) if (row.enabled && !ctx.variables.has(row.name)) ctx.variables.set(row.name, row.value)
     ctx.warnings.push(`${label}: its variables were added to the collection variables.`)
   }
-  return { description: s.docs, auth: convertAuth(s.authMode, s.auth, label, ctx.warnings) }
+  if (s.hasTags) ctx.hasTags = true
+  return { description: s.docs, auth: convertAuth(s.authMode, s.auth, label, ctx) }
 }
 
 function convertTree(tree: Tree, ctx: Context): { requests: ExportRequest[]; folders: ExportFolder[] } {
@@ -372,10 +535,10 @@ function convertTree(tree: Tree, ctx: Context): { requests: ExportRequest[]; fol
   return { requests, folders }
 }
 
-function finish(name: string, settings: BruSettings, tree: Tree, environments: string[], extra: string[], seedWarnings: string[]): BrunoEntry {
-  const ctx: Context = { warnings: [...seedWarnings], variables: new Map(), pathVariables: new Map(), dynamic: new Set(), scripted: [], tested: [], preVars: [] }
+function finish(name: string, settings: BruSettings, tree: Tree, environments: string[], extra: string[], ctx: Context): BrunoEntry {
   for (const row of settings.varsPre) if (row.enabled && !ctx.variables.has(row.name)) ctx.variables.set(row.name, row.value)
-  const rootAuth = convertAuth(settings.authMode, settings.auth, 'Collection', ctx.warnings)
+  if (settings.hasTags) ctx.hasTags = true
+  const rootAuth = convertAuth(settings.authMode, settings.auth, 'Collection', ctx)
   if (settings.headers.some((h) => h.name)) ctx.warnings.push('Collection: its headers were not imported; add them to each request.')
   if (settings.hasScripts) ctx.scripted.push('Collection')
 
@@ -388,10 +551,13 @@ function finish(name: string, settings: BruSettings, tree: Tree, environments: s
   }
   if (ctx.preVars.length > 0) ctx.warnings.push(`Request variables (pre-request vars) were not imported for ${ctx.preVars.length} request${ctx.preVars.length === 1 ? '' : 's'} (${ctx.preVars.slice(0, 3).join(', ')}${ctx.preVars.length > 3 ? ', …' : ''}).`)
   if (ctx.tested.length > 0) ctx.warnings.push(`Tests and assertions were not imported for ${ctx.tested.length} request${ctx.tested.length === 1 ? '' : 's'}.`)
-  if (environments.length > 0) {
-    ctx.warnings.push(`${environments.length} environment${environments.length === 1 ? ' was' : 's were'} not imported (${environments.slice(0, 3).join(', ')}${environments.length > 3 ? ', …' : ''}); create them in Postly and set the variables your requests use.`)
-  }
+  if (environments.length > 0) ctx.warnings.push(`${environments.length} environment${environments.length === 1 ? ' was' : 's were'} not imported (${environments.slice(0, 3).join(', ')}${environments.length > 3 ? ', …' : ''}); create them in Postly and set the variables your requests use.`)
   if (ctx.dynamic.size > 0) ctx.warnings.push(`Dynamic variables Postly does not provide are used and will stay unresolved: ${[...ctx.dynamic].map((d) => `{{${d}}}`).join(', ')}.`)
+  if (ctx.unknownBlocks.size > 0) ctx.warnings.push(`Unsupported Bruno blocks were ignored: ${[...ctx.unknownBlocks].sort().join(', ')}.`)
+  if (ctx.hasTags) ctx.warnings.push('Tags on the collection, folders, or requests were not imported.')
+  if (ctx.multipartContentTypes) ctx.warnings.push('Multipart part content types were not imported because Postly form-data rows do not support them.')
+  if (ctx.oauthDrops.size > 0) ctx.warnings.push(`OAuth 2.0 settings were not imported: ${[...ctx.oauthDrops].join(', ')}.`)
+  if (ctx.unsupportedSettings.size > 0) ctx.warnings.push(`Bruno request settings were not imported: ${[...ctx.unsupportedSettings].sort().join(', ')}.`)
   ctx.warnings.push(...extra)
   for (const [key, value] of ctx.pathVariables) if (!ctx.variables.has(key)) ctx.variables.set(key, value)
 
@@ -406,17 +572,24 @@ function finish(name: string, settings: BruSettings, tree: Tree, environments: s
       requests,
       folders,
     },
-    warnings: ctx.warnings,
+    warnings: [...new Set(ctx.warnings)],
   }
 }
-
-const emptySettings = (name: string): BruSettings => ({ name, seq: 0, headers: [], authMode: '', auth: {}, varsPre: [], hasScripts: false, docs: '' })
-
-// ─── Directories of .bru files ───────────────────────────────────────────────
 
 const IGNORED_DIRS = new Set(['node_modules', '.git'])
 const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1)
 const dirName = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+
+function commonAncestor(paths: string[]): string {
+  if (paths.length === 0) return ''
+  let parts = dirName(paths[0]).split('/').filter(Boolean)
+  for (const current of paths.slice(1).map((p) => dirName(p).split('/').filter(Boolean))) {
+    let i = 0
+    while (i < parts.length && i < current.length && parts[i] === current[i]) i++
+    parts = parts.slice(0, i)
+  }
+  return parts.join('/')
+}
 
 export function isBrunoYamlCollection(files: BrunoFile[]): boolean {
   return files.some((f) => /(^|\/)opencollection\.ya?ml$/.test(f.path))
@@ -428,10 +601,9 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
 
   const roots = files.filter((f) => baseName(f.path) === 'bruno.json').map((f) => dirName(f.path))
   if (roots.length === 0) {
-    // Without bruno.json the picked folder itself is the collection
-    const first = files.find((f) => f.path.endsWith('.bru'))
-    if (!first) return []
-    roots.push(first.path.split('/').length > 1 ? first.path.split('/')[0] : '')
+    const bruFiles = files.filter((f) => f.path.endsWith('.bru'))
+    if (bruFiles.length === 0) return []
+    roots.push(commonAncestor(bruFiles.map((f) => f.path)))
   }
   roots.sort((a, b) => b.length - a.length)
   const owner = (path: string) => roots.find((r) => r === '' || path.startsWith(`${r}/`))
@@ -440,6 +612,8 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
     const prefix = root ? `${root}/` : ''
     const mine = files.filter((f) => owner(f.path) === root)
     const rel = (f: BrunoFile) => f.path.slice(prefix.length)
+    const budget = new ImportBudget()
+    const unknownBlocks = new Set<string>()
 
     const warnings: string[] = []
     let name = baseName(root)
@@ -459,9 +633,12 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
 
     const environments = mine.filter((f) => /^environments\/[^/]+\.bru$/.test(rel(f))).map((f) => baseName(f.path).replace(/\.bru$/, ''))
     const collectionBru = mine.find((f) => rel(f) === 'collection.bru')
-    const settings = collectionBru ? settingsFromBru(collectionBru.text, name) : emptySettings(name)
+    const parsedSettings = collectionBru ? settingsFromBru(collectionBru.text, name) : undefined
+    const settings = parsedSettings ?? emptySettings(name)
+    for (const block of parsedSettings?.unknown ?? []) unknownBlocks.add(block)
 
-    const makeTree = (dir: string, folderSettings: BruSettings): Tree => {
+    const makeTree = (dir: string, folderSettings: BruSettings, depth: number): Tree => {
+      budget.take(depth)
       const tree: Tree = { settings: folderSettings, requests: [], folders: [], unsupported: [] }
       const subdirs = new Set<string>()
       for (const f of mine) {
@@ -471,34 +648,54 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
         if (rest.includes('/')) subdirs.add(rest.split('/')[0])
         else if (f.path.endsWith('.bru') && baseName(f.path) !== 'folder.bru' && !(dir === '' && rest === 'collection.bru')) {
           const parsed = requestFromBru(f.text, baseName(f.path).replace(/\.bru$/, ''))
+          for (const block of parsed.unknown) unknownBlocks.add(block)
+          budget.take(depth + 1)
           if (parsed.request.type === 'http' || parsed.request.type === 'graphql') tree.requests.push(parsed.request)
           else tree.unsupported.push(parsed.request.name)
         }
       }
       for (const sub of [...subdirs].sort()) {
         const folderFile = mine.find((f) => rel(f) === `${dir}${sub}/folder.bru`)
-        const s = folderFile ? settingsFromBru(folderFile.text, sub) : emptySettings(sub)
-        tree.folders.push(makeTree(`${dir}${sub}/`, s))
+        const parsedFolderSettings = folderFile ? settingsFromBru(folderFile.text, sub) : undefined
+        const s = parsedFolderSettings ?? emptySettings(sub)
+        for (const block of parsedFolderSettings?.unknown ?? []) unknownBlocks.add(block)
+        tree.folders.push(makeTree(`${dir}${sub}/`, s, depth + 1))
       }
       return tree
     }
-    return finish(name, settings, makeTree('', settings), environments, extra, warnings)
+
+    const ctx: Context = {
+      warnings: [...warnings],
+      variables: new Map(),
+      pathVariables: new Map(),
+      dynamic: new Set(),
+      scripted: [],
+      tested: [],
+      preVars: [],
+      hasTags: false,
+      unknownBlocks,
+      multipartContentTypes: false,
+      oauthDrops: new Set(),
+      unsupportedSettings: new Set(),
+    }
+    return finish(name, settings, makeTree('', settings, 0), environments, extra, ctx)
   })
 }
-
-// ─── Bruno JSON export ───────────────────────────────────────────────────────
 
 export function isBrunoExport(doc: unknown): boolean {
   return isObj(doc) && typeof doc.name === 'string' && Array.isArray(doc.items) && (doc.version === '1' || doc.version === 1) && (isObj(doc.brunoConfig) || Array.isArray(doc.environments))
 }
 
 export function convertBrunoExport(doc: Obj): BrunoEntry {
-  const build = (items: Obj[], settings: BruSettings): Tree => {
+  const budget = new ImportBudget()
+  const build = (items: Obj[], settings: BruSettings, depth: number): Tree => {
+    budget.take(depth)
     const tree: Tree = { settings, requests: [], folders: [], unsupported: [] }
     for (const item of items) {
+      budget.take(depth + 1)
       if (item.type === 'folder') {
         const name = str(item.name) || 'Folder'
-        tree.folders.push(build(list(item.items), settingsFromExport(item.root, name, num(item.seq))))
+        tree.folders.push(build(list(item.items), settingsFromExport(item.root, name, num(item.seq)), depth + 1))
       } else if (/^(http|graphql)(-request)?$/.test(str(item.type))) tree.requests.push(requestFromExport(item))
       else tree.unsupported.push(str(item.name))
     }
@@ -506,5 +703,19 @@ export function convertBrunoExport(doc: Obj): BrunoEntry {
   }
   const root = settingsFromExport(doc.root, str(doc.name), 0)
   const environments = list(doc.environments).map((e) => str(e.name)).filter(Boolean)
-  return finish(str(doc.name), root, build(list(doc.items), root), environments, [], [])
+  const ctx: Context = {
+    warnings: [],
+    variables: new Map(),
+    pathVariables: new Map(),
+    dynamic: new Set(),
+    scripted: [],
+    tested: [],
+    preVars: [],
+    hasTags: false,
+    unknownBlocks: new Set(),
+    multipartContentTypes: false,
+    oauthDrops: new Set(),
+    unsupportedSettings: new Set(),
+  }
+  return finish(str(doc.name), root, build(list(doc.items), root, 0), environments, [], ctx)
 }

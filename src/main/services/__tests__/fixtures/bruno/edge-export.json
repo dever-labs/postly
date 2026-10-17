@@ -1,0 +1,105 @@
+{
+  "name": "edge-export",
+  "version": "1",
+  "root": {
+    "tags": ["collection-tag"],
+    "request": {
+      "auth": {
+        "mode": "inherit"
+      }
+    }
+  },
+  "items": [
+    {
+      "type": "http",
+      "name": "upload",
+      "seq": 1,
+      "settings": {
+        "followRedirects": false,
+        "maxRedirects": 7,
+        "timeout": 1200,
+        "encodeUrl": true
+      },
+      "tags": ["request-tag"],
+      "request": {
+        "url": "https://example.com/upload",
+        "method": "POST",
+        "headers": [],
+        "params": [],
+        "body": {
+          "mode": "multipartForm",
+          "json": "",
+          "text": "",
+          "xml": "",
+          "sparql": "",
+          "graphql": {},
+          "formUrlEncoded": [],
+          "multipartForm": [
+            {
+              "name": "file",
+              "type": "file",
+              "value": ["a.txt", "b.txt"],
+              "enabled": true,
+              "contentType": "image/png"
+            },
+            {
+              "name": "caption",
+              "type": "text",
+              "value": "hello @contentType(text/plain)",
+              "enabled": true,
+              "contentType": "text/plain"
+            }
+          ],
+          "file": []
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "docs": "",
+        "auth": {
+          "mode": "oauth2",
+          "oauth2": {
+            "grantType": "password",
+            "authorizationUrl": "https://auth.example.com/authorize",
+            "accessTokenUrl": "https://auth.example.com/token",
+            "refreshTokenUrl": "https://auth.example.com/refresh",
+            "clientId": "id",
+            "clientSecret": "secret",
+            "scope": "read write",
+            "callbackUrl": "https://app.example.com/callback",
+            "username": "alice",
+            "password": "secret-password",
+            "state": "xyz",
+            "pkce": true,
+            "credentialsPlacement": "body",
+            "credentialsId": "cred-1",
+            "tokenSource": "id_token",
+            "tokenPlacement": "queryparams",
+            "tokenHeaderPrefix": "Token",
+            "tokenQueryKey": "access_token",
+            "autoFetchToken": false,
+            "autoRefreshToken": true,
+            "additionalParameters": {
+              "authorization": [
+                { "name": "audience", "value": "users", "enabled": true, "sendIn": "queryparams" }
+              ],
+              "token": [
+                { "name": "resource", "value": "api", "enabled": true, "sendIn": "body" }
+              ],
+              "refresh": [
+                { "name": "tenant", "value": "demo", "enabled": true, "sendIn": "headers" }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "environments": [],
+  "brunoConfig": {
+    "version": "1",
+    "name": "edge-export",
+    "type": "collection"
+  }
+}

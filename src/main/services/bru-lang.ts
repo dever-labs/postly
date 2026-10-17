@@ -20,7 +20,7 @@ const TEXT_BLOCKS = new Set([
   'script:pre-request', 'script:post-response', 'tests', 'docs',
 ])
 const LIST_BLOCKS = new Set(['vars:secret'])
-const DICT_PREFIXES = ['params:', 'headers', 'auth', 'body', 'vars', 'assert', 'settings', 'meta', 'get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'connect', 'trace', 'http']
+const DICT_PREFIXES = ['params:', 'query', 'headers', 'auth', 'body', 'vars', 'assert', 'settings', 'meta', 'get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'connect', 'trace', 'http']
 
 const isDict = (name: string) => DICT_PREFIXES.some((p) => name === p || (p.endsWith(':') ? name.startsWith(p) : name.startsWith(`${p}:`)))
 
@@ -55,7 +55,14 @@ function parseDict(lines: string[]): BruRow[] {
     }
 
     let value = rest.trim()
-    if (value === "'''") {
+    if (value === '[') {
+      const items: string[] = []
+      for (i++; i < lines.length && lines[i].trim() !== ']'; i++) {
+        const item = lines[i].trim().replace(/,$/, '')
+        if (item) items.push(item)
+      }
+      value = items.join('\n')
+    } else if (value === "'''") {
       const parts: string[] = []
       for (i++; i < lines.length && lines[i].trim() !== "'''"; i++) parts.push(lines[i])
       const indent = Math.min(...parts.filter((p) => p.trim()).map((p) => /^ */.exec(p)?.[0].length ?? 0), Infinity)

@@ -67,6 +67,24 @@ describe('Postman test scripts', () => {
     expect(parseRules(request.protocolConfig.extractRules as string)).toHaveLength(1)
     expect(warnings).toHaveLength(1)
   })
+
+  it('ignores disabled scripts at collection, folder and request scope', async () => {
+    const preview = await previewImport(JSON.stringify({
+      info: { name: 'C', schema: SCHEMA },
+      event: [{ listen: 'prerequest', disabled: true, script: { exec: ['console.log("collection")'] } }],
+      item: [{
+        name: 'F',
+        event: [{ listen: 'test', disabled: true, script: { exec: ['pm.environment.set("folder", pm.response.code);'] } }],
+        item: [{
+          name: 'R',
+          event: [{ listen: 'test', disabled: true, script: { exec: ['pm.environment.set("request", pm.response.code);'] } }],
+          request: { method: 'GET', url: 'http://x.test' },
+        }],
+      }],
+    }))
+    expect(preview.warnings).toEqual([])
+    expect(preview.collections[0].collection.folders[0].requests[0].protocolConfig).toEqual({})
+  })
 })
 
 describe('Postman auth mapping', () => {
@@ -191,6 +209,74 @@ describe('Postman requests', () => {
     expect(collection.variables).toEqual([{ key: 'a', value: '1', isSecret: false }, { key: 's', value: '', isSecret: true }])
   })
 
+  it('skips disabled collection variables and collapses folder/item variables to collection scope', async () => {
+    const preview = await previewImport(JSON.stringify({
+      info: { name: 'C', schema: SCHEMA },
+      variable: [{ key: 'root', value: '1' }, { key: 'off', value: 'x', disabled: true }],
+      item: [{
+        name: 'Folder',
+        variable: [{ key: 'root', value: 'folder-wins?' }, { key: 'folderOnly', value: '2' }, { key: 'folderDisabled', value: 'x', disabled: true }],
+        item: [{
+          name: 'Request',
+          variable: [{ key: 'folderOnly', value: 'override' }, { key: 'requestOnly', value: '3', type: 'secret' }],
+          request: { method: 'GET', url: 'http://x.test' },
+        }],
+      }],
+    }))
+    expect(preview.collections[0].collection.variables).toEqual([
+      { key: 'root', value: '1', isSecret: false },
+      { key: 'folderOnly', value: '2', isSecret: false },
+      { key: 'requestOnly', value: '', isSecret: true },
+    ])
+    expect(preview.warnings).toHaveLength(1)
+    expect(preview.warnings[0]).toMatch(/2 folder variables and 2 item variables were imported as collection variables/i)
+    expect(preview.warnings[0]).toMatch(/first value won/i)
+  })
+
+  it('parses string-form request headers', async () => {
+    const { request } = await importDoc({
+      name: 'R',
+      request: {
+        method: 'POST',
+        url: 'http://x.test',
+        header: 'Content-Type: application/json\r\nX-Trace: a:b\r\nFlag',
+        body: { mode: 'raw', raw: '{}' },
+      },
+    })
+    expect(request.bodyType).toBe('raw-json')
+    expect(rows(request.headers).map((h) => [h.key, h.value, h.enabled])).toEqual([
+      ['Content-Type', 'application/json', true],
+      ['X-Trace', 'a:b', true],
+      ['Flag', '', true],
+    ])
+  })
+
+  it('warns once about saved responses and protocol profile behavior while mapping redirect overrides', async () => {
+    const preview = await previewImport(JSON.stringify({
+      info: { name: 'C', schema: SCHEMA },
+      protocolProfileBehavior: { followRedirects: false, disableBodyPruning: true },
+      item: [{
+        name: 'Folder',
+        protocolProfileBehavior: { maxRedirects: 2, strictSSL: false },
+        item: [{
+          name: 'R',
+          protocolProfileBehavior: { followRedirects: true, maxRedirects: 1 },
+          response: [{ name: '200' }, { name: '500' }],
+          request: { method: 'GET', url: 'http://x.test' },
+        }],
+      }],
+    }))
+    const collection = preview.collections[0].collection
+    expect(collection.network).toEqual({ followRedirects: false })
+    expect(collection.folders[0].network).toEqual({ maxRedirects: 2 })
+    expect(collection.folders[0].requests[0].network).toEqual({ followRedirects: true, maxRedirects: 1 })
+    expect(preview.warnings).toHaveLength(2)
+    expect(preview.warnings.join('\n')).toMatch(/2 saved response examples across 1 request were not imported/i)
+    expect(preview.warnings.join('\n')).toMatch(/protocolProfileBehavior was imported from 1 collection, 1 folder, 1 item/i)
+    expect(preview.warnings.join('\n')).toMatch(/Mapped: followRedirects, maxRedirects/i)
+    expect(preview.warnings.join('\n')).toMatch(/Ignored keys: disableBodyPruning, strictSSL/i)
+  })
+
   it('maps raw languages, GraphQL and urlencoded bodies', async () => {
     const raw = (language: string) => importDoc({ name: 'R', request: { method: 'POST', url: 'http://x', body: { mode: 'raw', raw: 'x', options: { raw: { language } } } } })
     expect((await raw('json')).request.bodyType).toBe('raw-json')
@@ -230,5 +316,16 @@ describe('script parsing limits', () => {
     expect(result.rules).toEqual([])
     expect(result.warnings.length).toBe(1)
   })
+
+  it('rejects collections nested deeper than the import budget allows', async () => {
+    let item: Record<string, unknown> = { name: 'leaf', request: { method: 'GET', url: 'http://x.test' } }
+    for (let i = 0; i < 66; i++) item = { name: `F${i}`, item: [item] }
+    await expect(previewImport(JSON.stringify({ info: { name: 'C', schema: SCHEMA }, item: [item] }))).rejects.toThrow(/nested deeper than 64 levels/i)
+  })
 })
 
+describe('Postman collection v3', () => {
+  it('explains that the multi-file Git format is unsupported', async () => {
+    await expect(previewImport('$kind: collection\nname: x\n')).rejects.toThrow(/v3/)
+  })
+})

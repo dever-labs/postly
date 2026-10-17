@@ -105,6 +105,7 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
   }
   if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
+  if (obj.$kind === 'collection') throw new Error('This is a Postman collection v3 (multi-file Git format), which is not supported yet. In Postman, export the collection as Collection v2.1 JSON instead.')
   throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, Bruno JSON export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
 }
 

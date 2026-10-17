@@ -14,6 +14,15 @@ const importOne = async (extra: object) => {
   const collection = preview.collections[0].collection
   return { collection, request: collection.requests[0] as ExportRequest, warnings: preview.warnings }
 }
+const minimalV5 = (body: string) => `
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: V5
+meta:
+  id: wrk_1
+collection:
+${body}
+`
 
 describe('Insomnia v4 import', () => {
   it('imports a real v4 export with folders, bodies, variables and warnings', async () => {
@@ -65,6 +74,89 @@ describe('Insomnia v4 import', () => {
     const { request: r, collection } = await importOne({ url: 'https://x.test/users/:id', pathParameters: [{ name: 'id', value: '7' }] })
     expect(r.url).toBe('https://x.test/users/{{id}}')
     expect(collection.variables).toEqual([{ key: 'id', value: '7', isSecret: false }])
+  })
+
+  it('rewrites docs-style path parameters in v4 and v5 exports', async () => {
+    const v4Doc = await importOne({ url: 'https://x.test/users/{user-id}', pathParameters: [{ name: 'user-id', value: '9' }] })
+    expect(v4Doc.request.url).toBe('https://x.test/users/{{user-id}}')
+    expect(v4Doc.collection.variables).toEqual([{ key: 'user-id', value: '9', isSecret: false }])
+
+    const preview = await previewImport(minimalV5(`  - url: https://x.test/users/{orderId}
+    name: R
+    meta:
+      id: req_1
+    method: GET
+    pathParameters:
+      - name: orderId
+        value: "12"
+`))
+    expect(preview.collections[0].collection.requests[0].url).toBe('https://x.test/users/{{orderId}}')
+    expect(preview.collections[0].collection.variables).toEqual([{ key: 'orderId', value: '12', isSecret: false }])
+  })
+
+  it('maps follow-redirect overrides and warns once about unsupported request settings', async () => {
+    const v4Doc = await importOne({
+      settingFollowRedirects: 'off',
+      settingSendCookies: false,
+      settingStoreCookies: false,
+      settingEncodeUrl: false,
+      settingRebuildPath: false,
+    })
+    expect(v4Doc.request.network).toEqual({ followRedirects: false })
+    expect(v4Doc.warnings.join('\n')).toMatch(/cookie handling, URL encoding, auto-rebuild path/)
+
+    const preview = await previewImport(minimalV5(`  - url: https://x.test
+    name: R
+    meta:
+      id: req_2
+    method: GET
+    settings:
+      followRedirects: on
+      encodeUrl: false
+      cookies:
+        send: true
+        store: false
+      rebuildPath: false
+`))
+    expect(preview.collections[0].collection.requests[0].network).toEqual({ followRedirects: true })
+    expect(preview.warnings.join('\n')).toMatch(/cookie handling, URL encoding, auto-rebuild path/)
+  })
+
+  it('imports enabled kvPairData from environments and folders, warning about secret and typed rows', async () => {
+    const preview = await previewImport(v4(
+      {
+        _id: 'env_1',
+        _type: 'environment',
+        parentId: 'wrk_1',
+        name: 'Base',
+        data: { ignored: 'from-data' },
+        kvPairData: [
+          { id: 'envPair_1', name: 'baseVar', value: '1', type: 'str', enabled: true },
+          { id: 'envPair_2', name: 'secretVar', value: 'shh', type: 'secret', enabled: true },
+          { id: 'envPair_3', name: 'disabledVar', value: 'nope', type: 'str', enabled: false },
+        ],
+      },
+      {
+        _id: 'grp_1',
+        _type: 'request_group',
+        parentId: 'wrk_1',
+        name: 'Folder',
+        environment: { ignoredFolder: 'from-data' },
+        kvPairData: [
+          { id: 'envPair_4', name: 'folderJson', value: '{"ok":true}', type: 'json', enabled: true },
+          { id: 'envPair_5', name: 'disabledFolderVar', value: 'nope', type: 'str', enabled: false },
+        ],
+        metaSortKey: 1,
+      },
+      request({ parentId: 'grp_1' }),
+    ))
+    expect(preview.collections[0].collection.variables).toEqual([
+      { key: 'baseVar', value: '1', isSecret: false },
+      { key: 'secretVar', value: 'shh', isSecret: false },
+      { key: 'folderJson', value: '{"ok":true}', isSecret: false },
+    ])
+    expect(preview.warnings.join('\n')).toMatch(/secret and typed environment variables were imported as plain text collection variables/)
+    expect(preview.warnings.join('\n')).toMatch(/Folder "Folder": its environment variables were added to the collection variables/)
   })
 })
 
@@ -129,21 +221,25 @@ describe('Insomnia v5 import', () => {
   it('imports a v5 collection with nested folders and base-environment variables', async () => {
     const preview = await previewImport(fixture('real-insomnia-v5-security.yaml'))
     expect(preview.format).toBe('insomnia')
+    expect(preview.collections).toHaveLength(2)
     expect(preview.collections[0]).toMatchObject({ folders: 2, requests: 7 })
     const c = preview.collections[0].collection
     expect(c.requests[0].url).toBe('{{base_url}}/test/extra-data')
     expect(c.requests[0].auth.type).toBe('basic')
     expect(rows(c.requests[0].headers)[0]).toMatchObject({ key: 'x-inherited-value', value: '{{inherited_value}}' })
+    expect(preview.collections[1]).toMatchObject({ collection: { name: 'Security & Testing (API spec)' } })
+    expect(preview.collections[1].requests).toBeGreaterThan(2)
     expect(preview.warnings.join('\n')).toMatch(/Scripts were not imported for \d+ items/)
     expect(preview.warnings.join('\n')).toMatch(/2 sub-environments were not imported/)
   })
 
-  it('keeps the base environment value and says folder variables were merged', async () => {
+  it('lets folder variables override broader environments and warns about the collision', async () => {
     const preview = await previewImport(fixture('real-insomnia-v5-variables.yaml'))
     const c = preview.collections[0].collection
     expect(c.folders[0].folders[0].requests[0].name).toBe('Child Request')
-    expect(c.variables).toEqual([{ key: 'test-value', value: 'collection', isSecret: false }])
+    expect(c.variables).toEqual([{ key: 'test-value', value: 'grandparent', isSecret: false }])
     expect(c.folders[0].folders[0].requests[0].headers).toEqual([expect.anything(), expect.objectContaining({ key: 'x-test-value', value: '{{test-value}}' })])
+    expect(preview.warnings.join()).toMatch(/environment variable "test-value" overrides a broader environment value/)
     expect(preview.warnings.join()).toMatch(/environment variables were added to the collection variables/)
   })
 
@@ -164,5 +260,37 @@ describe('Insomnia v5 import', () => {
     const preview = await previewImport(v4(request({}), { _id: 'ws_1', _type: 'websocket_request', parentId: 'wrk_1', name: 'Socket', url: 'wss://x' }, { _id: 'g_1', _type: 'grpc_request', parentId: 'wrk_1', name: 'Rpc' }))
     expect(preview.collections[0].requests).toBe(1)
     expect(preview.warnings.join('\n')).toMatch(/Socket.*WebSocket requests are not imported/)
+  })
+
+  it('warns when a mixed collection embeds a spec that is not valid OpenAPI', async () => {
+    const preview = await previewImport(minimalV5(`  - url: https://x.test
+    name: R
+    meta:
+      id: req_1
+    method: GET
+spec:
+  contents:
+    nope: true
+`))
+    expect(preview.collections).toHaveLength(1)
+    expect(preview.warnings.join('\n')).toMatch(/embedded API spec was skipped/)
+  })
+
+  it('throws quickly on aliased YAML collection bombs', async () => {
+    let yaml = 'lvl8: &lvl8\\n  url: https://x.test\\n  name: Leaf\\n  meta:\\n    id: req_leaf\\n  method: GET'
+    for (let depth = 7; depth >= 0; depth -= 1) {
+      const refs = Array.from({ length: 9 }, () => `*lvl${depth + 1}`).join(', ')
+      yaml += `\\nlvl${depth}: &lvl${depth}\\n  name: Folder ${depth}\\n  meta:\\n    id: fld_${depth}\\n  children: [${refs}]`
+    }
+    const bomb = yaml.replace(/\\n/g, '\n') + `
+type: collection.insomnia.rest/5.0
+schema_version: "5.1"
+name: Bomb
+meta:
+  id: wrk_bomb
+collection:
+  - *lvl0
+`
+    await expect(previewImport(bomb)).rejects.toThrow(/more than 20000 requests and folders/)
   })
 })
