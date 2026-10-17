@@ -1,3 +1,4 @@
+import { MAX_FOLDER_FILES, selectCollectionFiles } from './folder-files'
 import { AlertTriangle, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Link as LinkIcon, Upload } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
@@ -51,8 +52,6 @@ const SOURCE_ICONS: Record<CollectionSource, React.ReactNode> = {
   backstage: <Database className="h-4 w-4" />,
   git: <GitBranch className="h-4 w-4" />,
 }
-
-const MAX_FOLDER_FILE_BYTES = 2 * 1024 * 1024
 
 export function ImportPage() {
   const { load } = useCollectionsStore()
@@ -115,19 +114,18 @@ export function ImportPage() {
     e.target.value = ''
     if (picked.length === 0) return
     setParseError('')
-    // Only the files Bruno collections are made of are read, and never dependency or VCS folders
     const pathOf = (f: File) => f.webkitRelativePath || f.name
-    const relevant = picked.filter((f) => {
-      const path = pathOf(f)
-      if (path.split('/').some((seg) => seg === 'node_modules' || seg === '.git' || seg === '.github')) return false
-      // Unrelated YAML (CI configs, lockfiles, large specs) must not block a collection import
-      if (/\.ya?ml$/.test(path)) return f.size <= MAX_FOLDER_FILE_BYTES
-      return /\.bru$|(^|\/)bruno\.json$/.test(path)
-    })
-    if (relevant.some((f) => f.size > MAX_FOLDER_FILE_BYTES)) {
-      setParseError('A file in the folder is larger than 2 MB.')
+    const picked_ = picked.map((file) => ({ file, path: pathOf(file), size: file.size }))
+    const selected = selectCollectionFiles(picked_)
+    if (selected.tooLarge) {
+      setParseError('A collection file in the folder is larger than 2 MB.')
       return
     }
+    if (selected.tooMany) {
+      setParseError(`The folder has more than ${MAX_FOLDER_FILES} collection files. Pick the collection's own folder.`)
+      return
+    }
+    const relevant = selected.files.map((x) => x.file)
     try {
       const files = await Promise.all(relevant.map(async (f) => ({ path: f.webkitRelativePath || f.name, text: await f.text() })))
       const { data, error } = await window.api.exportImport.parseFolder({ files }) as { data?: ParsedFile; error?: string }
