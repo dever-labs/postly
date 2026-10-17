@@ -9,6 +9,7 @@ const mockLoadCollections = vi.fn()
 const mockAddToast = vi.fn()
 const mockClearSelectedItem = vi.fn()
 const mockLoadVariables = vi.fn()
+const mockLoadEnvironments = vi.fn()
 const integrations = [{ id: 'gh-1', type: 'github', name: 'GitHub' }]
 
 vi.mock('@/components/ui/Select', () => ({
@@ -47,6 +48,12 @@ vi.mock('@/store/ui', () => ({
 vi.mock('@/store/variables', () => ({
   useVariablesStore: {
     getState: () => ({ load: mockLoadVariables }),
+  },
+}))
+
+vi.mock('@/store/environments', () => ({
+  useEnvironmentsStore: {
+    getState: () => ({ load: mockLoadEnvironments }),
   },
 }))
 
@@ -106,8 +113,10 @@ beforeEach(() => {
   setWindowApi()
   mockLoadCollections.mockResolvedValue(undefined)
   mockLoadVariables.mockResolvedValue(undefined)
+  mockLoadEnvironments.mockResolvedValue(undefined)
   mockAddToast.mockReset()
   mockClearSelectedItem.mockReset()
+  mockLoadEnvironments.mockReset()
   mockParse.mockReset()
   mockParseFolder.mockReset()
   mockImportCollections.mockReset()
@@ -128,7 +137,7 @@ describe('ImportPage', () => {
         format: 'bruno',
         warnings: ['Skipped auth helper'],
         collections: [
-          { collection: { name: 'Bruno Alpha', source: 'git' }, folders: 2, requests: 5 },
+          { collection: { name: 'Bruno Alpha', source: 'git' }, folders: 2, requests: 5, environments: 2 },
           { collection: { name: 'Bruno Beta', source: 'github', integrationName: 'GitHub' }, folders: 1, requests: 3 },
         ],
       },
@@ -164,6 +173,8 @@ describe('ImportPage', () => {
     expect((await screen.findByTestId('import-format')).textContent).toContain('Bruno collection · 2 collections found')
     expect(screen.getByTestId('import-warnings').textContent).toContain('1 thing could not be fully mapped')
     expect(screen.getByText('Skipped auth helper')).toBeDefined()
+    expect(screen.getByText('2 folders · 5 requests · 2 environments')).toBeDefined()
+    expect(screen.getByText('1 folder · 3 requests')).toBeDefined()
 
     const sourceSelects = screen.getAllByRole('combobox')
     expect((sourceSelects[0] as HTMLSelectElement).value).toBe('local')
@@ -180,6 +191,7 @@ describe('ImportPage', () => {
     })
     await waitFor(() => expect(mockLoadCollections).toHaveBeenCalledTimes(1))
     expect(mockLoadVariables).toHaveBeenCalledTimes(1)
+    expect(mockLoadEnvironments).toHaveBeenCalledTimes(1)
     expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
   })
 

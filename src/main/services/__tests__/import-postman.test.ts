@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { previewImport } from '../import-formats'
-import { convertPostmanScripts, isPostmanCollection } from '../import-postman'
+import { convertPostmanEnvironment, convertPostmanScripts, isPostmanCollection } from '../import-postman'
 import { parseRules } from '../../../shared/extract'
 import type { ExportCollection, ExportRequest } from '../../ipc/export-import'
 
@@ -311,6 +311,39 @@ describe('Postman detection', () => {
   it('explains environment files and v1 collections', async () => {
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Env', values: [], _postman_variable_scope: 'environment' }))).rejects.toThrow(/environment file/)
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Old', requests: [] }))).rejects.toThrow(/v1/)
+  })
+})
+
+describe('Postman environment conversion', () => {
+  it('converts standalone environment exports into Postly environments', () => {
+    expect(convertPostmanEnvironment({
+      _postman_variable_scope: 'environment',
+      name: 'Stage',
+      values: [
+        { key: 'baseUrl', value: 'https://stage.test' },
+        { key: 'apiKey', value: 'secret', type: 'secret' },
+        { key: 'disabled', value: 'skip', enabled: false },
+      ],
+    })).toEqual({
+      name: 'Stage',
+      variables: [
+        { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+        { key: 'apiKey', value: '', isSecret: true },
+      ],
+    })
+  })
+
+  it('falls back to a default name and skips disabled rows', () => {
+    expect(convertPostmanEnvironment({
+      _postman_variable_scope: 'environment',
+      values: [
+        { key: 'enabled', value: '1' },
+        { key: 'disabled', value: '0', disabled: true },
+      ],
+    })).toEqual({
+      name: 'Imported Postman environment',
+      variables: [{ key: 'enabled', value: '1', isSecret: false }],
+    })
   })
 })
 

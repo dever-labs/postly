@@ -272,9 +272,11 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
 }
 
 function environmentStatements(collections: ExportCollection[], now: number): Statement[] {
+  const incoming = collections.flatMap((c) => c.environments ?? [])
+  if (incoming.length === 0) return []
   const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
   const out: Statement[] = []
-  for (const environment of collections.flatMap((c) => c.environments ?? [])) {
+  for (const environment of incoming) {
     const base = String(environment.name ?? '').trim() || 'Imported'
     let name = base
     for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n})`

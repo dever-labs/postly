@@ -1,0 +1,10 @@
+vars {
+  host: https://dev.example.com
+  ~disabledToken: should-not-import
+  fromProcess: {{process.env.DEV_TOKEN}}
+}
+
+vars:secret [
+  apiKey,
+  ~disabledSecret
+]

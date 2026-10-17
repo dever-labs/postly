@@ -1,0 +1,6 @@
+info:
+  name: Ping
+  type: http
+http:
+  method: GET
+  url: https://example.com/ping

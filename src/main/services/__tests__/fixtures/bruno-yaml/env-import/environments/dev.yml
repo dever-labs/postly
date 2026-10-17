@@ -1,0 +1,12 @@
+name: Development
+variables:
+  - name: host
+    value: https://dev.example.com
+  - name: disabledToken
+    value: skip-me
+    enabled: false
+  - name: apiKey
+    secret: true
+    value: should-not-import
+  - name: fromProcess
+    value: "{{process.env.DEV_TOKEN}}"

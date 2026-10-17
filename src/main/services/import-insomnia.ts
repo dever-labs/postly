@@ -1,6 +1,6 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
 import { isOpenApiDocument } from './import-openapi'
 import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 
@@ -161,28 +161,56 @@ const sortKeyOf = (raw: Obj): number => {
 }
 const descriptionOf = (raw: Obj): string => str(raw.description) || (isObj(raw.meta) ? str(raw.meta.description) : '')
 
-/** Flattens nested environment data to dotted keys, because Insomnia reaches into objects with `_.a.b`. */
-function flatten(data: unknown, budget: ImportBudget, prefix = '', out: Array<[string, string]> = [], depth = 0): Array<[string, string]> {
+interface EnvironmentVariable {
+  key: string
+  value: string
+  isSecret: boolean
+}
+
+function isPrivateEnvironment(raw: Obj | undefined): boolean {
+  if (!raw) return false
+  const meta = isObj(raw.meta) ? raw.meta : {}
+  return raw.isPrivate === true || meta.isPrivate === true
+}
+
+function flattenEnvironmentRows(
+  data: unknown,
+  budget: ImportBudget,
+  isSecret: boolean,
+  prefix = '',
+  out: EnvironmentVariable[] = [],
+  depth = 0,
+): EnvironmentVariable[] {
   if (!isObj(data)) return out
   budget.take(depth)
   for (const [key, value] of Object.entries(data)) {
     const name = prefix ? `${prefix}.${key}` : key
-    if (isObj(value)) flatten(value, budget, name, out, depth + 1)
-    else out.push([name, Array.isArray(value) ? JSON.stringify(value) : str(value)])
+    if (isObj(value)) flattenEnvironmentRows(value, budget, isSecret, name, out, depth + 1)
+    else out.push({ key: name, value: Array.isArray(value) ? JSON.stringify(value) : str(value), isSecret })
   }
   return out
 }
 
-function environmentVariables(raw: Obj | undefined, dataKey: 'data' | 'environment', label: string, warnings: string[], budget: ImportBudget): Array<[string, string]> {
+function environmentRows(raw: Obj | undefined, dataKey: 'data' | 'environment', budget: ImportBudget): EnvironmentVariable[] {
   if (!raw) return []
+  const isSecret = isPrivateEnvironment(raw)
   if (Array.isArray(raw.kvPairData)) {
     const pairs = list(raw.kvPairData).filter((row) => str(row.name) && row.enabled !== false)
-    if (pairs.some((row) => row.type === 'secret' || row.type === 'json' || row.isConfidential === true)) {
-      warnings.push(`${label}: secret and typed environment variables were imported as plain text collection variables.`)
-    }
-    return pairs.map((row) => [str(row.name), str(row.value)])
+    return pairs.map((row) => ({
+      key: str(row.name),
+      value: str(row.value),
+      isSecret: isSecret || row.type === 'secret' || row.isConfidential === true,
+    }))
   }
-  return flatten(raw[dataKey], budget)
+  return flattenEnvironmentRows(raw[dataKey], budget, isSecret)
+}
+
+function warnPlainTextEnvironmentVariables(raw: Obj | undefined, rows: EnvironmentVariable[], label: string, warnings: string[]): void {
+  if (rows.length === 0) return
+  const hasTypedKvPairs = Array.isArray(raw?.kvPairData) && list(raw.kvPairData).some((row) => str(row.name) && row.enabled !== false && row.type === 'json')
+  if (rows.some((row) => row.isSecret) || hasTypedKvPairs) {
+    warnings.push(`${label}: secret and typed environment variables were imported as plain text collection variables.`)
+  }
 }
 
 function rewriteDeclaredPathParams(url: string, declared: Obj[], pathVariables: Map<string, string>, t: (v: unknown) => string): string {
@@ -244,14 +272,26 @@ const NON_HTTP: Record<string, string> = {
   mock_server: 'mock server',
 }
 
-function convertTree(name: string, description: string, roots: Node[], baseEnv: Obj | undefined, subEnvironments: number, extraWarnings: string[], hasCookies: boolean, tests: number, hasSpec: boolean, budget: ImportBudget): { collection: ExportCollection; warnings: string[] } {
+function convertTree(name: string, description: string, roots: Node[], baseEnv: Obj | undefined, subEnvironments: Obj[], extraWarnings: string[], hasCookies: boolean, tests: number, hasSpec: boolean, budget: ImportBudget): { collection: ExportCollection; warnings: string[] } {
   const warnings = [...extraWarnings]
   const variables = new Map<string, string>()
   const pathVariables = new Map<string, string>()
+  const environments: ExportEnvironment[] = []
   const scripted: string[] = []
   const unconverted = new Set<string>()
   const warnedCollisions = new Set<string>()
   const t = (v: unknown) => template(v, unconverted)
+  const warnUnconverted = (label: string, before: number) => {
+    if (unconverted.size > before) {
+      warnings.push(`${label}: uses Insomnia template tags that were left as text (${[...unconverted].slice(before).slice(0, 2).join(', ')}).`)
+    }
+  }
+  const convertEnvironmentValueRows = (rows: EnvironmentVariable[], label: string): EnvironmentVariable[] => {
+    const before = unconverted.size
+    const converted = rows.map((row) => ({ ...row, value: t(row.value) }))
+    warnUnconverted(label, before)
+    return converted
+  }
   const addVariables = (pairs: Array<[string, string]>, source?: string) => {
     for (const [key, value] of pairs) {
       const next = t(value)
@@ -265,7 +305,23 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
       } else if (existing === undefined) variables.set(key, next)
     }
   }
-  addVariables(environmentVariables(baseEnv, 'data', 'The base environment', warnings, budget))
+  const addEnvironmentVariables = (rows: EnvironmentVariable[], source?: string, label?: string) => {
+    const before = unconverted.size
+    addVariables(rows.map((row) => [row.key, row.value]), source)
+    if (label) warnUnconverted(label, before)
+  }
+
+  const baseEnvironmentRows = environmentRows(baseEnv, 'data', budget)
+  addEnvironmentVariables(baseEnvironmentRows, undefined, 'The base environment')
+  warnPlainTextEnvironmentVariables(baseEnv, baseEnvironmentRows, 'The base environment', warnings)
+  for (const raw of [...subEnvironments].sort((a, b) => sortKeyOf(a) - sortKeyOf(b))) {
+    const label = `Environment "${str(raw.name) || 'Imported'}"`
+    const rows = convertEnvironmentValueRows(environmentRows(raw, 'data', budget), label)
+    environments.push({
+      name: str(raw.name) || 'Imported',
+      variables: rows,
+    })
+  }
 
   function convertRequest(raw: Obj): ExportRequest {
     const method = (str(raw.method) || 'GET').toUpperCase()
@@ -318,9 +374,10 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
         if (list(raw.headers).some((h) => str(h.name))) warnings.push(`${label}: its headers were not imported; add them to each request.`)
         const scripts = isObj(raw.scripts) ? raw.scripts : {}
         if ([scripts.preRequest, scripts.afterResponse].some((s) => str(s).trim())) scripted.push(label)
-        const envVars = environmentVariables(raw, 'environment', label, warnings, budget)
+        const envVars = environmentRows(raw, 'environment', budget)
         if (envVars.length > 0) {
-          addVariables(envVars, label)
+          addEnvironmentVariables(envVars, label, label)
+          warnPlainTextEnvironmentVariables(raw, envVars, label, warnings)
           warnings.push(`${label}: its environment variables were added to the collection variables.`)
         }
         folders.push({
@@ -347,7 +404,6 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
     const sample = scripted.slice(0, 3).join(', ')
     warnings.push(`Scripts were not imported for ${scripted.length} item${scripted.length === 1 ? '' : 's'} (${sample}${scripted.length > 3 ? ', …' : ''}).`)
   }
-  if (subEnvironments > 0) warnings.push(`${subEnvironments} sub-environment${subEnvironments === 1 ? ' was' : 's were'} not imported (for example Dev or Production); only the base environment became collection variables.`)
   if (hasCookies) warnings.push('The cookie jar was not imported.')
   if (tests > 0) warnings.push(`${tests} unit test${tests === 1 ? ' was' : 's were'} not imported.`)
   for (const [key, value] of pathVariables) if (!variables.has(key)) variables.set(key, value)
@@ -360,6 +416,7 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
       auth: { ...NO_AUTH },
       ssl: 'inherit',
       variables: [...variables].map(([key, value]) => ({ key, value, isSecret: false })),
+      ...(environments.length > 0 ? { environments } : {}),
       requests,
       folders,
     },
@@ -394,7 +451,7 @@ function convertExport(doc: Obj): InsomniaImport {
     const id = str(ws._id)
     const children = byParent.get(id) ?? []
     const env = children.find((r) => r._type === 'environment')
-    const subEnvs = env ? (byParent.get(str(env._id)) ?? []).filter((r) => r._type === 'environment').length : 0
+    const subEnvs = env ? (byParent.get(str(env._id)) ?? []).filter((r) => r._type === 'environment') : []
     const hasCookies = children.some((r) => r._type === 'cookie_jar' && list(r.cookies).length > 0)
     const suites = children.filter((r) => r._type === 'unit_test_suite')
     const tests = suites.reduce((n, s) => n + (byParent.get(str(s._id)) ?? []).filter((r) => r._type === 'unit_test').length, 0)
@@ -424,7 +481,7 @@ function convertV5(doc: Obj, kind: InsomniaKind): InsomniaImport {
     })
   const roots = nodesOf(doc.collection)
   const env = isObj(doc.environments) ? doc.environments : undefined
-  const subEnvs = env && Array.isArray(env.subEnvironments) ? env.subEnvironments.length : 0
+  const subEnvs = env && Array.isArray(env.subEnvironments) ? list(env.subEnvironments) : []
   const hasCookies = isObj(doc.cookieJar) && Array.isArray(doc.cookieJar.cookies) && doc.cookieJar.cookies.length > 0
   const tests = Array.isArray(doc.testSuites) ? doc.testSuites.reduce((n, s) => n + (isObj(s) && Array.isArray(s.tests) ? s.tests.length : 0), 0) : 0
   const specContents = isObj(doc.spec) ? doc.spec.contents : undefined

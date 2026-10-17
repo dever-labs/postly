@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../shared/extract'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
 import type { BrunoEntry, BrunoFile } from './import-bruno'
 import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 import { MAX_REDIRECT_LIMIT, MAX_TIMEOUT_MS, type NetworkSettings } from './network-settings'
@@ -49,7 +49,12 @@ interface Context {
   unsupportedSettings: Set<string>
   variableCounts: Record<VariableSource, number>
   variableCollision: boolean
+  disabledEnvironmentVariables: number
+  secretEnvironmentVariables: number
+  unresolvedEnvironmentVariables: string[]
 }
+
+const ENV_REF = /\{\{\s*(?:process\.env|dotenv)\b[^}]*\}\}/i
 
 const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1)
 const dirName = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
@@ -121,6 +126,34 @@ function variableValue(raw: unknown): string {
   }
   if (isObj(raw) && 'data' in raw) return str(raw.data)
   return ''
+}
+
+function importEnvironmentVariable(
+  variables: Array<{ key: string; value: string; isSecret: boolean }>,
+  ctx: Pick<Context, 'disabledEnvironmentVariables' | 'secretEnvironmentVariables' | 'unresolvedEnvironmentVariables'>,
+  envName: string,
+  rawName: unknown,
+  rawValue: unknown,
+  options: { enabled?: boolean; isSecret?: boolean }
+): void {
+  const key = str(rawName)
+  if (!key) return
+  if (options.enabled === false) {
+    ctx.disabledEnvironmentVariables++
+    return
+  }
+  if (options.isSecret) {
+    ctx.secretEnvironmentVariables++
+    variables.push({ key, value: '', isSecret: true })
+    return
+  }
+  const value = variableValue(rawValue)
+  if (ENV_REF.test(value)) {
+    ctx.unresolvedEnvironmentVariables.push(`${envName}.${key}`)
+    variables.push({ key, value: '', isSecret: false })
+    return
+  }
+  variables.push({ key, value, isSecret: false })
 }
 
 function trackVariable(ctx: Context, source: VariableSource, name: string, value: string, isSecret: boolean): void {
@@ -490,6 +523,26 @@ function applyCollectionDefaults(raw: unknown, rootDir: string, ctx: Context): {
   }
 }
 
+function parseEnvironmentFile(raw: unknown, relPath: string, ctx: Context): ExportEnvironment | null {
+  if (!isObj(raw)) {
+    ctx.warnings.push(`"${relPath}": expected a YAML object.`)
+    return null
+  }
+  noteUnknown(ctx, relPath, raw, new Set(['name', 'variables']))
+  const name = str(raw.name) || baseName(relPath).replace(/\.ya?ml$/i, '')
+  const variables: ExportEnvironment['variables'] = []
+  for (const variable of list(raw.variables)) {
+    noteUnknown(ctx, relPath, variable, new Set(['name', 'value', 'enabled', 'disabled', 'secret', 'type', 'path', 'secretName', 'vaultName', 'projectId']), 'variables[]')
+    const isSecret = variable.secret === true
+      || (!('value' in variable) && ('path' in variable || 'secretName' in variable || 'vaultName' in variable || 'projectId' in variable))
+    importEnvironmentVariable(variables, ctx, name, variable.name, variable.value, {
+      enabled: variable.disabled !== true && variable.enabled !== false,
+      isSecret,
+    })
+  }
+  return { name, variables }
+}
+
 function addDirWithAncestors(set: Set<string>, dir: string): void {
   let current = dir
   while (current) {
@@ -534,7 +587,7 @@ function buildFolderTree(
   return [...(children.get('') ?? [])].sort((a, b) => compareOrdered(folderDrafts.get(a) ?? { name: baseName(a) }, folderDrafts.get(b) ?? { name: baseName(b) })).map((child) => build(child, 1))
 }
 
-function finishCollection(collection: ExportCollection, environments: string[], ctx: Context): BrunoEntry {
+function finishCollection(collection: ExportCollection, ctx: Context): BrunoEntry {
   if (collection.requests.length === 0 && collection.folders.length === 0) ctx.warnings.push('The collection has no requests.')
   if (ctx.scripted.length > 0) ctx.warnings.push(`Scripts were not imported for ${ctx.scripted.length} item${ctx.scripted.length === 1 ? '' : 's'} (${ctx.scripted.slice(0, 3).join(', ')}${ctx.scripted.length > 3 ? ', …' : ''}).`)
   if (ctx.tested.length > 0) ctx.warnings.push(`Tests and assertions were not imported for ${ctx.tested.length} request${ctx.tested.length === 1 ? '' : 's'}.`)
@@ -543,7 +596,6 @@ function finishCollection(collection: ExportCollection, environments: string[], 
   if (ctx.defaultActions.length > 0) ctx.warnings.push(`Collection or folder post-response actions were not imported for ${ctx.defaultActions.length} item${ctx.defaultActions.length === 1 ? '' : 's'} (${ctx.defaultActions.slice(0, 3).join(', ')}${ctx.defaultActions.length > 3 ? ', …' : ''}).`)
   if (ctx.unsupportedActions.length > 0) ctx.warnings.push(`Actions other than after-response variable setters were not imported for ${ctx.unsupportedActions.length} request${ctx.unsupportedActions.length === 1 ? '' : 's'} (${ctx.unsupportedActions.slice(0, 3).join(', ')}${ctx.unsupportedActions.length > 3 ? ', …' : ''}).`)
   if (ctx.unsupportedRequests.length > 0) ctx.warnings.push(`Only HTTP and GraphQL requests were imported; ${ctx.unsupportedRequests.length} request${ctx.unsupportedRequests.length === 1 ? '' : 's'} ${ctx.unsupportedRequests.length === 1 ? 'was' : 'were'} skipped (${ctx.unsupportedRequests.slice(0, 3).join(', ')}${ctx.unsupportedRequests.length > 3 ? ', …' : ''}).`)
-  if (environments.length > 0) ctx.warnings.push(`${environments.length} environment${environments.length === 1 ? ' was' : 's were'} not imported (${environments.slice(0, 3).join(', ')}${environments.length > 3 ? ', …' : ''}); create them in Postly and set the variables your requests use.`)
   if (ctx.variableCounts.folder > 0 || ctx.variableCounts.request > 0) {
     const parts = [
       ctx.variableCounts.folder > 0 ? `${ctx.variableCounts.folder} folder variable${ctx.variableCounts.folder === 1 ? '' : 's'}` : '',
@@ -551,6 +603,9 @@ function finishCollection(collection: ExportCollection, environments: string[], 
     ].filter(Boolean)
     ctx.warnings.push(`${parts.join(' and ')} were imported as collection variables${ctx.variableCollision ? '; first value won when names collided' : ''}.`)
   }
+  if (ctx.disabledEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments skipped ${ctx.disabledEnvironmentVariables} disabled variable${ctx.disabledEnvironmentVariables === 1 ? '' : 's'}.`)
+  if (ctx.secretEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments imported ${ctx.secretEnvironmentVariables} secret variable${ctx.secretEnvironmentVariables === 1 ? '' : 's'} with blank values; re-enter them in Postly.`)
+  if (ctx.unresolvedEnvironmentVariables.length > 0) ctx.warnings.push(`Bruno environment values using dotenv/process.env references were not imported for ${ctx.unresolvedEnvironmentVariables.length} variable${ctx.unresolvedEnvironmentVariables.length === 1 ? '' : 's'} (${ctx.unresolvedEnvironmentVariables.slice(0, 3).join(', ')}${ctx.unresolvedEnvironmentVariables.length > 3 ? ', …' : ''}); enter them manually in Postly.`)
   if (ctx.dynamic.size > 0) ctx.warnings.push(`Dynamic variables Postly does not provide are used and will stay unresolved: ${[...ctx.dynamic].map((value) => `{{${value}}}`).join(', ')}.`)
   if (ctx.multipartContentTypes) ctx.warnings.push('Multipart part content types were not imported because Postly form-data rows do not support them.')
   if (ctx.oauthDrops.size > 0) ctx.warnings.push(`OAuth 2.0 settings were not imported: ${[...ctx.oauthDrops].join(', ')}.`)
@@ -577,7 +632,7 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
     const relative = (file: BrunoFile) => file.path.slice(prefix.length)
     const folderDrafts = new Map<string, FolderDraft>()
     const requestsByDir = new Map<string, Array<Ordered & { request: ExportRequest }>>()
-    const environments: string[] = []
+    const environments: ExportEnvironment[] = []
     const ctx: Context = {
       warnings: [],
       variables: new Map(),
@@ -596,6 +651,9 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
       unsupportedSettings: new Set(),
       variableCounts: { collection: 0, folder: 0, request: 0, path: 0 },
       variableCollision: false,
+      disabledEnvironmentVariables: 0,
+      secretEnvironmentVariables: 0,
+      unresolvedEnvironmentVariables: [],
     }
 
     let collectionMeta: { name: string; description: string; auth: Auth; network?: NetworkSettings } = {
@@ -607,7 +665,15 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
     for (const file of mine) {
       const relPath = relative(file)
       if (/^environments\/[^/]+\.ya?ml$/i.test(relPath)) {
-        environments.push(baseName(relPath).replace(/\.ya?ml$/i, ''))
+        let doc: unknown
+        try {
+          doc = loadYaml(file.text)
+        } catch (error) {
+          ctx.warnings.push(`"${relPath}": could not read YAML (${(error as Error).message}).`)
+          continue
+        }
+        const environment = parseEnvironmentFile(doc, relPath, ctx)
+        if (environment) environments.push(environment)
         continue
       }
       if (!/\.ya?ml$/i.test(relPath)) continue
@@ -641,9 +707,10 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
       ssl: 'inherit',
       ...(collectionMeta.network ? { network: collectionMeta.network } : {}),
       variables: [...ctx.variables.entries()].map(([key, value]) => ({ key, value: value.value, isSecret: value.isSecret })),
+      ...(environments.length > 0 ? { environments } : {}),
       requests,
       folders,
     }
-    return finishCollection(collection, environments, ctx)
+    return finishCollection(collection, ctx)
   })
 }

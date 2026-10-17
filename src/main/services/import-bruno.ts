@@ -1,8 +1,8 @@
 import crypto from 'crypto'
 import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../shared/extract'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
-import { parseBru, type BruBlocks, type BruRow } from './bru-lang'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
+import { parseBru, parseBruEnvironment, type BruBlocks, type BruRow } from './bru-lang'
 import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 import { MAX_REDIRECT_LIMIT, MAX_TIMEOUT_MS, type NetworkSettings } from './network-settings'
 
@@ -85,6 +85,9 @@ interface Context {
   multipartContentTypes: boolean
   oauthDrops: Set<string>
   unsupportedSettings: Set<string>
+  disabledEnvironmentVariables: number
+  secretEnvironmentVariables: number
+  unresolvedEnvironmentVariables: string[]
 }
 
 const num = (v: unknown, fallback = 0): number => {
@@ -95,6 +98,71 @@ const rowsOf = (v: unknown): BruRow[] => list(v).map((r) => ({ name: str(r.name)
 const toDict = (rows: BruRow[] | undefined): Obj => Object.fromEntries((rows ?? []).map((r) => [r.name, r.value]))
 const hasMetaTags = (rows: BruRow[] | undefined): boolean => !!rows?.some((r) => r.name === 'tags' && r.value.trim())
 const emptySettings = (name: string): BruSettings => ({ name, seq: 0, headers: [], authMode: '', auth: {}, varsPre: [], hasScripts: false, docs: '', hasTags: false })
+const ENV_REF = /\{\{\s*(?:process\.env|dotenv)\b[^}]*\}\}/i
+
+function variableValue(raw: unknown): string {
+  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
+  if (Array.isArray(raw)) {
+    const variant = list(raw).find((item) => item.selected === true) ?? list(raw)[0]
+    return variant ? variableValue(isObj(variant) && 'value' in variant ? variant.value : variant) : ''
+  }
+  if (isObj(raw) && 'data' in raw) return str(raw.data)
+  return ''
+}
+
+function importEnvironmentVariable(
+  variables: Array<{ key: string; value: string; isSecret: boolean }>,
+  ctx: Pick<Context, 'disabledEnvironmentVariables' | 'secretEnvironmentVariables' | 'unresolvedEnvironmentVariables'>,
+  envName: string,
+  rawName: unknown,
+  rawValue: unknown,
+  options: { enabled?: boolean; isSecret?: boolean }
+): void {
+  const key = str(rawName)
+  if (!key) return
+  if (options.enabled === false) {
+    ctx.disabledEnvironmentVariables++
+    return
+  }
+  if (options.isSecret) {
+    ctx.secretEnvironmentVariables++
+    variables.push({ key, value: '', isSecret: true })
+    return
+  }
+  const value = variableValue(rawValue)
+  if (ENV_REF.test(value)) {
+    ctx.unresolvedEnvironmentVariables.push(`${envName}.${key}`)
+    variables.push({ key, value: '', isSecret: false })
+    return
+  }
+  variables.push({ key, value, isSecret: false })
+}
+
+function environmentFromBruFile(relPath: string, text: string, ctx: Context): ExportEnvironment | null {
+  const parsed = parseBruEnvironment(text)
+  const name = baseName(relPath).replace(/\.bru$/i, '')
+  const variables: ExportEnvironment['variables'] = []
+  for (const row of parsed.variables) importEnvironmentVariable(variables, ctx, name, row.name, row.value, { enabled: row.enabled })
+  for (const row of parsed.secretVariables) importEnvironmentVariable(variables, ctx, name, row.name, '', { enabled: row.enabled, isSecret: true })
+  if (parsed.malformed) ctx.warnings.push(`"${relPath}": could not fully read the Bruno environment file; invalid lines were ignored.`)
+  if (parsed.extends.length > 0) ctx.warnings.push(`"${relPath}": Bruno environment inheritance was not imported (${parsed.extends.slice(0, 3).join(', ')}${parsed.extends.length > 3 ? ', …' : ''}).`)
+  if (parsed.externalSecrets.length > 0) ctx.warnings.push(`"${relPath}": external secret providers were not imported (${parsed.externalSecrets.slice(0, 3).join(', ')}${parsed.externalSecrets.length > 3 ? ', …' : ''}).`)
+  if (parsed.hasColor) ctx.warnings.push(`"${relPath}": the Bruno environment color was ignored.`)
+  return { name, variables }
+}
+
+function environmentFromExport(raw: unknown, index: number, ctx: Context): ExportEnvironment {
+  const env = isObj(raw) ? raw : {}
+  const name = str(env.name) || `Environment ${index + 1}`
+  const variables: ExportEnvironment['variables'] = []
+  for (const variable of list(env.variables)) {
+    importEnvironmentVariable(variables, ctx, name, variable.name, variable.value, {
+      enabled: variable.enabled !== false,
+      isSecret: variable.secret === true,
+    })
+  }
+  return { name, variables }
+}
 
 function additionalParametersFromBlocks(b: BruBlocks): Obj | undefined {
   const read = (name: string, sendIn: string) => (b.dicts.get(name) ?? []).map((row) => ({ ...row, sendIn }))
@@ -535,7 +603,7 @@ function convertTree(tree: Tree, ctx: Context): { requests: ExportRequest[]; fol
   return { requests, folders }
 }
 
-function finish(name: string, settings: BruSettings, tree: Tree, environments: string[], extra: string[], ctx: Context): BrunoEntry {
+function finish(name: string, settings: BruSettings, tree: Tree, environments: ExportEnvironment[], extra: string[], ctx: Context): BrunoEntry {
   for (const row of settings.varsPre) if (row.enabled && !ctx.variables.has(row.name)) ctx.variables.set(row.name, row.value)
   if (settings.hasTags) ctx.hasTags = true
   const rootAuth = convertAuth(settings.authMode, settings.auth, 'Collection', ctx)
@@ -551,7 +619,9 @@ function finish(name: string, settings: BruSettings, tree: Tree, environments: s
   }
   if (ctx.preVars.length > 0) ctx.warnings.push(`Request variables (pre-request vars) were not imported for ${ctx.preVars.length} request${ctx.preVars.length === 1 ? '' : 's'} (${ctx.preVars.slice(0, 3).join(', ')}${ctx.preVars.length > 3 ? ', …' : ''}).`)
   if (ctx.tested.length > 0) ctx.warnings.push(`Tests and assertions were not imported for ${ctx.tested.length} request${ctx.tested.length === 1 ? '' : 's'}.`)
-  if (environments.length > 0) ctx.warnings.push(`${environments.length} environment${environments.length === 1 ? ' was' : 's were'} not imported (${environments.slice(0, 3).join(', ')}${environments.length > 3 ? ', …' : ''}); create them in Postly and set the variables your requests use.`)
+  if (ctx.disabledEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments skipped ${ctx.disabledEnvironmentVariables} disabled variable${ctx.disabledEnvironmentVariables === 1 ? '' : 's'}.`)
+  if (ctx.secretEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments imported ${ctx.secretEnvironmentVariables} secret variable${ctx.secretEnvironmentVariables === 1 ? '' : 's'} with blank values; re-enter them in Postly.`)
+  if (ctx.unresolvedEnvironmentVariables.length > 0) ctx.warnings.push(`Bruno environment values using dotenv/process.env references were not imported for ${ctx.unresolvedEnvironmentVariables.length} variable${ctx.unresolvedEnvironmentVariables.length === 1 ? '' : 's'} (${ctx.unresolvedEnvironmentVariables.slice(0, 3).join(', ')}${ctx.unresolvedEnvironmentVariables.length > 3 ? ', …' : ''}); enter them manually in Postly.`)
   if (ctx.dynamic.size > 0) ctx.warnings.push(`Dynamic variables Postly does not provide are used and will stay unresolved: ${[...ctx.dynamic].map((d) => `{{${d}}}`).join(', ')}.`)
   if (ctx.unknownBlocks.size > 0) ctx.warnings.push(`Unsupported Bruno blocks were ignored: ${[...ctx.unknownBlocks].sort().join(', ')}.`)
   if (ctx.hasTags) ctx.warnings.push('Tags on the collection, folders, or requests were not imported.')
@@ -569,6 +639,7 @@ function finish(name: string, settings: BruSettings, tree: Tree, environments: s
       auth: rootAuth.type === 'inherit' ? { ...NO_AUTH } : rootAuth,
       ssl: 'inherit',
       variables: [...ctx.variables].map(([key, value]) => ({ key, value, isSecret: false })),
+      ...(environments.length > 0 ? { environments } : {}),
       requests,
       folders,
     },
@@ -631,7 +702,27 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
       }
     }
 
-    const environments = mine.filter((f) => /^environments\/[^/]+\.bru$/.test(rel(f))).map((f) => baseName(f.path).replace(/\.bru$/, ''))
+    const ctx: Context = {
+      warnings: [...warnings],
+      variables: new Map(),
+      pathVariables: new Map(),
+      dynamic: new Set(),
+      scripted: [],
+      tested: [],
+      preVars: [],
+      hasTags: false,
+      unknownBlocks,
+      multipartContentTypes: false,
+      oauthDrops: new Set(),
+      unsupportedSettings: new Set(),
+      disabledEnvironmentVariables: 0,
+      secretEnvironmentVariables: 0,
+      unresolvedEnvironmentVariables: [],
+    }
+    const environments = mine.filter((f) => /^environments\/[^/]+\.bru$/i.test(rel(f)))
+      .sort((a, b) => rel(a).localeCompare(rel(b)))
+      .map((f) => environmentFromBruFile(rel(f), f.text, ctx))
+      .filter((environment): environment is ExportEnvironment => environment !== null)
     const collectionBru = mine.find((f) => rel(f) === 'collection.bru')
     const parsedSettings = collectionBru ? settingsFromBru(collectionBru.text, name) : undefined
     const settings = parsedSettings ?? emptySettings(name)
@@ -663,21 +754,6 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
       }
       return tree
     }
-
-    const ctx: Context = {
-      warnings: [...warnings],
-      variables: new Map(),
-      pathVariables: new Map(),
-      dynamic: new Set(),
-      scripted: [],
-      tested: [],
-      preVars: [],
-      hasTags: false,
-      unknownBlocks,
-      multipartContentTypes: false,
-      oauthDrops: new Set(),
-      unsupportedSettings: new Set(),
-    }
     return finish(name, settings, makeTree('', settings, 0), environments, extra, ctx)
   })
 }
@@ -702,7 +778,6 @@ export function convertBrunoExport(doc: Obj): BrunoEntry {
     return tree
   }
   const root = settingsFromExport(doc.root, str(doc.name), 0)
-  const environments = list(doc.environments).map((e) => str(e.name)).filter(Boolean)
   const ctx: Context = {
     warnings: [],
     variables: new Map(),
@@ -716,6 +791,10 @@ export function convertBrunoExport(doc: Obj): BrunoEntry {
     multipartContentTypes: false,
     oauthDrops: new Set(),
     unsupportedSettings: new Set(),
+    disabledEnvironmentVariables: 0,
+    secretEnvironmentVariables: 0,
+    unresolvedEnvironmentVariables: [],
   }
+  const environments = list(doc.environments).map((environment, index) => environmentFromExport(environment, index, ctx))
   return finish(str(doc.name), root, build(list(doc.items), root, 0), environments, [], ctx)
 }

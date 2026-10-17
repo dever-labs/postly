@@ -18,14 +18,27 @@ describe('OpenAPI 3 import', () => {
     expect(entry.collection.requests.map((r) => r.name)).toEqual(['Upload avatar', 'Log in'])
   })
 
-  it('puts the server URL in a baseUrl variable, resolving server variable defaults', async () => {
+  it('puts the first server URL in a baseUrl variable, resolving server variable defaults, and imports environments for multiple servers', async () => {
     const { collections, warnings } = await previewImport(fixture('petstore-oas3.yaml'))
-    const { variables, folders } = collections[0].collection
+    const { variables, folders, environments } = collections[0].collection
     expect(variables).toContainEqual({ key: 'baseUrl', value: 'https://api.example.com/v1', isSecret: false })
     expect(variables).toContainEqual({ key: 'petId', value: '7', isSecret: false })
+    expect(environments).toEqual([
+      {
+        name: 'api.example.com',
+        variables: [
+          { key: 'baseUrl', value: 'https://{{env}}.example.com/v1', isSecret: false },
+          { key: 'env', value: 'api', isSecret: false },
+        ],
+      },
+      {
+        name: 'staging.example.com',
+        variables: [{ key: 'baseUrl', value: 'https://staging.example.com/v1', isSecret: false }],
+      },
+    ])
     expect(folders[0].requests[0].url).toBe('{{baseUrl}}/pets')
     expect(folders[0].requests[2].url).toBe('{{baseUrl}}/pets/{{petId}}')
-    expect(warnings).toContain('2 servers are defined; only the first is used as {{baseUrl}} (others: https://staging.example.com/v1).')
+    expect(warnings.some((warning) => warning.includes('only the first is used as {{baseUrl}}'))).toBe(false)
   })
 
   it('merges path-level parameters and marks only required ones enabled', async () => {
@@ -85,6 +98,7 @@ describe('Swagger 2 import', () => {
     const preview = await previewImport(fixture('swagger2.json'))
     const col = preview.collections[0].collection
     expect(col.variables).toContainEqual({ key: 'baseUrl', value: 'https://legacy.example.com/api', isSecret: false })
+    expect(col.environments).toBeUndefined()
     expect(col.auth.type).toBe('basic')
     const put = col.folders[0].requests[0]
     expect(put).toMatchObject({ method: 'PUT', url: '{{baseUrl}}/items/{{id}}', bodyType: 'raw-json' })
@@ -92,6 +106,21 @@ describe('Swagger 2 import', () => {
     const form = col.requests[0]
     expect(form.bodyType).toBe('x-www-form-urlencoded')
     expect(JSON.parse(form.bodyContent)).toMatchObject([{ key: 'q', value: 'x' }])
+  })
+
+  it('creates one environment per Swagger scheme when there is more than one server', async () => {
+    const preview = await previewImport(JSON.stringify({
+      swagger: '2.0',
+      info: { title: 'Legacy API', version: '1' },
+      host: 'legacy.example.com',
+      basePath: '/api',
+      schemes: ['https', 'http'],
+      paths: { '/items': { get: { responses: {} } } },
+    }))
+    expect(preview.collections[0].collection.environments).toEqual([
+      { name: 'legacy.example.com (https)', variables: [{ key: 'baseUrl', value: 'https://legacy.example.com/api', isSecret: false }] },
+      { name: 'legacy.example.com (http)', variables: [{ key: 'baseUrl', value: 'http://legacy.example.com/api', isSecret: false }] },
+    ])
   })
 })
 

@@ -1,5 +1,6 @@
 import crypto from 'crypto'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { VariableRow } from './variable-store'
 
 type Obj = Record<string, unknown>
 type Auth = { type: string; config: Record<string, unknown> }
@@ -76,6 +77,59 @@ function serverUrl(server: Obj): string {
     const variable = variables[name]
     return isObj(variable) && variable.default !== undefined ? String(variable.default) : match
   })
+}
+
+function serverTemplateUrl(server: Obj): string {
+  return str(server.url).replace(/\{([^}]+)\}/g, (_match, name: string) => `{{${name}}}`)
+}
+
+function serverVariableValue(variable: unknown): string {
+  if (!isObj(variable)) return ''
+  if (variable.default !== undefined) return String(variable.default)
+  if (Array.isArray(variable.enum) && variable.enum.length > 0) return String(variable.enum[0])
+  return ''
+}
+
+function serverVariableRows(server: Obj): VariableRow[] {
+  const variables = isObj(server.variables) ? server.variables : {}
+  return Object.entries(variables)
+    .map(([key, value]) => ({ key, value: serverVariableValue(value), isSecret: false }))
+    .filter((row) => row.key)
+}
+
+function serverName(rawUrl: string, sourceUrl: string | undefined, fallback: string): string {
+  try { return new URL(rawUrl, sourceUrl).host || fallback } catch { return fallback }
+}
+
+function openApiServerEnvironment(server: Obj, index: number, sourceUrl?: string): ExportEnvironment {
+  const resolved = serverUrl(server)
+  const fallback = str(server.url) || `server-${index + 1}`
+  const description = str(server.description).trim()
+  const name = description || serverName(resolved || str(server.url), sourceUrl, fallback)
+  return {
+    name,
+    variables: [
+      { key: 'baseUrl', value: serverTemplateUrl(server), isSecret: false },
+      ...serverVariableRows(server),
+    ],
+  }
+}
+
+function swaggerBaseUrl(host: string, basePath: string, scheme: string): string {
+  return host ? `${scheme || 'https'}://${host}${basePath}` : basePath
+}
+
+function swaggerEnvironments(doc: Obj): ExportEnvironment[] {
+  const host = str(doc.host)
+  if (!host) return []
+  const basePath = str(doc.basePath)
+  const schemes = (Array.isArray(doc.schemes) ? doc.schemes : []).map(str).filter(Boolean)
+  const urls = (schemes.length > 0 ? schemes : ['https']).map((scheme) => ({ scheme, url: swaggerBaseUrl(host, basePath, scheme) }))
+  if (urls.length <= 1) return []
+  return urls.map(({ scheme, url }) => ({
+    name: `${host} (${scheme})`,
+    variables: [{ key: 'baseUrl', value: url, isSecret: false }],
+  }))
 }
 
 const GRANT_ORDER = ['authorization_code', 'client_credentials', 'password', 'implicit'] as const
@@ -178,16 +232,18 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   const isV3 = str(doc.openapi).startsWith('3')
   const info = isObj(doc.info) ? doc.info : {}
   const variables = new Map<string, string>()
+  const environments: ExportEnvironment[] = []
 
   let baseUrl = ''
   if (isV3) {
     const servers = (Array.isArray(doc.servers) ? doc.servers : []).filter(isObj)
     baseUrl = servers[0] ? serverUrl(servers[0]) : ''
-    if (servers.length > 1) warnings.push(`${servers.length} servers are defined; only the first is used as {{baseUrl}} (others: ${servers.slice(1).map((s) => str(s.url)).join(', ')}).`)
+    if (servers.length > 1) environments.push(...servers.map((server, index) => openApiServerEnvironment(server, index, sourceUrl)))
   } else {
     const host = str(doc.host)
     const schemes = Array.isArray(doc.schemes) ? doc.schemes : []
-    baseUrl = host ? `${str(schemes[0]) || 'https'}://${host}${str(doc.basePath)}` : str(doc.basePath)
+    baseUrl = swaggerBaseUrl(host, str(doc.basePath), str(schemes[0]) || 'https')
+    environments.push(...swaggerEnvironments(doc))
   }
   if (baseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrl)) {
     const relative = baseUrl
@@ -381,6 +437,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
       auth: collectionAuth,
       ssl: 'inherit',
       variables: [...variables].map(([key, value]) => ({ key, value, isSecret: false })),
+      ...(environments.length > 0 ? { environments } : {}),
       requests: rootRequests,
       folders: [...folders.values()],
     },

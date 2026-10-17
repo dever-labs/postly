@@ -114,7 +114,8 @@ describe('real-world import fixtures', () => {
     expect(requestByName(collection, 'form-urlencoded').bodyType).toBe('x-www-form-urlencoded')
     expect(requestByName(collection, 'multipart').bodyType).toBe('form-data')
 
-    expect(preview.warnings.join('\n')).toMatch(/1 environment was not imported \(Local\)/)
+    expect(collection.environments?.map((e) => e.name)).toEqual(['Local'])
+    expect(preview.warnings.join('\n')).not.toMatch(/environment.* not imported/)
     expect(preview.warnings.join('\n')).toMatch(/4 folder variables and 15 request variables were imported as collection variables/)
     expect(preview.warnings.join('\n')).toMatch(/timeout \(non-positive or out-of-range values\)/)
   })

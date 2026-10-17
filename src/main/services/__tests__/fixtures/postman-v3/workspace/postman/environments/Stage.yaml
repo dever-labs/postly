@@ -3,3 +3,10 @@ name: Stage
 values:
   - key: baseUrl
     value: https://stage.example.com
+    type: text
+  - key: apiToken
+    value: stage-secret
+    type: secret
+  - key: disabledFlag
+    value: skipped
+    disabled: true
