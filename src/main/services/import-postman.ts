@@ -35,7 +35,9 @@ export function isPostmanV1Collection(doc: unknown): boolean {
 
 // ─── Scripts ─────────────────────────────────────────────────────────────────
 
-const SET_CALL = /^pm\.(environment|collectionVariables|globals|variables)\.set\(\s*(['"])([^'"]+)\2\s*,\s*(.+?)\s*\)\s*;?$/
+// Longer lines are minified or hostile; they are reported rather than matched
+const MAX_SCRIPT_LINE = 2000
+const SET_CALL = /^pm\.(environment|collectionVariables|globals|variables)\.set\(\s*(['"])([^'"]+)\2\s*,(.+)\)\s*;?$/
 const JSON_ALIAS = /^(?:const|let|var)\s+(\w+)\s*=\s*(?:pm\.response\.json\(\)|JSON\.parse\(\s*responseBody\s*\))\s*;?$/
 
 function valueToRule(expr: string, aliases: Set<string>): Pick<ExtractRule, 'source' | 'expression'> | null {
@@ -70,10 +72,11 @@ export function convertPostmanScripts(requestName: string, events: unknown): { r
     const aliases = new Set<string>()
     const skipped: string[] = []
     for (const line of scriptLines(event)) {
+      if (line.length > MAX_SCRIPT_LINE) { skipped.push(line); continue }
       const alias = JSON_ALIAS.exec(line)
       if (alias) { aliases.add(alias[1]); continue }
       const set = SET_CALL.exec(line)
-      const rule = set && (set[1] === 'environment' || set[1] === 'collectionVariables') ? valueToRule(set[4], aliases) : null
+      const rule = set && (set[1] === 'environment' || set[1] === 'collectionVariables') ? valueToRule(set[4].trim(), aliases) : null
       if (set && rule) {
         rules.push({ id: crypto.randomUUID(), ...rule, variable: set[3], scope: set[1] === 'environment' ? 'environment' : 'collection', enabled: true })
       } else skipped.push(line)

@@ -220,3 +220,15 @@ describe('Postman detection', () => {
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Old', requests: [] }))).rejects.toThrow(/v1/)
   })
 })
+
+describe('script parsing limits', () => {
+  it('handles a pathological whitespace line quickly', () => {
+    const line = `pm.environment.set('a', x${' '.repeat(200_000)}y`
+    const start = Date.now()
+    const result = convertPostmanScripts('r', test([line]))
+    expect(Date.now() - start).toBeLessThan(500)
+    expect(result.rules).toEqual([])
+    expect(result.warnings.length).toBe(1)
+  })
+})
+
