@@ -1,0 +1,19 @@
+$kind: graphql-request
+name: Search users
+url: '{{baseUrl}}/graphql'
+query: |
+  query SearchUsers($term: String!) {
+    users(term: $term) { id }
+  }
+variables: '{"term":"ada"}'
+headers:
+  - key: X-Mode
+    value: graph
+scripts:
+  - type: afterResponse
+    code: pm.collectionVariables.set("next", pm.response.json().page.next);
+examples:
+  - name: Search
+    $kind: http-example
+    response:
+      statusCode: 200

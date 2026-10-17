@@ -1,0 +1,32 @@
+info:
+  name: Query Users
+  type: graphql
+  seq: 1
+graphql:
+  method: POST
+  url: https://api.example.com/graphql
+  headers:
+    - name: X-Env
+      value: "{{folderVar}}"
+  body:
+    query: |
+      query Users {
+        users { id }
+      }
+    variables: '{"limit":1}'
+  auth:
+    type: basic
+    username: user
+    password: pass
+runtime:
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        method: jsonq
+        expression: res.status
+      variable:
+        name: lastStatus
+        scope: runtime
+settings:
+  timeout: 700

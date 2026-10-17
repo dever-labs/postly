@@ -1,0 +1,16 @@
+$kind: collection
+name: Single file sample
+variables:
+  - key: baseUrl
+    value: https://single.example.com
+items:
+  - $kind: collection
+    name: Admin
+    items:
+      - $kind: http-request
+        name: Get audit
+        url: '{{baseUrl}}/audit/:id?expand=true'
+        method: GET
+        pathVariables:
+          - key: id
+            value: '99'

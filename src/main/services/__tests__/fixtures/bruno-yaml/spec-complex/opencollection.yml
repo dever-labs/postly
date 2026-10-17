@@ -1,0 +1,36 @@
+opencollection: "1.0.0"
+info:
+  name: Spec Complex
+  summary: Root summary
+request:
+  headers:
+    - name: X-Collection-Header
+      value: root
+  auth:
+    type: bearer
+    token: "{{token}}"
+  variables:
+    - name: token
+      value: root-token
+    - name: shadow
+      value: root-shadow
+  settings:
+    http:
+      followRedirects: false
+      maxRedirects: 4
+      timeout: 2000
+      encodeUrl: true
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        method: jsonq
+        expression: res.body.root
+      variable:
+        name: rootFromAction
+        scope: runtime
+  scripts:
+    - type: before-request
+      code: console.log('root')
+docs: root docs
+mystery: true

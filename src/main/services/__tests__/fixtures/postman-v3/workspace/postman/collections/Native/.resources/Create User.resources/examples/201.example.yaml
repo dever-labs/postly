@@ -1,0 +1,4 @@
+$kind: http-example
+name: Created from file
+response:
+  statusCode: 201

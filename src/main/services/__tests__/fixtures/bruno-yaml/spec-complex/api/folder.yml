@@ -1,0 +1,40 @@
+info:
+  name: API
+  type: folder
+  seq: 1
+  description:
+    type: text/markdown
+    content: Folder desc
+request:
+  headers:
+    - name: X-Folder-Header
+      value: folder
+  auth:
+    type: apikey
+    key: X-Key
+    value: "{{token}}"
+    placement: query
+  variables:
+    - name: folderVar
+      value: folder
+    - name: shadow
+      value: folder-shadow
+  settings:
+    http:
+      followRedirects: true
+  actions:
+    - type: set-variable
+      phase: after-response
+      selector:
+        method: jsonq
+        expression: res.body.folder
+      variable:
+        name: folderAction
+        scope: runtime
+  scripts:
+    - type: after-response
+      code: console.log('folder')
+docs:
+  type: text/markdown
+  content: folder docs
+unknownFolder: 1

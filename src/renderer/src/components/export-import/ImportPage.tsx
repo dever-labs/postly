@@ -1,3 +1,4 @@
+import { MAX_FOLDER_FILES, selectCollectionFiles } from './folder-files'
 import { AlertTriangle, Database, FileJson, FolderOpen, GitBranch, GitFork, Globe, Link as LinkIcon, Upload } from 'lucide-react'
 import React, { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
@@ -23,7 +24,7 @@ interface PreviewEntry {
 }
 
 interface ParsedFile {
-  format: 'postly' | 'openapi'
+  format: 'postly' | 'openapi' | 'postman' | 'insomnia' | 'bruno'
   collections: PreviewEntry[]
   warnings: string[]
 }
@@ -31,6 +32,9 @@ interface ParsedFile {
 const FORMAT_LABELS: Record<ParsedFile['format'], string> = {
   postly: 'Postly export',
   openapi: 'OpenAPI / Swagger',
+  postman: 'Postman collection',
+  insomnia: 'Insomnia export',
+  bruno: 'Bruno collection',
 }
 
 const SOURCE_LABELS: Record<CollectionSource, string> = {
@@ -63,6 +67,7 @@ export function ImportPage() {
   ]
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const [parsedFile, setParsedFile] = useState<ParsedFile | null>(null)
   const [fileName, setFileName] = useState('')
   const [sourceOverrides, setSourceOverrides] = useState<Record<number, CollectionSource>>({})
@@ -102,6 +107,37 @@ export function ImportPage() {
     reader.onerror = () => setParseError('Could not read the file.')
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (picked.length === 0) return
+    setParseError('')
+    const pathOf = (f: File) => f.webkitRelativePath || f.name
+    const picked_ = picked.map((file) => ({ file, path: pathOf(file), size: file.size }))
+    const selected = selectCollectionFiles(picked_)
+    if (selected.tooLarge) {
+      setParseError('A collection file in the folder is larger than 2 MB.')
+      return
+    }
+    if (selected.tooMany) {
+      setParseError(`The folder has more than ${MAX_FOLDER_FILES} collection files. Pick the collection's own folder.`)
+      return
+    }
+    const relevant = selected.files.map((x) => x.file)
+    try {
+      const files = await Promise.all(relevant.map(async (f) => ({ path: f.webkitRelativePath || f.name, text: await f.text() })))
+      const { data, error } = await window.api.exportImport.parseFolder({ files }) as { data?: ParsedFile; error?: string }
+      if (error || !data) {
+        setParseError(error ?? 'Could not read the folder.')
+        setParsedFile(null)
+        return
+      }
+      showPreview((picked[0].webkitRelativePath || picked[0].name).split('/')[0], data)
+    } catch {
+      setParseError('Could not read the folder.')
+    }
   }
 
   const handleFetchUrl = async () => {
@@ -165,6 +201,16 @@ export function ImportPage() {
             className="hidden"
             onChange={handleFileChange}
           />
+          <input
+            ref={folderInputRef}
+            type="file"
+            data-testid="import-folder-input"
+            aria-label="Collection folder"
+            // webkitdirectory is not in React's input typings
+            {...{ webkitdirectory: '' }}
+            className="hidden"
+            onChange={(e) => { void handleFolderChange(e) }}
+          />
           {!parsedFile ? (
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -173,7 +219,7 @@ export function ImportPage() {
               <FolderOpen className="h-8 w-8 text-th-text-muted" />
               <div>
                 <p className="text-sm font-medium text-th-text-secondary">Browse for a file</p>
-                <p className="mt-0.5 text-xs text-th-text-subtle">Postly export (.postly.json), or an OpenAPI 3.x / Swagger 2 document (JSON or YAML)</p>
+                <p className="mt-0.5 text-xs text-th-text-subtle">Postly export (.postly.json), a Postman collection (v2.0 / v2.1), an Insomnia export (v4 / v5), a Bruno JSON export, or an OpenAPI 3.x / Swagger 2 document (JSON or YAML)</p>
               </div>
             </button>
           ) : (
@@ -203,6 +249,17 @@ export function ImportPage() {
                 {fetching ? 'Fetching…' : 'Fetch'}
               </Button>
             </form>
+          )}
+          {!parsedFile && (
+            <button
+              type="button"
+              data-testid="import-folder"
+              onClick={() => folderInputRef.current?.click()}
+              className="mt-3 flex items-center gap-2 text-xs text-th-text-subtle hover:text-th-text-primary"
+            >
+              <FolderOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
+              …or choose a collection folder (Bruno .bru / YAML, or Postman v3)
+            </button>
           )}
           {parseError && <p role="alert" data-testid="import-error" className="mt-2 text-xs text-red-400 light:text-red-800">{parseError}</p>}
         </div>

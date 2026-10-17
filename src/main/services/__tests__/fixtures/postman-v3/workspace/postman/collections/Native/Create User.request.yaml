@@ -1,0 +1,49 @@
+$kind: http-request
+name: Create user
+description: Creates a user
+url: '{{baseUrl}}/users/:id?draft=1#ignore'
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-Trace
+    value: '{{ $guid }}'
+queryParams:
+  - key: draft
+    value: '1'
+  - key: verbose
+    value: '0'
+    disabled: true
+pathVariables:
+  - key: id
+    value: '42'
+body:
+  type: json
+  content: '{"name":"Ada"}'
+auth:
+  type: apikey
+  credentials:
+    - key: key
+      value: X-Api-Key
+    - key: value
+      value: abc123
+    - key: in
+      value: query
+settings:
+  followRedirects: false
+  maxRedirects: 2
+  strictSSL: false
+  disableCookies: true
+scripts:
+  - type: beforeRequest
+    code: console.log('pre')
+  - type: afterResponse
+    code: |
+      var jsonData = pm.response.json();
+      pm.environment.set("userId", jsonData.id);
+examples:
+  - $kind: http-example
+    name: Created
+    response:
+      statusCode: 201
+unknownRequest: ignored
