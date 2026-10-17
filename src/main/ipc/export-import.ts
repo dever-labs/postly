@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import { queryAll, runTransaction } from '../database'
 import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
-import { MAX_IMPORT_BYTES, previewImport } from '../services/import-formats'
+import { MAX_IMPORT_BYTES, previewBrunoFolder, previewImport } from '../services/import-formats'
 import { collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
@@ -389,6 +389,16 @@ export function registerExportImportHandlers(): void {
     try {
       if (typeof args?.text !== 'string') return { error: 'No file content provided.' }
       return { data: await previewImport(args.text, { sourceUrl: typeof args.sourceUrl === 'string' ? args.sourceUrl : undefined }) }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('postly:import:parse-folder', (_event, args: { files?: Array<{ path?: unknown; text?: unknown }> }) => {
+    try {
+      if (!Array.isArray(args?.files)) return { error: 'No files provided.' }
+      const files = args.files.filter((f) => typeof f?.path === 'string' && typeof f.text === 'string') as Array<{ path: string; text: string }>
+      return { data: previewBrunoFolder(files) }
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) }
     }

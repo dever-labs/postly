@@ -56,7 +56,7 @@ test.afterAll(async ({ window }) => {
 test.describe('Import OpenAPI', () => {
   test('previews a file with warnings, then imports it as a collection', async ({ window }) => {
     await window.getByTestId('btn-import').click()
-    await window.locator('input[type="file"]').setInputFiles({ name: 'api.yaml', mimeType: 'application/yaml', buffer: Buffer.from(SPEC) })
+    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({ name: 'api.yaml', mimeType: 'application/yaml', buffer: Buffer.from(SPEC) })
 
     await expect(window.getByTestId('import-format')).toContainText('OpenAPI')
     await expect(window.getByText(title)).toBeVisible()
@@ -99,7 +99,7 @@ test.describe('Import OpenAPI', () => {
 
   test('rejects a file in an unknown format', async ({ window }) => {
     await window.getByTestId('btn-import').click()
-    await window.locator('input[type="file"]').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') })
+    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') })
     await expect(window.getByTestId('import-error')).toContainText('Unrecognised format')
   })
 })
