@@ -352,3 +352,23 @@ describe('OpenAPI edge cases', () => {
     expect(warnings.join()).toMatch(/"additionalOperations" operations/)
   })
 })
+
+describe('server environments', () => {
+  const doc = (servers: unknown[]) => JSON.stringify({ openapi: '3.0.3', info: { title: 'T', version: '1' }, servers, paths: { '/pets': { get: { responses: {} } } } })
+
+  it('normalises each environment baseUrl like the collection variable', async () => {
+    const preview = await previewImport(doc([{ url: 'https://a.com/v1/' }, { url: '/api' }]), { sourceUrl: 'https://spec.test/openapi.json' })
+    const envs = preview.collections[0].collection.environments ?? []
+    expect(envs.map((e) => e.variables[0].value)).toEqual(['https://a.com/v1', 'https://spec.test/api'])
+  })
+
+  it('renames a server variable called baseUrl instead of overwriting the URL', async () => {
+    const preview = await previewImport(doc([{ url: 'https://{baseUrl}.x.com', variables: { baseUrl: { default: 'p' } } }, { url: 'https://b.x.com' }]))
+    const env = preview.collections[0].collection.environments?.[0]
+    expect(env?.variables).toEqual([
+      { key: 'baseUrl', value: 'https://{{serverBaseUrl}}.x.com', isSecret: false },
+      { key: 'serverBaseUrl', value: 'p', isSecret: false },
+    ])
+  })
+})
+

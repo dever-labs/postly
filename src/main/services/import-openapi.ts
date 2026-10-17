@@ -79,8 +79,20 @@ function serverUrl(server: Obj): string {
   })
 }
 
+/** A server variable called baseUrl would overwrite the URL variable of the same environment, so it is renamed. */
+const serverVariableKey = (name: string) => (name === 'baseUrl' ? 'serverBaseUrl' : name)
+
 function serverTemplateUrl(server: Obj): string {
-  return str(server.url).replace(/\{([^}]+)\}/g, (_match, name: string) => `{{${name}}}`)
+  return str(server.url).replace(/\{([^}]+)\}/g, (_match, name: string) => `{{${serverVariableKey(name)}}}`)
+}
+
+/** Same treatment as the collection baseUrl: relative URLs resolve against the source, trailing slashes go. */
+function normalizeBaseUrl(value: string, sourceUrl?: string): string {
+  let url = value
+  if (url && !url.includes('{{') && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && sourceUrl) {
+    try { url = new URL(url, sourceUrl).href } catch { /* kept as written */ }
+  }
+  return url.replace(/\/+$/, '')
 }
 
 function serverVariableValue(variable: unknown): string {
@@ -93,7 +105,7 @@ function serverVariableValue(variable: unknown): string {
 function serverVariableRows(server: Obj): VariableRow[] {
   const variables = isObj(server.variables) ? server.variables : {}
   return Object.entries(variables)
-    .map(([key, value]) => ({ key, value: serverVariableValue(value), isSecret: false }))
+    .map(([key, value]) => ({ key: serverVariableKey(key), value: serverVariableValue(value), isSecret: false }))
     .filter((row) => row.key)
 }
 
@@ -109,7 +121,7 @@ function openApiServerEnvironment(server: Obj, index: number, sourceUrl?: string
   return {
     name,
     variables: [
-      { key: 'baseUrl', value: serverTemplateUrl(server), isSecret: false },
+      { key: 'baseUrl', value: normalizeBaseUrl(serverTemplateUrl(server), sourceUrl), isSecret: false },
       ...serverVariableRows(server),
     ],
   }
@@ -119,7 +131,7 @@ function swaggerBaseUrl(host: string, basePath: string, scheme: string): string 
   return host ? `${scheme || 'https'}://${host}${basePath}` : basePath
 }
 
-function swaggerEnvironments(doc: Obj): ExportEnvironment[] {
+function swaggerEnvironments(doc: Obj, sourceUrl?: string): ExportEnvironment[] {
   const host = str(doc.host)
   if (!host) return []
   const basePath = str(doc.basePath)
@@ -128,7 +140,7 @@ function swaggerEnvironments(doc: Obj): ExportEnvironment[] {
   if (urls.length <= 1) return []
   return urls.map(({ scheme, url }) => ({
     name: `${host} (${scheme})`,
-    variables: [{ key: 'baseUrl', value: url, isSecret: false }],
+    variables: [{ key: 'baseUrl', value: normalizeBaseUrl(url, sourceUrl), isSecret: false }],
   }))
 }
 
@@ -243,7 +255,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
     const host = str(doc.host)
     const schemes = Array.isArray(doc.schemes) ? doc.schemes : []
     baseUrl = swaggerBaseUrl(host, str(doc.basePath), str(schemes[0]) || 'https')
-    environments.push(...swaggerEnvironments(doc))
+    environments.push(...swaggerEnvironments(doc, sourceUrl))
   }
   if (baseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrl)) {
     const relative = baseUrl
