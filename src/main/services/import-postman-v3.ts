@@ -135,7 +135,8 @@ function parseWorkspaceEnvironments(files: ParsedFile[]): ParsedEnvironmentAttac
       warnings.push(`${warningLabel(file.path)}: Postman environment files must contain a YAML object.`)
       continue
     }
-    if (file.doc.$kind !== 'environment') {
+    const looksLikeEnvironment = file.doc.$kind === 'environment' || typeof file.doc.name === 'string' || Array.isArray(file.doc.values)
+    if (!looksLikeEnvironment) {
       warnings.push(`${warningLabel(file.path)}: expected a Postman environment file.`)
       continue
     }

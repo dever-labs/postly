@@ -409,6 +409,41 @@ describe('importData integration', () => {
     expect(count('environments')).toBe(0)
     expect(count('env_vars')).toBe(0)
   })
+
+  it('imports top-level environments in the same transaction as collections', () => {
+    importData(makeFile({
+      environments: [
+        {
+          name: '  Shared  ',
+          variables: [
+            { key: 'base_url', value: 'https://shared.example.test', isSecret: false },
+            { key: 'token', value: 'shared-secret', isSecret: true },
+          ],
+        },
+        {
+          name: 'Shared',
+          variables: [{ key: 'region', value: 'eu-west-1', isSecret: false }],
+        },
+      ],
+    }))
+
+    expect(count('folders')).toBe(1)
+    expect(count('environments')).toBe(2)
+    expect(rows<{ name: string }>('SELECT name FROM environments ORDER BY name ASC').map((row) => row.name)).toEqual([
+      'Shared',
+      'Shared (2)',
+    ])
+    expect(rows<{ key: string; value: string; is_secret: number }>(
+      `SELECT env_vars.key, env_vars.value, env_vars.is_secret
+       FROM env_vars
+       JOIN environments ON environments.id = env_vars.env_id
+       WHERE environments.name = 'Shared'
+       ORDER BY env_vars.key ASC`,
+    )).toEqual([
+      { key: 'base_url', value: 'https://shared.example.test', is_secret: 0 },
+      { key: 'token', value: 'shared-secret', is_secret: 1 },
+    ])
+  })
 })
 
 describe('export/import IPC network and validation handlers', () => {
@@ -455,12 +490,29 @@ describe('export/import IPC network and validation handlers', () => {
       ],
     })
 
-    expect(result).toEqual({ error: 'Error: Collection environments must be arrays.' })
+    expect(result).toEqual({ error: 'Error: Environments must be arrays.' })
     expect(count('folders')).toBe(0)
     expect(count('requests')).toBe(0)
     expect(count('variables')).toBe(0)
     expect(count('environments')).toBe(0)
     expect(count('env_vars')).toBe(0)
+  })
+
+  it('imports top-level environments from the renderer payload', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [],
+      environments: [
+        {
+          name: 'Renderer Env',
+          variables: [{ key: 'base_url', value: 'https://renderer.example.test', isSecret: false }],
+        },
+      ],
+    })
+
+    expect(result).toEqual({ data: { count: 0 } })
+    expect(count('folders')).toBe(0)
+    expect(count('environments')).toBe(1)
+    expect(rows<{ name: string }>('SELECT name FROM environments')).toEqual([{ name: 'Renderer Env' }])
   })
 
   it('rejects malformed environment variables without partial imports', async () => {

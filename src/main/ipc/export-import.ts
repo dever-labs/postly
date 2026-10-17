@@ -66,6 +66,7 @@ export interface PostlyExportFile {
   $schema: string
   exportedAt: string
   collections: ExportCollection[]
+  environments?: ExportEnvironment[]
 }
 
 interface DbFolderRow {
@@ -293,11 +294,11 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
   }
 }
 
-function environmentStatements(collections: ExportCollection[], now: number): Statement[] {
+function environmentStatements(sources: Array<{ environments?: unknown }>, now: number): Statement[] {
   const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
   const out: Statement[] = []
-  for (const collection of collections) {
-    const incoming = arrayField<ExportEnvironment>(collection.environments, 'Collection environments must be arrays.')
+  for (const source of sources) {
+    const incoming = arrayField<ExportEnvironment>(source.environments, 'Environments must be arrays.')
     for (const environment of incoming) {
       const base = String(environment.name ?? '').trim() || 'Imported'
       let name = base
@@ -355,7 +356,7 @@ export function importData(data: PostlyExportFile): number {
       folderStatements(folder, collectionId, folderIndex, now, statements)
     }
   }
-  statements.push(...environmentStatements(collections, now))
+  statements.push(...environmentStatements([...collections, { environments: data.environments }], now))
   runTransaction(statements)
   return collections.length
 }
@@ -435,10 +436,10 @@ export function registerExportImportHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:import:collections', async (_event, args: { collections: ExportCollection[] }) => {
+  ipcMain.handle('postly:import:collections', async (_event, args: { collections: ExportCollection[]; environments?: ExportEnvironment[] }) => {
     try {
       if (!Array.isArray(args?.collections)) return { error: 'Invalid collections data.' }
-      const count = importData({ $schema: SCHEMA, exportedAt: new Date().toISOString(), collections: args.collections })
+      const count = importData({ $schema: SCHEMA, exportedAt: new Date().toISOString(), collections: args.collections, environments: args.environments })
       return { data: { count } }
     } catch (err) {
       return { error: String(err) }

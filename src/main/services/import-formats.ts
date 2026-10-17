@@ -1,13 +1,22 @@
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
-import type { ExportCollection, ExportFolder } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder } from '../ipc/export-import'
 import { isOpenApiDocument, parseOpenApi } from './import-openapi'
-import { convertBrunoExport, convertBrunoFiles, isBrunoExport, type BrunoFile } from './import-bruno'
+import { convertBrunoEnvironmentExport, convertBrunoExport, convertBrunoFiles, isBrunoEnvironmentExport, isBrunoExport, type BrunoFile } from './import-bruno'
 import { convertBrunoYamlFiles, isBrunoYamlFolder } from './import-bruno-yaml'
-import { convertInsomnia, insomniaKind } from './import-insomnia'
+import { convertInsomnia, convertInsomniaEnvironment, insomniaKind } from './import-insomnia'
 import { convertPostmanV3Files, isPostmanV3Folder } from './import-postman-v3'
-import { convertPostman, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
+import { convertPostman, convertPostmanEnvironment, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
+import { list } from './import-util'
 
-export type ImportFormat = 'postly' | 'openapi' | 'postman' | 'insomnia' | 'bruno'
+export type ImportFormat =
+  | 'postly'
+  | 'openapi'
+  | 'postman'
+  | 'postman-environment'
+  | 'insomnia'
+  | 'insomnia-environment'
+  | 'bruno-environment'
+  | 'bruno'
 
 export interface ImportPreviewCollection {
   collection: ExportCollection
@@ -19,6 +28,7 @@ export interface ImportPreviewCollection {
 export interface ImportPreview {
   format: ImportFormat
   collections: ImportPreviewCollection[]
+  environments?: ExportEnvironment[]
   warnings: string[]
 }
 
@@ -54,6 +64,17 @@ function parseText(text: string): unknown {
   }
 }
 
+function summarizePostmanEnvironment(doc: Record<string, unknown>): { environment: ExportEnvironment; warnings: string[] } {
+  const environment = convertPostmanEnvironment(doc)
+  const values = list(doc.values)
+  const disabled = values.filter((value) => value.disabled === true || value.enabled === false).length
+  const secrets = values.filter((value) => value.disabled !== true && value.enabled !== false && value.type === 'secret').length
+  const warnings: string[] = []
+  if (disabled > 0) warnings.push(`${environment.name}: skipped ${disabled} disabled variable${disabled !== 1 ? 's' : ''}.`)
+  if (secrets > 0) warnings.push(`${environment.name}: ${secrets} secret variable${secrets !== 1 ? 's were' : ' was'} imported without a value. Re-enter ${secrets !== 1 ? 'them' : 'it'} in Postly.`)
+  return { environment, warnings }
+}
+
 /** Detects the format of an import file and converts it to Postly collections without touching the database. */
 export async function previewImport(text: string, options: { sourceUrl?: string } = {}): Promise<ImportPreview> {
   if (text.length > MAX_IMPORT_BYTES) throw new Error('The file is larger than 20 MB.')
@@ -62,7 +83,8 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
 
   const obj = doc as Record<string, unknown>
   if (typeof obj.$schema === 'string' && obj.$schema.startsWith('postly/') && Array.isArray(obj.collections)) {
-    return { format: 'postly', collections: (obj.collections as ExportCollection[]).map(summarize), warnings: [] }
+    const environments = Array.isArray(obj.environments) ? obj.environments as ExportEnvironment[] : undefined
+    return { format: 'postly', collections: (obj.collections as ExportCollection[]).map(summarize), ...(environments ? { environments } : {}), warnings: [] }
   }
   if (isOpenApiDocument(obj)) {
     let result
@@ -77,14 +99,25 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     const result = convertPostman(obj)
     return { format: 'postman', collections: [summarize(result.collection)], warnings: result.warnings }
   }
+  if (isPostmanEnvironment(obj)) {
+    const result = summarizePostmanEnvironment(obj)
+    return { format: 'postman-environment', collections: [], environments: [result.environment], warnings: result.warnings }
+  }
   const insomnia = insomniaKind(obj)
-  if (insomnia === 'environment') throw new Error('This is an Insomnia environment file. Import an Insomnia collection or workspace export instead.')
   if (insomnia === 'unsupported') throw new Error('This Insomnia file type is not supported. Export a collection or workspace from Insomnia.')
+  if (insomnia === 'environment') {
+    const result = convertInsomniaEnvironment(obj)
+    return { format: 'insomnia-environment', collections: [], environments: result.environments, warnings: result.warnings }
+  }
   if (insomnia) {
     const entries: ImportPreviewCollection[] = []
     const warnings: string[] = []
-    const converted = convertInsomnia(obj, insomnia).collections
-    for (const entry of converted) {
+    const converted = convertInsomnia(obj, insomnia)
+    if (converted.collections.length === 0 && converted.environments) {
+      return { format: 'insomnia-environment', collections: [], environments: converted.environments, warnings: converted.warnings ?? [] }
+    }
+    warnings.push(...(converted.warnings ?? []))
+    for (const entry of converted.collections) {
       let { collection } = entry
       const own = [...entry.warnings]
       if (entry.spec) {
@@ -98,15 +131,18 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
         }
       }
       entries.push(summarize(collection))
-      warnings.push(...(converted.length > 1 ? own.map((w) => `${collection.name}: ${w}`) : own))
+      warnings.push(...(converted.collections.length > 1 ? own.map((w) => `${collection.name}: ${w}`) : own))
     }
     return { format: 'insomnia', collections: entries, warnings }
+  }
+  if (isBrunoEnvironmentExport(obj)) {
+    const result = convertBrunoEnvironmentExport(obj)
+    return { format: 'bruno-environment', collections: [], environments: result.environments, warnings: result.warnings }
   }
   if (isBrunoExport(obj)) {
     const result = convertBrunoExport(obj)
     return { format: 'bruno', collections: [summarize(result.collection)], warnings: result.warnings }
   }
-  if (isPostmanEnvironment(obj)) throw new Error('This is a Postman environment file. Import a Postman collection (v2.0 or v2.1) instead.')
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
   if (obj.$kind === 'collection') {
     const entries = convertPostmanV3Files([{ path: 'collection.yaml', text }])

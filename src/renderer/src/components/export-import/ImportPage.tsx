@@ -18,6 +18,11 @@ interface ParsedCollection {
   integrationName?: string
 }
 
+interface ParsedEnvironment {
+  name: string
+  variables: Array<{ key: string; value: string; isSecret: boolean }>
+}
+
 interface PreviewEntry {
   collection: ParsedCollection
   folders: number
@@ -26,8 +31,9 @@ interface PreviewEntry {
 }
 
 interface ParsedFile {
-  format: 'postly' | 'openapi' | 'postman' | 'insomnia' | 'bruno'
+  format: 'postly' | 'openapi' | 'postman' | 'postman-environment' | 'insomnia' | 'insomnia-environment' | 'bruno' | 'bruno-environment'
   collections: PreviewEntry[]
+  environments?: ParsedEnvironment[]
   warnings: string[]
 }
 
@@ -35,7 +41,10 @@ const FORMAT_LABELS: Record<ParsedFile['format'], string> = {
   postly: 'Postly export',
   openapi: 'OpenAPI / Swagger',
   postman: 'Postman collection',
+  'postman-environment': 'Postman environment',
   insomnia: 'Insomnia export',
+  'insomnia-environment': 'Insomnia environment',
+  'bruno-environment': 'Bruno environment',
   bruno: 'Bruno collection',
 }
 
@@ -77,6 +86,33 @@ export function ImportPage() {
   const [parseError, setParseError] = useState('')
   const [url, setUrl] = useState('')
   const [fetching, setFetching] = useState(false)
+  const previewEnvironments = parsedFile?.environments ?? []
+  const previewCollectionCount = parsedFile?.collections.length ?? 0
+  const previewEnvironmentCount = previewEnvironments.length
+  const environmentWarningPrefix = (name: string) => `${name}: `
+
+  const environmentWarnings = (name: string) =>
+    (parsedFile?.warnings ?? []).filter((warning) => warning.startsWith(environmentWarningPrefix(name))).map((warning) => warning.slice(environmentWarningPrefix(name).length))
+
+  const generalWarnings = (parsedFile?.warnings ?? []).filter((warning) =>
+    previewEnvironments.every((environment) => !warning.startsWith(environmentWarningPrefix(environment.name))),
+  )
+
+  const formatSummary = (preview: ParsedFile) => {
+    const collectionCount = preview.collections.length
+    const environmentCount = preview.environments?.length ?? 0
+    if (collectionCount === 0 && environmentCount > 0) return `${FORMAT_LABELS[preview.format]} · ${environmentCount} environment${environmentCount !== 1 ? 's' : ''} found`
+    if (environmentCount === 0) return `${FORMAT_LABELS[preview.format]} · ${collectionCount} collection${collectionCount !== 1 ? 's' : ''} found`
+    return `${FORMAT_LABELS[preview.format]} · ${collectionCount} collection${collectionCount !== 1 ? 's' : ''} and ${environmentCount} environment${environmentCount !== 1 ? 's' : ''} found`
+  }
+
+  const importButtonLabel = (preview: ParsedFile) => {
+    const collectionCount = preview.collections.length
+    const environmentCount = preview.environments?.length ?? 0
+    if (collectionCount === 0 && environmentCount > 0) return `Import ${environmentCount} environment${environmentCount !== 1 ? 's' : ''}`
+    if (environmentCount === 0) return `Import ${collectionCount} collection${collectionCount !== 1 ? 's' : ''}`
+    return `Import ${collectionCount} collection${collectionCount !== 1 ? 's' : ''} and ${environmentCount} environment${environmentCount !== 1 ? 's' : ''}`
+  }
 
   const showPreview = (name: string, preview: ParsedFile) => {
     setFileName(name)
@@ -166,6 +202,7 @@ export function ImportPage() {
     }))
     const { data, error } = await window.api.exportImport.importCollections({
       collections: collectionsWithSource,
+      ...(previewEnvironments.length > 0 ? { environments: previewEnvironments } : {}),
     })
     setImporting(false)
     if (error) {
@@ -173,10 +210,14 @@ export function ImportPage() {
       return
     }
     if (data) {
-      await load()
-      void useVariablesStore.getState().load()
+      if (previewCollectionCount > 0) {
+        await load()
+        void useVariablesStore.getState().load()
+      }
       void useEnvironmentsStore.getState().load()
-      addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
+      if (previewCollectionCount === 0) addToast(`Imported ${previewEnvironmentCount} environment${previewEnvironmentCount !== 1 ? 's' : ''}`, 'success')
+      else if (previewEnvironmentCount === 0) addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''}`, 'success')
+      else addToast(`Imported ${data.count} collection${data.count !== 1 ? 's' : ''} and ${previewEnvironmentCount} environment${previewEnvironmentCount !== 1 ? 's' : ''}`, 'success')
       clearSelectedItem()
     }
   }
@@ -270,17 +311,47 @@ export function ImportPage() {
         {parsedFile && (
           <div className="flex flex-col gap-3">
             <p data-testid="import-format" className="text-xs font-medium uppercase tracking-wide text-th-text-subtle">
-              {FORMAT_LABELS[parsedFile.format]} · {parsedFile.collections.length} collection{parsedFile.collections.length !== 1 ? 's' : ''} found
+              {formatSummary(parsedFile)}
             </p>
-            {parsedFile.warnings.length > 0 && (
+            {generalWarnings.length > 0 && (
               <div data-testid="import-warnings" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
                 <p className="flex items-center gap-1.5 text-xs font-medium text-amber-400 light:text-amber-900">
                   <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                  {parsedFile.warnings.length} thing{parsedFile.warnings.length !== 1 ? 's' : ''} could not be fully mapped
+                  {generalWarnings.length} thing{generalWarnings.length !== 1 ? 's' : ''} could not be fully mapped
                 </p>
                 <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-xs text-th-text-muted">
-                  {parsedFile.warnings.map((w) => <li key={w}>{w}</li>)}
+                  {generalWarnings.map((w) => <li key={w}>{w}</li>)}
                 </ul>
+              </div>
+            )}
+            {previewEnvironments.length > 0 && (
+              <div className="rounded-lg border border-th-border bg-th-surface-raised px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-medium text-th-text-primary">Environments</h2>
+                  <span className="text-xs text-th-text-subtle">
+                    {previewEnvironmentCount} environment{previewEnvironmentCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-col gap-3">
+                  {previewEnvironments.map((environment, index) => {
+                    const warnings = environmentWarnings(environment.name)
+                    return (
+                      <div key={`${environment.name}-${index}`} className="rounded-lg border border-th-border px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate text-sm font-medium text-th-text-primary">{environment.name}</span>
+                          <span className="shrink-0 text-xs text-th-text-faint">
+                            {environment.variables.length} variable{environment.variables.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        {warnings.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-amber-400 light:text-amber-900">
+                            {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
             {parsedFile.collections.map(({ collection: col, folders, requests, environments = 0 }, i) => (
@@ -334,7 +405,7 @@ export function ImportPage() {
                 <Upload className="h-4 w-4" />
                 {importing
                   ? 'Importing…'
-                  : `Import ${parsedFile.collections.length} collection${parsedFile.collections.length !== 1 ? 's' : ''}`}
+                  : importButtonLabel(parsedFile)}
               </Button>
               <button
                 onClick={clearSelectedItem}

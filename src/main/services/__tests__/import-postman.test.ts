@@ -308,13 +308,38 @@ describe('Postman detection', () => {
     expect(isPostmanCollection({ info: { schema: 'https://example.com/collection.json' } })).toBe(false)
   })
 
-  it('explains environment files and v1 collections', async () => {
-    await expect(previewImport(JSON.stringify({ id: 'x', name: 'Env', values: [], _postman_variable_scope: 'environment' }))).rejects.toThrow(/environment file/)
+  it('still explains v1 collections', async () => {
     await expect(previewImport(JSON.stringify({ id: 'x', name: 'Old', requests: [] }))).rejects.toThrow(/v1/)
   })
 })
 
 describe('Postman environment conversion', () => {
+  it('previews standalone environment exports with warnings for disabled and secret rows', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _postman_variable_scope: 'environment',
+      name: 'Stage',
+      values: [
+        { key: 'baseUrl', value: 'https://stage.test', enabled: true },
+        { key: 'apiKey', value: 'secret', type: 'secret', enabled: true },
+        { key: 'disabled', value: 'skip', enabled: false },
+      ],
+    }))
+
+    expect(preview).toMatchObject({
+      format: 'postman-environment',
+      collections: [],
+      environments: [{
+        name: 'Stage',
+        variables: [
+          { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+          { key: 'apiKey', value: '', isSecret: true },
+        ],
+      }],
+    })
+    expect(preview.warnings.join('\n')).toMatch(/Stage: skipped 1 disabled variable/)
+    expect(preview.warnings.join('\n')).toMatch(/Stage: 1 secret variable was imported without a value/)
+  })
+
   it('converts standalone environment exports into Postly environments', () => {
     expect(convertPostmanEnvironment({
       _postman_variable_scope: 'environment',
@@ -343,6 +368,21 @@ describe('Postman environment conversion', () => {
     })).toEqual({
       name: 'Imported Postman environment',
       variables: [{ key: 'enabled', value: '1', isSecret: false }],
+    })
+  })
+
+  it('accepts empty environment files', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _postman_variable_scope: 'environment',
+      name: 'Empty',
+      values: [],
+    }))
+
+    expect(preview).toMatchObject({
+      format: 'postman-environment',
+      collections: [],
+      environments: [{ name: 'Empty', variables: [] }],
+      warnings: [],
     })
   })
 })

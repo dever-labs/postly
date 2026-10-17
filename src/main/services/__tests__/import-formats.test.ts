@@ -39,6 +39,33 @@ describe('previewImport', () => {
   it('enforces the 20 MB import cap before parsing', async () => {
     await expect(previewImport('x'.repeat(MAX_IMPORT_BYTES + 1))).rejects.toThrow(/larger than 20 MB/)
   })
+
+  it('keeps top-level Postly environments alongside collections in previews', async () => {
+    const preview = await previewImport(JSON.stringify({
+      $schema: 'postly/v1',
+      exportedAt: '2026-10-17T00:00:00.000Z',
+      collections: [{
+        name: 'Imported API',
+        description: '',
+        source: 'local',
+        auth: { type: 'none', config: {} },
+        ssl: 'inherit',
+        requests: [],
+        folders: [],
+      }],
+      environments: [{
+        name: 'Shared',
+        variables: [{ key: 'base_url', value: 'https://api.example.test', isSecret: false }],
+      }],
+    }))
+
+    expect(preview).toMatchObject({
+      format: 'postly',
+      collections: [expect.objectContaining({ collection: expect.objectContaining({ name: 'Imported API' }) })],
+      environments: [{ name: 'Shared', variables: [{ key: 'base_url', value: 'https://api.example.test', isSecret: false }] }],
+      warnings: [],
+    })
+  })
 })
 
 describe('previewFolder', () => {
@@ -78,5 +105,18 @@ describe('previewFolder', () => {
     )
     expect(() => previewFolder([{ path: 'c/request.bru', text: 'x'.repeat(MAX_IMPORT_BYTES + 1) }])).toThrow(/folder is larger than 20 MB/)
     expect(() => previewFolder([])).toThrow(/No Bruno \(\.bru or YAML\) or Postman v3 collection files were found/)
+  })
+})
+
+describe('standalone Bruno environment export', () => {
+  it('imports the environments, copies inherited variables and keeps secrets blank', async () => {
+    const text = fs.readFileSync(path.join(FIX, 'real-world-env', 'bruno-collection-environments.json'), 'utf-8')
+    const preview = await previewImport(text)
+    expect(preview.format).toBe('bruno-environment')
+    expect(preview.collections).toEqual([])
+    const derived = preview.environments?.find((e) => e.name === 'derived')
+    expect(derived?.variables.map((v) => v.key)).toEqual(expect.arrayContaining(['host', 'secretToken', 'region']))
+    expect(derived?.variables.find((v) => v.key === 'secretToken')).toMatchObject({ value: '', isSecret: true })
+    expect(preview.warnings.join('\n')).toMatch(/extends another/)
   })
 })

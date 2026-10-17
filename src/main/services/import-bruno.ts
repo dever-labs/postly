@@ -798,3 +798,46 @@ export function convertBrunoExport(doc: Obj): BrunoEntry {
   const environments = list(doc.environments).map((environment, index) => environmentFromExport(environment, index, ctx))
   return finish(str(doc.name), root, build(list(doc.items), root, 0), environments, [], ctx)
 }
+
+/** A standalone Bruno environment export: { info: { type: 'bruno-environment' }, environments: [...] }. */
+export function isBrunoEnvironmentExport(doc: unknown): boolean {
+  return isObj(doc) && isObj(doc.info) && doc.info.type === 'bruno-environment' && Array.isArray(doc.environments)
+}
+
+export function convertBrunoEnvironmentExport(doc: Obj): { environments: ExportEnvironment[]; warnings: string[] } {
+  const ctx: Context = {
+    warnings: [],
+    variables: new Map(),
+    pathVariables: new Map(),
+    dynamic: new Set(),
+    scripted: [],
+    tested: [],
+    preVars: [],
+    hasTags: false,
+    unknownBlocks: new Set(),
+    multipartContentTypes: false,
+    oauthDrops: new Set(),
+    unsupportedSettings: new Set(),
+    disabledEnvironmentVariables: 0,
+    secretEnvironmentVariables: 0,
+    unresolvedEnvironmentVariables: [],
+  }
+  const raw = list(doc.environments)
+  const environments = raw.map((environment, index) => environmentFromExport(environment, index, ctx))
+  // `extends` inherits the parent's variables; Postly environments are flat, so they are copied in
+  const byName = new Map(environments.map((e) => [e.name, e]))
+  const resolve = (name: string, seen: Set<string>): ExportEnvironment['variables'] => {
+    const env = byName.get(name)
+    const parent = str(raw[environments.indexOf(env as ExportEnvironment)]?.extends)
+    if (!env || !parent || seen.has(name) || !byName.has(parent)) return env?.variables ?? []
+    seen.add(name)
+    const own = new Set(env.variables.map((v) => v.key))
+    return [...resolve(parent, seen).filter((v) => !own.has(v.key)), ...env.variables]
+  }
+  const extended = raw.filter((e) => str(e.extends)).length
+  const resolved = environments.map((e) => ({ ...e, variables: resolve(e.name, new Set()) }))
+  if (extended > 0) ctx.warnings.push(`${extended} environment${extended === 1 ? ' extends' : 's extend'} another; the inherited variables were copied in.`)
+  if (ctx.disabledEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments skipped ${ctx.disabledEnvironmentVariables} disabled variable${ctx.disabledEnvironmentVariables === 1 ? '' : 's'}.`)
+  if (ctx.secretEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments imported ${ctx.secretEnvironmentVariables} secret variable${ctx.secretEnvironmentVariables === 1 ? '' : 's'} with blank values; re-enter them in Postly.`)
+  return { environments: resolved, warnings: ctx.warnings }
+}

@@ -286,6 +286,61 @@ describe('ImportPage', () => {
     await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('Imported 1 collection', 'success'))
   })
 
+  it('renders standalone environments and imports them without reloading collections', async () => {
+    const user = userEvent.setup()
+    mockImportCollections.mockResolvedValue({ data: { count: 0 } })
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postman-environment',
+        warnings: [
+          'Stage: skipped 1 disabled variable.',
+          'Stage: 1 secret variable was imported without a value. Re-enter it in Postly.',
+        ],
+        collections: [],
+        environments: [
+          {
+            name: 'Stage',
+            variables: [
+              { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+              { key: 'apiKey', value: '', isSecret: true },
+            ],
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"_postman_variable_scope":"environment"}'], 'stage.postman_environment.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Postman environment · 1 environment found')
+    expect(screen.getByText('Environments')).toBeDefined()
+    expect(screen.getByText('Stage')).toBeDefined()
+    expect(screen.getByText('2 variables')).toBeDefined()
+    expect(screen.getByText('skipped 1 disabled variable.')).toBeDefined()
+    expect(screen.getByText(/1 secret variable was imported without a value/)).toBeDefined()
+
+    await user.click(screen.getByRole('button', { name: /Import 1 environment/i }))
+
+    expect(mockImportCollections).toHaveBeenCalledWith({
+      collections: [],
+      environments: [
+        {
+          name: 'Stage',
+          variables: [
+            { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+            { key: 'apiKey', value: '', isSecret: true },
+          ],
+        },
+      ],
+    })
+    expect(mockLoadCollections).not.toHaveBeenCalled()
+    expect(mockLoadVariables).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockLoadEnvironments).toHaveBeenCalledTimes(1))
+    expect(mockAddToast).toHaveBeenCalledWith('Imported 1 environment', 'success')
+    expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a parse error when a selected file cannot be converted', async () => {
     const user = userEvent.setup()
     mockParse.mockResolvedValue({ error: 'Unsupported format' })

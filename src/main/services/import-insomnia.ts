@@ -16,6 +16,8 @@ export interface InsomniaEntry {
 
 export interface InsomniaImport {
   collections: InsomniaEntry[]
+  environments?: ExportEnvironment[]
+  warnings?: string[]
 }
 
 export type InsomniaKind = 'export' | 'collection' | 'design' | 'environment' | 'unsupported'
@@ -210,6 +212,57 @@ function warnPlainTextEnvironmentVariables(raw: Obj | undefined, rows: Environme
   const hasTypedKvPairs = Array.isArray(raw?.kvPairData) && list(raw.kvPairData).some((row) => str(row.name) && row.enabled !== false && row.type === 'json')
   if (rows.some((row) => row.isSecret) || hasTypedKvPairs) {
     warnings.push(`${label}: secret and typed environment variables were imported as plain text collection variables.`)
+  }
+}
+
+function convertStandaloneEnvironment(raw: Obj, dataKey: 'data' | 'environment', budget: ImportBudget): { environment: ExportEnvironment; warnings: string[] } {
+  const warnings: string[] = []
+  const unconverted = new Set<string>()
+  const values = environmentRows(raw, dataKey, budget).map((row) => ({
+    ...row,
+    value: template(row.value, unconverted),
+  }))
+  const label = str(raw.name) || 'Imported'
+  if (unconverted.size > 0) {
+    warnings.push(`${label}: uses Insomnia template tags that were left as text (${[...unconverted].slice(0, 2).join(', ')}).`)
+  }
+  return {
+    environment: {
+      name: label,
+      variables: values,
+    },
+    warnings,
+  }
+}
+
+function convertStandaloneV4Environments(resources: Obj[]): InsomniaImport {
+  const environments = resources.filter((resource) => resource._type === 'environment')
+  if (environments.length === 0) throw new Error('The Insomnia export contains no workspaces.')
+  const budget = new ImportBudget()
+  const byParent = new Map<string, Obj[]>()
+  for (const environment of environments) {
+    const parentId = str(environment.parentId)
+    byParent.set(parentId, [...(byParent.get(parentId) ?? []), environment])
+  }
+  const environmentIds = new Set(environments.map((resource) => str(resource._id)))
+  const roots = environments
+    .filter((resource) => {
+      const parentId = str(resource.parentId)
+      return !parentId || !environmentIds.has(parentId)
+    })
+    .sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
+  const visit = (environment: Obj): Array<{ environment: ExportEnvironment; warnings: string[] }> => [
+    convertStandaloneEnvironment(environment, 'data', budget),
+    ...(byParent.get(str(environment._id)) ?? [])
+      .sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
+      .flatMap((child) => visit(child)),
+  ]
+  const entries = roots.flatMap((root) => visit(root))
+
+  return {
+    collections: [],
+    environments: entries.map((entry) => entry.environment),
+    warnings: entries.flatMap((entry) => entry.warnings),
   }
 }
 
@@ -447,6 +500,7 @@ function convertExport(doc: Obj): InsomniaImport {
       })
 
   const workspaces = resources.filter((r) => r._type === 'workspace')
+  if (workspaces.length === 0) return convertStandaloneV4Environments(resources)
   const collections = workspaces.map((ws) => {
     const id = str(ws._id)
     const children = byParent.get(id) ?? []
@@ -508,6 +562,22 @@ function convertV5(doc: Obj, kind: InsomniaKind): InsomniaImport {
     } else if (extra.warning) result.warnings.push(extra.warning)
   }
   return { collections: entries }
+}
+
+export function convertInsomniaEnvironment(doc: Obj): { environments: ExportEnvironment[]; warnings: string[] } {
+  const env = isObj(doc.environments) ? doc.environments : undefined
+  if (!env) throw new Error('The Insomnia environment file contains no environments.')
+  const budget = new ImportBudget()
+  const entries = [
+    convertStandaloneEnvironment(env, 'data', budget),
+    ...list(env.subEnvironments)
+      .sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
+      .map((subEnvironment) => convertStandaloneEnvironment(subEnvironment, 'data', budget)),
+  ]
+  return {
+    environments: entries.map((entry) => entry.environment),
+    warnings: entries.flatMap((entry) => entry.warnings),
+  }
 }
 
 export function convertInsomnia(doc: Obj, kind: InsomniaKind): InsomniaImport {

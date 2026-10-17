@@ -460,8 +460,83 @@ environments:
     expect(preview.collections[0].collection.environments).toBeUndefined()
   })
 
-  it('explains environment and other Insomnia file types', async () => {
-    await expect(previewImport(fixture('real-insomnia-v5-environment.yaml'))).rejects.toThrow(/environment file/)
+  it('imports standalone v5 environment files', async () => {
+    const preview = await previewImport(fixture('real-insomnia-v5-environment.yaml'))
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [{
+        name: 'Dev',
+        variables: [
+          { key: 'base_url', value: 'http://localhost:8000', isSecret: false },
+          { key: 'auth_token', value: 'e1015e6d-039b-42dd-b038-31068702935d', isSecret: false },
+          { key: 'inherited_value', value: 'from_global_env', isSecret: false },
+        ],
+      }],
+    })
+    expect(preview.warnings).toEqual([])
+  })
+
+  it('imports standalone v4 environment exports with empty, nested, and secret values', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        {
+          _id: 'env_base',
+          _type: 'environment',
+          parentId: null,
+          name: 'Base',
+          isPrivate: false,
+          data: {
+            base_url: 'https://x.test',
+            nested: { auth: { user: 'alice' } },
+          },
+        },
+        {
+          _id: 'env_private',
+          _type: 'environment',
+          parentId: 'env_base',
+          name: 'Private',
+          isPrivate: true,
+          data: {
+            token: 'secret-token',
+          },
+        },
+        {
+          _id: 'env_empty',
+          _type: 'environment',
+          parentId: null,
+          name: 'Empty',
+          data: {},
+        },
+      ],
+    }))
+
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [
+        {
+          name: 'Base',
+          variables: [
+            { key: 'base_url', value: 'https://x.test', isSecret: false },
+            { key: 'nested.auth.user', value: 'alice', isSecret: false },
+          ],
+        },
+        {
+          name: 'Private',
+          variables: [{ key: 'token', value: 'secret-token', isSecret: true }],
+        },
+        {
+          name: 'Empty',
+          variables: [],
+        },
+      ],
+    })
+  })
+
+  it('explains other unsupported Insomnia file types', async () => {
     await expect(previewImport('type: mcpClient.insomnia/5.0\nname: x\n')).rejects.toThrow(/not supported/)
   })
 

@@ -426,16 +426,6 @@ test.describe('Import sources', () => {
     ]))
   })
 
-  test('explains a Postman environment file', async ({ window }) => {
-    await openImport(window)
-    await window.locator('input[type="file"]:not([data-testid="import-folder-input"])').setInputFiles({
-      name: 'env.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from('{"name":"E","values":[],"_postman_variable_scope":"environment"}'),
-    })
-    await expect(window.getByTestId('import-error')).toContainText('Postman environment')
-  })
-
   test('imports a Bruno collection folder and persists folders, requests, auth, headers, and variables', async ({ window }) => {
     await importFolder(window, prepared.brunoFolder)
     await expect(window.getByTestId('import-format')).toContainText('Bruno')

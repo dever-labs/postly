@@ -841,6 +841,16 @@ describe('registerExportImportHandlers', () => {
     expect(mockTransaction).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed top-level environments without writing partial data', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [],
+      environments: { name: 'Prod', variables: [] },
+    })
+
+    expect(result).toEqual({ error: 'Error: Environments must be arrays.' })
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
   it('imports validated collections directly from the renderer payload', async () => {
     const result = await invoke('postly:import:collections', {
       collections: [
@@ -858,6 +868,24 @@ describe('registerExportImportHandlers', () => {
 
     expect(result).toEqual({ data: { count: 1 } })
     expect(mockTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('imports standalone environments directly from the renderer payload', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [],
+      environments: [
+        {
+          name: 'Renderer Env',
+          variables: [{ key: 'base_url', value: 'https://renderer.example.test', isSecret: false }],
+        },
+      ],
+    })
+
+    expect(result).toEqual({ data: { count: 0 } })
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+    const statements = mockTransaction.mock.calls[0]?.[0] ?? []
+    expect(statements.some((statement) => statement.sql.includes('INSERT INTO environments'))).toBe(true)
+    expect(statements.some((statement) => statement.sql.includes('INSERT INTO env_vars'))).toBe(true)
   })
 
   it('parses inline text and folder payloads through the preview handlers', async () => {
