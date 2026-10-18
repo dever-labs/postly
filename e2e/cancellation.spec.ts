@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures'
 import type { Page } from '@playwright/test'
-import type { StubHandle } from '../src/main/services/__tests__/helpers/http-stub'
+import type { StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 let requestId = ''
 let collectionId = ''

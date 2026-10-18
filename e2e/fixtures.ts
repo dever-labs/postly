@@ -1,7 +1,7 @@
 import { test as base, _electron as electron, expect } from '@playwright/test'
 import type { Page, ElectronApplication } from '@playwright/test'
 import path from 'path'
-import { startStubServer, type HttpStubServer } from '../src/main/services/__tests__/helpers/http-stub'
+import { startTestServer, type TestServer } from '../src/main/services/__tests__/helpers/test-server'
 
 const ROOT = path.join(__dirname, '..')
 const MAIN = path.join(ROOT, 'out', 'main', 'index.js')
@@ -10,11 +10,11 @@ const RENDERER_URL = `file://${path.join(ROOT, 'out', 'renderer', 'index.html').
 type Fixtures = {
   electronApp: ElectronApplication
   window: Page
-  stubServer: HttpStubServer
+  stubServer: TestServer
 }
 
 type WorkerFixtures = {
-  stubServerWorker: HttpStubServer
+  stubServerWorker: TestServer
 }
 
 /**
@@ -25,7 +25,7 @@ type WorkerFixtures = {
 export const test = base.extend<Fixtures, WorkerFixtures>({
   stubServerWorker: [
     async ({}, use) => {
-      const server = await startStubServer({ ensureInstalled: true })
+      const server = await startTestServer({ ensureInstalled: true })
       await use(server)
       await server.stop()
     },

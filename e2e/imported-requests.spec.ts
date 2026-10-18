@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
-import type { HttpStubServer, StubHandle } from '../src/main/services/__tests__/helpers/http-stub'
+import type { TestServer, StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 type PreparedFixtures = {
   postmanCollection: string
@@ -220,7 +220,7 @@ async function openRequest(window: Page, collectionName: string, requestName: st
   await window.getByTestId('url-input').waitFor({ state: 'visible' })
 }
 
-async function installImportStubs(baseUrl: string, stubServer: HttpStubServer): Promise<ImportStubs> {
+async function installImportStubs(baseUrl: string, stubServer: TestServer): Promise<ImportStubs> {
   return {
     postmanRequest: await stubServer.stub({
       method: 'POST',

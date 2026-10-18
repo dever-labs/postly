@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures'
 import http from 'http'
 import type { AddressInfo } from 'net'
-import type { StubHandle } from '../src/main/services/__tests__/helpers/http-stub'
+import type { StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 interface AuthServer {
   url: string

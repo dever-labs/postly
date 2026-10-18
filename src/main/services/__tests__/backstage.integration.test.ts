@@ -95,7 +95,7 @@ vi.mock('electron', () => {
 
 import { queryOne, run } from '../../database'
 import { syncCatalog, authenticateWithBackstageGuest, authenticateWithBackstage } from '../backstage'
-import { startStubServer, type HttpStubServer } from './helpers/http-stub'
+import { startTestServer, type TestServer } from './helpers/test-server'
 
 // ─── Minimal OpenAPI spec for testing ────────────────────────────────────────
 
@@ -122,10 +122,10 @@ const MINIMAL_OAS3 = JSON.stringify({
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
 
-let server: HttpStubServer
+let server: TestServer
 
 beforeAll(async () => {
-  server = await startStubServer()
+  server = await startTestServer()
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -141,7 +141,7 @@ beforeEach(async () => {
 
 function settings(overrides: Record<string, unknown> = {}) {
   return {
-    baseUrl: server.httpBase,
+    baseUrl: server.baseUrl,
     token: 'test-token',
     autoSync: false,
     ...overrides,
@@ -278,7 +278,7 @@ describe('syncCatalog — API with spec URL annotation', () => {
       metadata: {
         name: 'pet-store-annotated',
         namespace: 'default',
-        annotations: { 'backstage.io/api-spec': `${server.httpBase}${specPath}` },
+        annotations: { 'backstage.io/api-spec': `${server.baseUrl}${specPath}` },
       },
       spec: { type: 'openapi' }, // no inline definition
     }
@@ -322,7 +322,7 @@ describe('syncCatalog — API with spec URL annotation', () => {
       metadata: {
         name: 'broken-api',
         namespace: 'default',
-        annotations: { 'backstage.io/api-spec': `${server.httpBase}/no-such-spec` },
+        annotations: { 'backstage.io/api-spec': `${server.baseUrl}/no-such-spec` },
       },
       spec: { type: 'openapi' },
     }
@@ -607,7 +607,7 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    const result = await authenticateWithBackstageGuest(server.httpBase)
+    const result = await authenticateWithBackstageGuest(server.baseUrl)
     expect(result.token).toBe('guest-token-abc')
     expect(result.user.name).toBe('Guest User')
     expect(result.user.email).toBe('guest@example.com')
@@ -626,7 +626,7 @@ describe('authenticateWithBackstageGuest', () => {
     })
 
     // Pass URL with trailing slash — should still work
-    const result = await authenticateWithBackstageGuest(`${server.httpBase}/`)
+    const result = await authenticateWithBackstageGuest(`${server.baseUrl}/`)
     expect(result.token).toBe('guest-token-abc')
   })
 
@@ -641,7 +641,7 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    const result = await authenticateWithBackstageGuest(server.httpBase)
+    const result = await authenticateWithBackstageGuest(server.baseUrl)
     expect(result.user.name).toBe('Guest')
   })
 
@@ -656,7 +656,7 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    await expect(authenticateWithBackstageGuest(server.httpBase)).rejects.toThrow(
+    await expect(authenticateWithBackstageGuest(server.baseUrl)).rejects.toThrow(
       'Guest refresh did not return a token',
     )
   })
@@ -668,7 +668,7 @@ describe('authenticateWithBackstageGuest', () => {
       response: { status: 401, body: 'Unauthorized' },
     })
 
-    await expect(authenticateWithBackstageGuest(server.httpBase)).rejects.toThrow()
+    await expect(authenticateWithBackstageGuest(server.baseUrl)).rejects.toThrow()
   })
 })
 
@@ -696,9 +696,9 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
       response: { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<html>signing in…</html>' },
     })
 
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
-    expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
+    expect(win.webContents.url).toBe(`${server.baseUrl}/api/auth/${provider}/start?env=production`)
     await server.waitForRequests(startRoute, 1, { timeoutMs: 2_000 })
 
     // Finish the flow so the test doesn't leave a dangling promise.
@@ -715,19 +715,19 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(OAUTH_RESPONSE) },
     })
 
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
 
     // Still on the provider's own login/auth pages — must not attempt extraction yet.
-    win.webContents.url = `${server.httpBase}/api/auth/${provider}/start?env=production`
+    win.webContents.url = `${server.baseUrl}/api/auth/${provider}/start?env=production`
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
     win.webContents.emit('did-finish-load')
 
     // Real navigation away from the auth pages back to the Backstage app.
-    win.webContents.url = `${server.httpBase}/`
+    win.webContents.url = `${server.baseUrl}/`
     win.webContents.emit('did-finish-load')
 
     const result = await promise
@@ -748,13 +748,13 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
       },
     })
 
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
-    win.webContents.url = `${server.httpBase}/`
+    win.webContents.url = `${server.baseUrl}/`
     win.webContents.emit('did-finish-load')
 
     const result = await promise
@@ -768,13 +768,13 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
       response: { status: 401, body: 'not logged in yet' },
     })
 
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
-    win.webContents.url = `${server.httpBase}/`
+    win.webContents.url = `${server.baseUrl}/`
     win.webContents.emit('did-finish-load')
 
     // Give the microtask queue a chance to run tryExtract; the promise
@@ -788,14 +788,14 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('rejects when the user closes the auth window before completing sign-in', async () => {
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
     win.close()
     await expect(promise).rejects.toThrow('Authentication window closed')
   })
 
   it('closes the window once the flow settles', async () => {
-    const promise = authenticateWithBackstage(server.httpBase, provider)
+    const promise = authenticateWithBackstage(server.baseUrl, provider)
     const win = lastWindow()
     win.close()
     await promise.catch(() => { /* expected rejection */ })
@@ -806,7 +806,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 describe('authenticateWithBackstage — provider validation', () => {
   it('rejects unsupported providers without opening a window', async () => {
     const before = createdWindows.length
-    await expect(authenticateWithBackstage(server.httpBase, 'facebook')).rejects.toThrow(
+    await expect(authenticateWithBackstage(server.baseUrl, 'facebook')).rejects.toThrow(
       'Unsupported Backstage OAuth provider',
     )
     expect(createdWindows.length).toBe(before)
@@ -817,7 +817,7 @@ describe('authenticateWithBackstage — timeout', () => {
   it('rejects if sign-in is not completed within the timeout window', async () => {
     vi.useFakeTimers()
     try {
-      const promise = authenticateWithBackstage(server.httpBase, 'github')
+      const promise = authenticateWithBackstage(server.baseUrl, 'github')
       const assertion = expect(promise).rejects.toThrow('Backstage authentication timed out')
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1)
       await assertion

@@ -21,7 +21,7 @@
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import { startStubServer, type HttpStubServer, type StubHandle } from './helpers/http-stub'
+import { startTestServer, type TestServer, type StubHandle } from './helpers/test-server'
 import type { OAuthConfig, Token } from '../oauth'
 
 // ─── Mock database (not under test here) ─────────────────────────────────────
@@ -129,11 +129,11 @@ const TOKEN_RESPONSE = {
 
 // ─── Shared server setup ─────────────────────────────────────────────────────
 
-let server: HttpStubServer
+let server: TestServer
 let tokenEndpoint: StubHandle
 
 beforeAll(async () => {
-  server = await startStubServer()
+  server = await startTestServer()
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -163,7 +163,7 @@ describe('clientCredentials', () => {
       grantType: 'client_credentials',
       clientId: 'test-client',
       scopes: 'read write',
-      tokenUrl: `${server.httpBase}/oauth2/token`,
+      tokenUrl: `${server.baseUrl}/oauth2/token`,
       redirectUri: 'http://localhost:19999/callback',
       ...overrides,
     }
@@ -187,7 +187,7 @@ describe('clientCredentials', () => {
 
     await clientCredentials(makeConfig())
 
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(requests).toHaveLength(1)
 
     const params = parseFormBody(requests[0].body ?? '')
@@ -202,7 +202,7 @@ describe('clientCredentials', () => {
 
     await clientCredentials(makeConfig({ clientSecret: 's3cr3t' }))
 
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     const params = parseFormBody(requests[0].body ?? '')
     expect(params['client_secret']).toBe('s3cr3t')
   })
@@ -224,7 +224,7 @@ describe('clientCredentials', () => {
     })
 
     await expect(
-      clientCredentials(makeConfig({ tokenUrl: `${server.httpBase}/oauth2/token-error` })),
+      clientCredentials(makeConfig({ tokenUrl: `${server.baseUrl}/oauth2/token-error` })),
     ).rejects.toThrow('Client authentication failed')
 
   })
@@ -243,7 +243,7 @@ describe('clientCredentials', () => {
     })
 
     await expect(
-      clientCredentials(makeConfig({ tokenUrl: `${server.httpBase}/oauth2/token-500` })),
+      clientCredentials(makeConfig({ tokenUrl: `${server.baseUrl}/oauth2/token-500` })),
     ).rejects.toThrow('500')
 
   })
@@ -277,10 +277,10 @@ describe('refreshTokenGrant', () => {
 
     await refreshTokenGrant(existingToken, {
       ...config,
-      tokenUrl: `${server.httpBase}/oauth2/token`,
+      tokenUrl: `${server.baseUrl}/oauth2/token`,
     })
 
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(requests).toHaveLength(1)
 
     const params = parseFormBody(requests[0].body ?? '')
@@ -295,7 +295,7 @@ describe('refreshTokenGrant', () => {
 
     const token = await refreshTokenGrant(existingToken, {
       ...config,
-      tokenUrl: `${server.httpBase}/oauth2/token`,
+      tokenUrl: `${server.baseUrl}/oauth2/token`,
     })
 
     expect(token.accessToken).toBe('integration-access-token')
@@ -310,7 +310,7 @@ describe('refreshTokenGrant', () => {
     await expect(
       refreshTokenGrant(noRefresh, {
         ...config,
-        tokenUrl: `${server.httpBase}/oauth2/token`,
+        tokenUrl: `${server.baseUrl}/oauth2/token`,
       }),
     ).rejects.toThrow('missing refresh token')
   })
@@ -336,7 +336,7 @@ describe('authorizeAuthCode — session partition persistence', () => {
   }
 
   beforeEach(() => {
-    AUTH_CONFIG.tokenUrl = `${server.httpBase}/oauth2/token`
+    AUTH_CONFIG.tokenUrl = `${server.baseUrl}/oauth2/token`
   })
 
   it('uses a persistent partition (persist: prefix) so the session survives', async () => {
@@ -406,7 +406,7 @@ describe('authorizeAuthCode — session partition persistence', () => {
     const token = await authorizeAuthCode(AUTH_CONFIG)
 
     // Verify the stub server received the code exchange request.
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(requests).toHaveLength(1)
 
     const params = parseFormBody(requests[0].body ?? '')
@@ -534,7 +534,7 @@ describe('authorizeAuthCode — state validation', () => {
   }
 
   beforeEach(() => {
-    AUTH_CONFIG.tokenUrl = `${server.httpBase}/oauth2/token`
+    AUTH_CONFIG.tokenUrl = `${server.baseUrl}/oauth2/token`
   })
 
   it('ignores a will-redirect with a wrong state and resolves on the real callback', async () => {
@@ -548,7 +548,7 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     // Only the real code (not the decoy) must reach the token endpoint.
     expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
@@ -596,7 +596,7 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(requests).toHaveLength(1)
     expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
@@ -656,7 +656,7 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
 
@@ -703,7 +703,7 @@ describe('authorizeAuthCode — state validation', () => {
       clientId: 'inline-client',
       clientSecret: 'inline-secret',
       authUrl: 'http://127.0.0.1:1/authorize',
-      tokenUrl: `${server.httpBase}/oauth2/token`,
+      tokenUrl: `${server.baseUrl}/oauth2/token`,
       scopes: 'openid profile',
       redirectUri: 'http://localhost:19999/callback',
     }
@@ -711,7 +711,7 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeInline(inlineConfig)
 
     expect(token.accessToken).toBe('integration-access-token')
-    const requests = await server.requestsTo(tokenEndpoint)
+    const requests = await server.requests(tokenEndpoint)
     expect(requests).toHaveLength(1)
     expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
     // The token's oauthConfigId must be the config hash, not the empty id.
