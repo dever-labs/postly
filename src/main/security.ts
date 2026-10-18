@@ -1,4 +1,4 @@
-import { shell, type BrowserWindow, type Session, type WebPreferences } from 'electron'
+import { session, shell, type BrowserWindow, type Session, type WebPreferences } from 'electron'
 
 /** Baseline web preferences for every BrowserWindow we create. */
 export const SECURE_WEB_PREFERENCES: WebPreferences = {
@@ -73,9 +73,14 @@ export function isAllowedAuthNavigation(target: string, callbackUrls: string[] =
   }
 }
 
-export function denySessionPermissions(session: Session): void {
-  session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
-  session.setPermissionCheckHandler(() => false)
+export function denySessionPermissions(targetSession: Session): boolean {
+  if (targetSession === session.defaultSession) {
+    console.warn('[security] Refused to install deny-all permission handlers on defaultSession')
+    return false
+  }
+  targetSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+  targetSession.setPermissionCheckHandler(() => false)
+  return true
 }
 
 /** Auth windows may navigate within the OAuth flow, but never open popups or request extra permissions. */

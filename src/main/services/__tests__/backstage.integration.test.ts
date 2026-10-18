@@ -39,6 +39,7 @@ function lastWindow(): FakeBrowserWindow {
 }
 
 interface FakeBrowserWindow {
+  options: { webPreferences?: { partition?: string } }
   webContents: {
     url: string
     emit: (event: 'did-finish-load') => void
@@ -48,6 +49,12 @@ interface FakeBrowserWindow {
 }
 
 vi.mock('electron', () => {
+  const defaultSession = {
+    fetch: (url: string, init?: RequestInit) => fetch(url, init),
+    setPermissionRequestHandler: (_handler: unknown) => undefined,
+    setPermissionCheckHandler: (_handler: unknown) => undefined,
+  }
+
   class FakeWebContents {
     url = ''
     private listeners: Record<string, Array<() => void>> = {}
@@ -68,9 +75,13 @@ vi.mock('electron', () => {
 
   class BrowserWindow {
     webContents = new FakeWebContents()
+    options: { webPreferences?: { partition?: string } }
     private destroyed = false
     private closedListeners: Array<() => void> = []
-    constructor(_opts: unknown) { createdWindows.push(this as unknown as FakeBrowserWindow) }
+    constructor(opts: unknown) {
+      this.options = (opts as { webPreferences?: { partition?: string } }) ?? {}
+      createdWindows.push(this as unknown as FakeBrowserWindow)
+    }
     loadURL(url: string) {
       this.webContents.url = url
       // Real navigation, like real Electron: hit the URL over HTTP against
@@ -91,7 +102,16 @@ vi.mock('electron', () => {
     }
   }
 
-  return { BrowserWindow }
+  return {
+    BrowserWindow,
+    session: {
+      defaultSession,
+      fromPartition: (partition: string) => ({
+        ...defaultSession,
+        partition,
+      }),
+    },
+  }
 })
 
 import { queryOne, run } from '../../database'
@@ -705,6 +725,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
     const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
+    expect(win.options.webPreferences?.partition).toMatch(new RegExp(`^backstage-auth:${provider}:`))
     await server.waitForCalls(`${provider}-start`, 1, '2s')
 
     // Finish the flow so the test doesn't leave a dangling promise.

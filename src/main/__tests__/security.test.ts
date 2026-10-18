@@ -1,12 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const openExternal = vi.fn()
-vi.mock('electron', () => ({ shell: { openExternal: (...a: unknown[]) => openExternal(...a) } }))
+const { openExternal, defaultSession } = vi.hoisted(() => ({
+  openExternal: vi.fn(),
+  defaultSession: {
+    setPermissionRequestHandler: vi.fn(),
+    setPermissionCheckHandler: vi.fn(),
+  },
+}))
+vi.mock('electron', () => ({
+  shell: { openExternal: (...a: unknown[]) => openExternal(...a) },
+  session: { defaultSession },
+}))
 
 import { isSafeExternalUrl, isAppNavigation, openExternalSafe, lockDownWindow, SECURE_WEB_PREFERENCES, isAllowedAuthNavigation, denySessionPermissions, lockDownAuthWindow } from '../security'
 
 beforeEach(() => {
   openExternal.mockReset()
+  defaultSession.setPermissionRequestHandler.mockReset()
+  defaultSession.setPermissionCheckHandler.mockReset()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
@@ -108,12 +119,18 @@ describe('denySessionPermissions', () => {
       setPermissionCheckHandler: (handler: typeof checkHandler) => { checkHandler = handler },
     }
 
-    denySessionPermissions(session as never)
+    expect(denySessionPermissions(session as never)).toBe(true)
 
     expect(checkHandler()).toBe(false)
     const callback = vi.fn()
     requestHandler(null, 'notifications', callback)
     expect(callback).toHaveBeenCalledWith(false)
+  })
+
+  it('refuses to install deny-all handlers on defaultSession', () => {
+    expect(denySessionPermissions(defaultSession as never)).toBe(false)
+    expect(defaultSession.setPermissionRequestHandler).not.toHaveBeenCalled()
+    expect(defaultSession.setPermissionCheckHandler).not.toHaveBeenCalled()
   })
 })
 
@@ -158,6 +175,21 @@ describe('lockDownAuthWindow', () => {
     const blocked = { preventDefault: vi.fn() }
     navHandler(blocked, 'javascript:alert(1)')
     expect(blocked.preventDefault).toHaveBeenCalled()
+  })
+
+  it('never installs session-wide deny handlers on defaultSession', () => {
+    const win = {
+      webContents: {
+        session: defaultSession,
+        setWindowOpenHandler: vi.fn(),
+        on: vi.fn(),
+      },
+    }
+
+    lockDownAuthWindow(win as never)
+
+    expect(defaultSession.setPermissionRequestHandler).not.toHaveBeenCalled()
+    expect(defaultSession.setPermissionCheckHandler).not.toHaveBeenCalled()
   })
 })
 

@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, session } from 'electron'
 import { SECURE_WEB_PREFERENCES, lockDownAuthWindow } from '../security'
 import axios from 'axios'
 import https from 'https'
@@ -250,6 +250,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
 }
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000
+const BACKSTAGE_AUTH_PARTITION_PREFIX = 'backstage-auth:'
 
 export async function authenticateWithBackstageGuest(
   baseUrl: string,
@@ -288,13 +289,15 @@ export async function authenticateWithBackstage(
   }
   const safeProvider = provider as OAuthProvider
   const base = baseUrl.replace(/\/$/, '')
+  const partition = `${BACKSTAGE_AUTH_PARTITION_PREFIX}${safeProvider}:${crypto.randomUUID()}`
+  const authSession = session.fromPartition(partition)
 
   const win = new BrowserWindow({
     width: 1000,
     height: 700,
     title: `Sign in to Backstage via ${safeProvider}`,
     autoHideMenuBar: true,
-    webPreferences: { ...SECURE_WEB_PREFERENCES },
+    webPreferences: { ...SECURE_WEB_PREFERENCES, partition },
   })
   lockDownAuthWindow(win)
 
@@ -321,7 +324,7 @@ export async function authenticateWithBackstage(
       if (!shouldTryBackstageRefresh(url, base)) return
       try {
         const refreshUrl = `${base}/api/auth/${safeProvider}/refresh`
-        const resp = await win.webContents.session.fetch(refreshUrl, { method: 'GET', headers: { Accept: 'application/json' } })
+        const resp = await authSession.fetch(refreshUrl, { method: 'GET', headers: { Accept: 'application/json' } })
         if (!resp.ok) return
         const result = await resp.json() as { backstageIdentity?: { token?: string }; profile?: { displayName?: string; email?: string; picture?: string } } | null
 
