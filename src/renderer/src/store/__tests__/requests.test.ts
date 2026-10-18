@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockHttpExecute = vi.fn()
 const mockHttpCancel = vi.fn()
-let streamListener: ((m: unknown) => void) | null = null
-const mockOnStream = vi.fn((cb: (m: unknown) => void) => { streamListener = cb; return () => { streamListener = null } })
+let streamListeners: Array<(m: unknown) => void> = []
+const mockOnStream = vi.fn((cb: (m: unknown) => void) => {
+  streamListeners.push(cb)
+  return () => {
+    streamListeners = streamListeners.filter((listener) => listener !== cb)
+  }
+})
 const mockDraftsGet = vi.fn()
 const mockDraftsUpsert = vi.fn()
 const mockDraftsDelete = vi.fn()
@@ -25,6 +30,10 @@ vi.mock('../collections', () => ({
 
 import { useRequestsStore } from '../requests'
 import type { Request } from '@/types'
+
+function emitStream(message: unknown): void {
+  for (const listener of [...streamListeners]) listener(message)
+}
 
 function makeRequest(overrides: Partial<Request> = {}): Request {
   return {
@@ -54,6 +63,8 @@ function makeResponse() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.useRealTimers()
+  streamListeners = []
   mockDraftsGet.mockResolvedValue({ data: null })
   mockDraftsUpsert.mockResolvedValue({})
   mockDraftsDelete.mockResolvedValue({})
@@ -190,8 +201,8 @@ describe('useRequestsStore — streaming responses', () => {
     mockHttpExecute.mockReturnValue(new Promise((r) => { finish = r }))
     const sending = useRequestsStore.getState().sendRequest()
 
-    streamListener?.({ type: 'start', kind: 'sse', status: 200, statusText: 'OK', headers: {} })
-    streamListener?.({ type: 'events', events: [{ index: 1, id: '1', data: 'a', at: 0 }, { index: 2, id: '2', data: 'b', at: 5 }] })
+    emitStream({ type: 'start', kind: 'sse', status: 200, statusText: 'OK', headers: {} })
+    emitStream({ type: 'events', events: [{ index: 1, id: '1', data: 'a', at: 0 }, { index: 2, id: '2', data: 'b', at: 5 }] })
     let state = useRequestsStore.getState()
     expect(state.isLoading).toBe(true)
     expect(state.response?.status).toBe(200)
@@ -210,10 +221,10 @@ describe('useRequestsStore — streaming responses', () => {
     let finish: (v: unknown) => void = () => {}
     mockHttpExecute.mockReturnValue(new Promise((r) => { finish = r }))
     const sending = useRequestsStore.getState().sendRequest()
-    streamListener?.({ type: 'start', kind: 'ndjson', status: 200, statusText: 'OK', headers: {} })
+    emitStream({ type: 'start', kind: 'ndjson', status: 200, statusText: 'OK', headers: {} })
     const batch = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ index: from + i, data: String(from + i), at: 0 }))
-    streamListener?.({ type: 'events', events: batch(1, 4000) })
-    streamListener?.({ type: 'events', events: batch(4001, 2000) })
+    emitStream({ type: 'events', events: batch(1, 4000) })
+    emitStream({ type: 'events', events: batch(4001, 2000) })
     const { stream } = useRequestsStore.getState()
     expect(stream?.events).toHaveLength(5000)
     expect(stream?.dropped).toBe(1000)
@@ -230,8 +241,8 @@ describe('useRequestsStore — streaming responses', () => {
     mockHttpExecute.mockReturnValue(new Promise((r) => { finish = r }))
     useRequestsStore.getState().resumeStream()
     expect((mockHttpExecute.mock.calls[0][0] as { headers: Record<string, string> }).headers['Last-Event-ID']).toBe('7')
-    streamListener?.({ type: 'start', kind: 'sse', status: 200, statusText: 'OK', headers: {} })
-    streamListener?.({ type: 'events', events: [{ index: 1, id: '8', data: 'y', at: 0 }] })
+    emitStream({ type: 'start', kind: 'sse', status: 200, statusText: 'OK', headers: {} })
+    emitStream({ type: 'events', events: [{ index: 1, id: '8', data: 'y', at: 0 }] })
     expect(useRequestsStore.getState().stream?.events.map((e) => [e.index, e.data])).toEqual([[1, 'x'], [2, 'y']])
     finish({ data: makeResponse() })
     await vi.waitFor(() => expect(useRequestsStore.getState().isLoading).toBe(false))
@@ -241,5 +252,27 @@ describe('useRequestsStore — streaming responses', () => {
     useRequestsStore.setState({ stream: { kind: 'sse', dropped: 0, active: false, events: [{ index: 1, data: 'x', at: 0 }] } })
     useRequestsStore.getState().resumeStream()
     expect(mockHttpExecute).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale stream listeners from an earlier completed send', async () => {
+    vi.useFakeTimers()
+    mockHttpExecute.mockResolvedValueOnce({ data: makeResponse() })
+    useRequestsStore.setState({ editingRequest: makeRequest() })
+
+    await useRequestsStore.getState().sendRequest()
+    expect(streamListeners).toHaveLength(1)
+
+    let finish: (value: unknown) => void = () => {}
+    mockHttpExecute.mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+    const sending = useRequestsStore.getState().sendRequest()
+
+    emitStream({ type: 'start', kind: 'sse', status: 200, statusText: 'OK', headers: {} })
+    emitStream({ type: 'events', events: [{ index: 1, id: '1', data: 'fresh', at: 0 }] })
+
+    expect(useRequestsStore.getState().stream?.events.map((event) => event.data)).toEqual(['fresh'])
+
+    finish({ data: makeResponse() })
+    await sending
+    vi.runOnlyPendingTimers()
   })
 })

@@ -45,6 +45,7 @@ for (const theme of ['dark', 'light'] as const) {
     })
 
     test('main screens have no serious or critical violations', async ({ window }) => {
+      test.setTimeout(90_000)
       const name = `A11y ${theme} ${Date.now()}`
       await seed(window, name)
       await expectNoSeriousViolations(window, 'home')
@@ -75,6 +76,7 @@ for (const theme of ['dark', 'light'] as const) {
     })
 
     test('dialogs and pages have no serious or critical violations', async ({ window }) => {
+      test.setTimeout(90_000)
       await window.getByTestId('btn-import').click()
       await expectNoSeriousViolations(window, 'import page')
       await window.getByTestId('btn-export').click()

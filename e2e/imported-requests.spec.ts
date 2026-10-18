@@ -18,6 +18,14 @@ type ImportStubs = {
   urlMissing: string
 }
 
+type ProxySettingsSnapshot = {
+  mode: 'system' | 'manual' | 'none'
+  url: string
+  username: string
+  bypass: string
+  hasPassword: boolean
+}
+
 const stamp = Date.now()
 const generated = path.join(__dirname, '.generated-imported-requests')
 
@@ -51,6 +59,7 @@ const stubIds: ImportStubs = {
 
 let prepared: PreparedFixtures | null = null
 let stubs: ImportStubs
+let originalProxySettings: ProxySettingsSnapshot | null = null
 
 function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true })
@@ -322,15 +331,25 @@ test.beforeEach(async ({ window, server }) => {
   prepared ??= prepareFixtures(server.httpBase)
   stubs = await installImportStubs(server.httpBase, server)
   await reloadApp(window)
+  originalProxySettings = await window.evaluate(async () => {
+    return ((await window.api.proxy.get()) as { data?: ProxySettingsSnapshot }).data ?? null
+  })
   await window.evaluate(async () => {
-    await window.api.proxy.set({ mode: 'none', url: '', username: '', password: '', bypass: '' })
+    await window.api.proxy.set({ mode: 'none', url: '', username: '', bypass: '' })
   })
 })
 
 test.afterEach(async ({ window }) => {
-  await window.evaluate(async () => {
-    await window.api.proxy.set({ mode: 'system', url: '', username: '', password: '', bypass: '' })
-  })
+  if (!originalProxySettings) return
+
+  await window.evaluate(async (settings: ProxySettingsSnapshot) => {
+    await window.api.proxy.set({
+      mode: settings.mode,
+      url: settings.url,
+      username: settings.username,
+      bypass: settings.bypass,
+    })
+  }, originalProxySettings)
 })
 
 test.afterAll(async ({ window }) => {
@@ -386,7 +405,7 @@ test.describe('Imported requests', () => {
       secret: 'resolved-secret-token',
     })
 
-    expect(requests[0].headers.authorization).toMatch(/^Bearer\s+\S+$/)
+    expect(requests[0].headers.authorization).toBe('Bearer resolved-secret-token')
     expect(requests[0].headers['x-stage']).toBe(postmanVars.stage)
     expect(requests[0].method).toBe('POST')
     expect(requests[0].path).toBe(`/imported/widgets/${postmanVars.widgetId}`)

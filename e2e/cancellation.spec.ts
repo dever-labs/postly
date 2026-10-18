@@ -154,6 +154,14 @@ test.describe('Send & cancel request', () => {
 
     await expect(window.locator('[data-testid="cancel-button"]')).toBeVisible({ timeout: 8_000 })
     await expect(window.locator('[data-testid="send-button"]')).not.toBeVisible()
+    const sendButton = window.locator('[data-testid="send-button"]')
+    if (await sendButton.isVisible()) {
+      await sendButton.click()
+    }
+    await window.locator('[data-testid="url-input"]').press('Enter')
+
+    const requests = await server.waitForCalls(SLOW_ENDPOINT_ID, 1)
+    expect(requests.count).toBe(1)
 
     await window.locator('[data-testid="cancel-button"]').click()
     await expect(window.locator('[data-testid="send-button"]')).toBeVisible({ timeout: 10_000 })
