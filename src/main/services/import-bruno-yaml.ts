@@ -31,6 +31,12 @@ interface VariableEntry {
   isSecret: boolean
 }
 
+interface EnvironmentDraft {
+  environment: ExportEnvironment
+  extends: string[]
+  label: string
+}
+
 interface Context {
   warnings: string[]
   variables: Map<string, VariableEntry>
@@ -154,6 +160,84 @@ function importEnvironmentVariable(
     return
   }
   variables.push({ key, value, isSecret: false })
+}
+
+function normalizeExtends(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.flatMap((entry) => {
+    const name = str(entry).trim()
+    return name ? [name] : []
+  })
+  const name = str(raw).trim()
+  return name ? [name] : []
+}
+
+function mergeEnvironmentVariables(base: ExportEnvironment['variables'], override: ExportEnvironment['variables']): ExportEnvironment['variables'] {
+  const keys = new Set(override.map((variable) => variable.key))
+  return [...base.filter((variable) => !keys.has(variable.key)), ...override]
+}
+
+function externalSecretProviders(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((entry) => str(entry).trim()).filter(Boolean)
+  if (isObj(raw)) return Object.keys(raw).filter(Boolean)
+  const value = str(raw).trim()
+  return value ? [value] : []
+}
+
+function resolveEnvironmentDrafts(drafts: EnvironmentDraft[], ctx: Pick<Context, 'warnings'>, budget: ImportBudget): ExportEnvironment[] {
+  drafts.forEach(() => budget.takeEnvironment())
+  const byName = new Map<string, number[]>()
+  drafts.forEach((draft, index) => {
+    const matches = byName.get(draft.environment.name) ?? []
+    matches.push(index)
+    byName.set(draft.environment.name, matches)
+  })
+  const missingWarnings = new Set<string>()
+  const cycleWarnings = new Set<string>()
+  const cache = new Map<number, ExportEnvironment['variables']>()
+  const stack = new Set<number>()
+
+  const findParentIndex = (parentName: string, currentIndex: number): number | undefined => {
+    const matches = byName.get(parentName)
+    if (!matches || matches.length === 0) return undefined
+    return matches.find((index) => index !== currentIndex) ?? matches[0]
+  }
+
+  const resolve = (index: number): ExportEnvironment['variables'] => {
+    const cached = cache.get(index)
+    if (cached) return cached
+    const draft = drafts[index]
+    if (!draft) return []
+    if (stack.has(index)) {
+      const warningKey = `${draft.label}:${draft.environment.name}`
+      if (!cycleWarnings.has(warningKey)) {
+        cycleWarnings.add(warningKey)
+        ctx.warnings.push(`"${draft.label}": Bruno environment inheritance has a cycle; cyclic parents were skipped.`)
+      }
+      return draft.environment.variables
+    }
+
+    stack.add(index)
+    let inherited: ExportEnvironment['variables'] = []
+    for (const parentName of draft.extends) {
+      const parentIndex = findParentIndex(parentName, index)
+      if (parentIndex === undefined) {
+        const warningKey = `${draft.label}:${parentName}`
+        if (!missingWarnings.has(warningKey)) {
+          missingWarnings.add(warningKey)
+          ctx.warnings.push(`"${draft.label}": Bruno environment parent "${parentName}" was not found; its variables were skipped.`)
+        }
+        continue
+      }
+      inherited = mergeEnvironmentVariables(inherited, resolve(parentIndex))
+    }
+    stack.delete(index)
+
+    const resolved = mergeEnvironmentVariables(inherited, draft.environment.variables)
+    cache.set(index, resolved)
+    return resolved
+  }
+
+  return drafts.map((draft, index) => ({ ...draft.environment, variables: resolve(index) }))
 }
 
 function trackVariable(ctx: Context, source: VariableSource, name: string, value: string, isSecret: boolean): void {
@@ -523,12 +607,12 @@ function applyCollectionDefaults(raw: unknown, rootDir: string, ctx: Context): {
   }
 }
 
-function parseEnvironmentFile(raw: unknown, relPath: string, ctx: Context): ExportEnvironment | null {
+function parseEnvironmentFile(raw: unknown, relPath: string, ctx: Context): EnvironmentDraft | null {
   if (!isObj(raw)) {
     ctx.warnings.push(`"${relPath}": expected a YAML object.`)
     return null
   }
-  noteUnknown(ctx, relPath, raw, new Set(['name', 'variables']))
+  noteUnknown(ctx, relPath, raw, new Set(['name', 'variables', 'extends', 'externalSecrets', 'color']))
   const name = str(raw.name) || baseName(relPath).replace(/\.ya?ml$/i, '')
   const variables: ExportEnvironment['variables'] = []
   for (const variable of list(raw.variables)) {
@@ -540,7 +624,15 @@ function parseEnvironmentFile(raw: unknown, relPath: string, ctx: Context): Expo
       isSecret,
     })
   }
-  return { name, variables }
+  const externalSecrets = externalSecretProviders(raw.externalSecrets)
+  if (externalSecrets.length > 0) {
+    ctx.warnings.push(`"${relPath}": external secret providers were not imported (${externalSecrets.slice(0, 3).join(', ')}${externalSecrets.length > 3 ? ', …' : ''}).`)
+  }
+  return {
+    environment: { name, variables },
+    extends: normalizeExtends(raw.extends),
+    label: relPath,
+  }
 }
 
 function addDirWithAncestors(set: Set<string>, dir: string): void {
@@ -632,7 +724,7 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
     const relative = (file: BrunoFile) => file.path.slice(prefix.length)
     const folderDrafts = new Map<string, FolderDraft>()
     const requestsByDir = new Map<string, Array<Ordered & { request: ExportRequest }>>()
-    const environments: ExportEnvironment[] = []
+    const environmentDrafts: EnvironmentDraft[] = []
     const ctx: Context = {
       warnings: [],
       variables: new Map(),
@@ -673,7 +765,7 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
           continue
         }
         const environment = parseEnvironmentFile(doc, relPath, ctx)
-        if (environment) environments.push(environment)
+        if (environment) environmentDrafts.push(environment)
         continue
       }
       if (!/\.ya?ml$/i.test(relPath)) continue
@@ -697,6 +789,7 @@ export function convertBrunoYamlFiles(input: BrunoFile[]): BrunoEntry[] {
     }
 
     for (const [key, value] of ctx.pathVariables) trackVariable(ctx, 'path', key, value, false)
+    const environments = resolveEnvironmentDrafts(environmentDrafts, ctx, budget)
     const folders = buildFolderTree(folderDrafts, requestsByDir, budget)
     const requests = [...(requestsByDir.get('') ?? [])].sort(compareOrdered).map((entry) => entry.request)
     const collection: ExportCollection = {

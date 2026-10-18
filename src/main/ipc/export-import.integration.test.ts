@@ -515,6 +515,68 @@ describe('export/import IPC network and validation handlers', () => {
     expect(rows<{ name: string }>('SELECT name FROM environments')).toEqual([{ name: 'Renderer Env' }])
   })
 
+  it('normalizes Postly preview environments through the IPC parser', async () => {
+    const result = await invoke('postly:import:parse', {
+      text: JSON.stringify({
+        $schema: 'postly/v1',
+        exportedAt: new Date().toISOString(),
+        collections: [],
+        environments: [
+          null,
+          {
+            name: 123,
+            variables: [
+              null,
+              { key: 7, value: false, isSecret: 'yes' },
+            ],
+          },
+        ],
+      }),
+    })
+
+    expect(result).toEqual({
+      data: expect.objectContaining({
+        format: 'postly',
+        environments: [
+          {
+            name: '123',
+            variables: [{ key: '7', value: 'false', isSecret: false }],
+          },
+        ],
+      }),
+    })
+  })
+
+  it('keeps environment import names case-insensitively deduplicated with stable suffixes', () => {
+    db.run("INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES ('existing-1', 'prod', 0, 1, 1)")
+    db.run("INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES ('existing-2', 'PROD (2)', 0, 1, 1)")
+
+    importData(makeFile({
+      collections: [],
+      environments: [
+        { name: 'Prod', variables: [] },
+        { name: 'prod', variables: [] },
+      ],
+    }))
+
+    expect(rows<{ name: string }>('SELECT name FROM environments ORDER BY created_at ASC, rowid ASC').map((row) => row.name)).toEqual([
+      'prod',
+      'PROD (2)',
+      'Prod (3)',
+      'prod (4)',
+    ])
+  })
+
+  it('rejects imports with more than 5000 environments', async () => {
+    const result = await invoke('postly:import:collections', {
+      collections: [],
+      environments: Array.from({ length: 5001 }, (_, index) => ({ name: `Env ${index + 1}`, variables: [] })),
+    })
+
+    expect(result).toEqual({ error: 'Error: The import has more than 5000 environments.' })
+    expect(count('environments')).toBe(0)
+  })
+
   it('rejects malformed environment variables without partial imports', async () => {
     const result = await invoke('postly:import:collections', {
       collections: [

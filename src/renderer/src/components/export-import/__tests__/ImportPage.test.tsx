@@ -341,6 +341,30 @@ describe('ImportPage', () => {
     expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
   })
 
+  it('renders malformed preview environments defensively', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postly',
+        warnings: [],
+        collections: [],
+        environments: [
+          {
+            name: 'Broken Preview',
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"collections":[]}'], 'broken.postly.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Postly export · 1 environment found')
+    expect(screen.getByText('Broken Preview')).toBeDefined()
+    expect(screen.getByText('0 variables')).toBeDefined()
+  })
+
   it('shows a parse error when a selected file cannot be converted', async () => {
     const user = userEvent.setup()
     mockParse.mockResolvedValue({ error: 'Unsupported format' })

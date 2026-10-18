@@ -29,6 +29,12 @@ interface MultipartRow extends BruRow {
   values?: string[]
 }
 
+interface BrunoEnvironmentDraft {
+  environment: ExportEnvironment
+  extends: string[]
+  label: string
+}
+
 /** One request, whichever way it was stored. */
 interface BruRequest {
   name: string
@@ -138,20 +144,99 @@ function importEnvironmentVariable(
   variables.push({ key, value, isSecret: false })
 }
 
-function environmentFromBruFile(relPath: string, text: string, ctx: Context): ExportEnvironment | null {
+function normalizeExtends(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.flatMap((entry) => {
+    const name = str(entry).trim()
+    return name ? [name] : []
+  })
+  const name = str(raw).trim()
+  return name ? [name] : []
+}
+
+function mergeEnvironmentVariables(base: ExportEnvironment['variables'], override: ExportEnvironment['variables']): ExportEnvironment['variables'] {
+  const keys = new Set(override.map((variable) => variable.key))
+  return [...base.filter((variable) => !keys.has(variable.key)), ...override]
+}
+
+function resolveEnvironmentDrafts(
+  drafts: BrunoEnvironmentDraft[],
+  ctx: Pick<Context, 'warnings'>,
+  budget: ImportBudget,
+  options: { inheritedSummary?: boolean } = {}
+): ExportEnvironment[] {
+  drafts.forEach(() => budget.takeEnvironment())
+  const byName = new Map<string, number[]>()
+  drafts.forEach((draft, index) => {
+    const matches = byName.get(draft.environment.name) ?? []
+    matches.push(index)
+    byName.set(draft.environment.name, matches)
+  })
+  const missingWarnings = new Set<string>()
+  const cycleWarnings = new Set<string>()
+  const cache = new Map<number, ExportEnvironment['variables']>()
+  const stack = new Set<number>()
+
+  const findParentIndex = (parentName: string, currentIndex: number): number | undefined => {
+    const matches = byName.get(parentName)
+    if (!matches || matches.length === 0) return undefined
+    return matches.find((index) => index !== currentIndex) ?? matches[0]
+  }
+
+  const resolve = (index: number): ExportEnvironment['variables'] => {
+    const cached = cache.get(index)
+    if (cached) return cached
+    const draft = drafts[index]
+    if (!draft) return []
+    if (stack.has(index)) {
+      const warningKey = `${draft.label}:${draft.environment.name}`
+      if (!cycleWarnings.has(warningKey)) {
+        cycleWarnings.add(warningKey)
+        ctx.warnings.push(`"${draft.label}": Bruno environment inheritance has a cycle; cyclic parents were skipped.`)
+      }
+      return draft.environment.variables
+    }
+
+    stack.add(index)
+    let inherited: ExportEnvironment['variables'] = []
+    for (const parentName of draft.extends) {
+      const parentIndex = findParentIndex(parentName, index)
+      if (parentIndex === undefined) {
+        const warningKey = `${draft.label}:${parentName}`
+        if (!missingWarnings.has(warningKey)) {
+          missingWarnings.add(warningKey)
+          ctx.warnings.push(`"${draft.label}": Bruno environment parent "${parentName}" was not found; its variables were skipped.`)
+        }
+        continue
+      }
+      inherited = mergeEnvironmentVariables(inherited, resolve(parentIndex))
+    }
+    stack.delete(index)
+
+    const resolved = mergeEnvironmentVariables(inherited, draft.environment.variables)
+    cache.set(index, resolved)
+    return resolved
+  }
+
+  const inheritedCount = drafts.filter((draft) => draft.extends.length > 0).length
+  const resolved = drafts.map((draft, index) => ({ ...draft.environment, variables: resolve(index) }))
+  if (options.inheritedSummary && inheritedCount > 0) {
+    ctx.warnings.push(`${inheritedCount} environment${inheritedCount === 1 ? ' extends' : 's extend'} another; the inherited variables were copied in.`)
+  }
+  return resolved
+}
+
+function environmentFromBruFile(relPath: string, text: string, ctx: Context): BrunoEnvironmentDraft | null {
   const parsed = parseBruEnvironment(text)
   const name = baseName(relPath).replace(/\.bru$/i, '')
   const variables: ExportEnvironment['variables'] = []
   for (const row of parsed.variables) importEnvironmentVariable(variables, ctx, name, row.name, row.value, { enabled: row.enabled })
   for (const row of parsed.secretVariables) importEnvironmentVariable(variables, ctx, name, row.name, '', { enabled: row.enabled, isSecret: true })
   if (parsed.malformed) ctx.warnings.push(`"${relPath}": could not fully read the Bruno environment file; invalid lines were ignored.`)
-  if (parsed.extends.length > 0) ctx.warnings.push(`"${relPath}": Bruno environment inheritance was not imported (${parsed.extends.slice(0, 3).join(', ')}${parsed.extends.length > 3 ? ', …' : ''}).`)
   if (parsed.externalSecrets.length > 0) ctx.warnings.push(`"${relPath}": external secret providers were not imported (${parsed.externalSecrets.slice(0, 3).join(', ')}${parsed.externalSecrets.length > 3 ? ', …' : ''}).`)
-  if (parsed.hasColor) ctx.warnings.push(`"${relPath}": the Bruno environment color was ignored.`)
-  return { name, variables }
+  return { environment: { name, variables }, extends: parsed.extends, label: relPath }
 }
 
-function environmentFromExport(raw: unknown, index: number, ctx: Context): ExportEnvironment {
+function environmentFromExport(raw: unknown, index: number, ctx: Context): BrunoEnvironmentDraft {
   const env = isObj(raw) ? raw : {}
   const name = str(env.name) || `Environment ${index + 1}`
   const variables: ExportEnvironment['variables'] = []
@@ -161,7 +246,11 @@ function environmentFromExport(raw: unknown, index: number, ctx: Context): Expor
       isSecret: variable.secret === true,
     })
   }
-  return { name, variables }
+  return {
+    environment: { name, variables },
+    extends: normalizeExtends(env.extends),
+    label: name,
+  }
 }
 
 function additionalParametersFromBlocks(b: BruBlocks): Obj | undefined {
@@ -719,10 +808,11 @@ export function convertBrunoFiles(input: BrunoFile[]): BrunoEntry[] {
       secretEnvironmentVariables: 0,
       unresolvedEnvironmentVariables: [],
     }
-    const environments = mine.filter((f) => /^environments\/[^/]+\.bru$/i.test(rel(f)))
+    const environmentDrafts = mine.filter((f) => /^environments\/[^/]+\.bru$/i.test(rel(f)))
       .sort((a, b) => rel(a).localeCompare(rel(b)))
       .map((f) => environmentFromBruFile(rel(f), f.text, ctx))
-      .filter((environment): environment is ExportEnvironment => environment !== null)
+      .filter((environment): environment is BrunoEnvironmentDraft => environment !== null)
+    const environments = resolveEnvironmentDrafts(environmentDrafts, ctx, budget)
     const collectionBru = mine.find((f) => rel(f) === 'collection.bru')
     const parsedSettings = collectionBru ? settingsFromBru(collectionBru.text, name) : undefined
     const settings = parsedSettings ?? emptySettings(name)
@@ -795,7 +885,7 @@ export function convertBrunoExport(doc: Obj): BrunoEntry {
     secretEnvironmentVariables: 0,
     unresolvedEnvironmentVariables: [],
   }
-  const environments = list(doc.environments).map((environment, index) => environmentFromExport(environment, index, ctx))
+  const environments = resolveEnvironmentDrafts(list(doc.environments).map((environment, index) => environmentFromExport(environment, index, ctx)), ctx, budget)
   return finish(str(doc.name), root, build(list(doc.items), root, 0), environments, [], ctx)
 }
 
@@ -822,21 +912,13 @@ export function convertBrunoEnvironmentExport(doc: Obj): { environments: ExportE
     secretEnvironmentVariables: 0,
     unresolvedEnvironmentVariables: [],
   }
-  const raw = list(doc.environments)
-  const environments = raw.map((environment, index) => environmentFromExport(environment, index, ctx))
-  // `extends` inherits the parent's variables; Postly environments are flat, so they are copied in
-  const byName = new Map(environments.map((e) => [e.name, e]))
-  const resolve = (name: string, seen: Set<string>): ExportEnvironment['variables'] => {
-    const env = byName.get(name)
-    const parent = str(raw[environments.indexOf(env as ExportEnvironment)]?.extends)
-    if (!env || !parent || seen.has(name) || !byName.has(parent)) return env?.variables ?? []
-    seen.add(name)
-    const own = new Set(env.variables.map((v) => v.key))
-    return [...resolve(parent, seen).filter((v) => !own.has(v.key)), ...env.variables]
-  }
-  const extended = raw.filter((e) => str(e.extends)).length
-  const resolved = environments.map((e) => ({ ...e, variables: resolve(e.name, new Set()) }))
-  if (extended > 0) ctx.warnings.push(`${extended} environment${extended === 1 ? ' extends' : 's extend'} another; the inherited variables were copied in.`)
+  const budget = new ImportBudget()
+  const resolved = resolveEnvironmentDrafts(
+    list(doc.environments).map((environment, index) => environmentFromExport(environment, index, ctx)),
+    ctx,
+    budget,
+    { inheritedSummary: true },
+  )
   if (ctx.disabledEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments skipped ${ctx.disabledEnvironmentVariables} disabled variable${ctx.disabledEnvironmentVariables === 1 ? '' : 's'}.`)
   if (ctx.secretEnvironmentVariables > 0) ctx.warnings.push(`Bruno environments imported ${ctx.secretEnvironmentVariables} secret variable${ctx.secretEnvironmentVariables === 1 ? '' : 's'} with blank values; re-enter them in Postly.`)
   return { environments: resolved, warnings: ctx.warnings }

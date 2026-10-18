@@ -66,6 +66,49 @@ describe('previewImport', () => {
       warnings: [],
     })
   })
+
+  it('normalizes malformed Postly preview environments for the renderer', async () => {
+    const preview = await previewImport(JSON.stringify({
+      $schema: 'postly/v1',
+      exportedAt: '2026-10-17T00:00:00.000Z',
+      collections: [],
+      environments: [
+        null,
+        {
+          name: 123,
+          variables: [
+            null,
+            { key: 7, value: false, isSecret: 'yes' },
+            'skip-me',
+          ],
+        },
+        {
+          variables: 'bad-shape',
+        },
+      ],
+    }))
+
+    expect(preview.environments).toEqual([
+      {
+        name: '123',
+        variables: [{ key: '7', value: 'false', isSecret: false }],
+      },
+      {
+        name: 'Imported',
+        variables: [],
+      },
+    ])
+  })
+
+  it('rejects Bruno environment exports with more than 5000 environments', async () => {
+    await expect(previewImport(JSON.stringify({
+      info: { type: 'bruno-environment' },
+      environments: Array.from({ length: 5001 }, (_, index) => ({
+        name: `Env ${index + 1}`,
+        variables: [],
+      })),
+    }))).rejects.toThrow(/more than 5000 environments/i)
+  })
 })
 
 describe('previewFolder', () => {

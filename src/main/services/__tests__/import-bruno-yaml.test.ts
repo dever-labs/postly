@@ -63,6 +63,72 @@ describe('Bruno YAML import', () => {
     expect(entry.warnings.join('\n')).toMatch(/Development\.fromProcess/)
   })
 
+  it('resolves YAML environment inheritance, merges array-form parents in order, and ignores color', () => {
+    const [entry] = convertBrunoYamlFiles([
+      { path: 'picked/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Env Inheritance\n' },
+      { path: 'picked/request.yml', text: 'info:\n  name: Ping\n  type: http\nhttp:\n  method: GET\n  url: https://example.com/ping\n' },
+      { path: 'picked/environments/base.yml', text: `name: Base
+variables:
+  - name: host
+    value: https://base.example.com
+  - name: token
+    value: base
+` },
+      { path: 'picked/environments/child.yml', text: `name: Child
+extends:
+  - Base
+  - Shared
+  - Missing
+externalSecrets:
+  - vault
+color: purple
+variables:
+  - name: token
+    value: child
+` },
+      { path: 'picked/environments/cycle-a.yml', text: 'name: Cycle A\nextends: Cycle B\nvariables:\n  - name: a\n    value: 1\n' },
+      { path: 'picked/environments/cycle-b.yml', text: 'name: Cycle B\nextends:\n  - Cycle A\nvariables:\n  - name: b\n    value: 2\n' },
+      { path: 'picked/environments/shared.yml', text: `name: Shared
+variables:
+  - name: token
+    value: shared
+  - name: region
+    value: eu-west-1
+` },
+    ])
+
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'token', value: 'base', isSecret: false },
+        ],
+      },
+      {
+        name: 'Child',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+      { name: 'Cycle A', variables: [{ key: 'b', value: '2', isSecret: false }, { key: 'a', value: '1', isSecret: false }] },
+      { name: 'Cycle B', variables: [{ key: 'a', value: '1', isSecret: false }, { key: 'b', value: '2', isSecret: false }] },
+      {
+        name: 'Shared',
+        variables: [
+          { key: 'token', value: 'shared', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+        ],
+      },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/parent "Missing" was not found/i)
+    expect(entry.warnings.join('\n')).toMatch(/inheritance has a cycle/i)
+    expect(entry.warnings.join('\n')).toMatch(/external secret providers were not imported/i)
+    expect(entry.warnings.join('\n')).not.toMatch(/color was ignored/i)
+  })
+
   it('maps defaults, GraphQL, variables, actions, settings, and aggregate warnings', () => {
     const [entry] = convertBrunoYamlFiles(folder('spec-complex').map((file) => ({ ...file, path: file.path.replace('spec-complex/', 'picked/') })))
     const collection = entry.collection

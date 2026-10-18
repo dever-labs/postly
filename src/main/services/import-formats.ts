@@ -75,6 +75,32 @@ function summarizePostmanEnvironment(doc: Record<string, unknown>): { environmen
   return { environment, warnings }
 }
 
+function normalizePreviewEnvironments(value: unknown): ExportEnvironment[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.flatMap((entry) => {
+    if (typeof entry !== 'object' || entry === null) return []
+    const environment = entry as Partial<ExportEnvironment>
+    const rawName = typeof environment.name === 'string'
+      ? environment.name
+      : typeof environment.name === 'number' || typeof environment.name === 'boolean'
+        ? String(environment.name)
+        : 'Imported'
+    const name = rawName.trim() || 'Imported'
+    const variables = Array.isArray(environment.variables)
+      ? environment.variables.flatMap((row) => {
+          if (typeof row !== 'object' || row === null) return []
+          const variable = row as Partial<ExportEnvironment['variables'][number]>
+          return [{
+            key: typeof variable.key === 'string' ? variable.key : String(variable.key ?? ''),
+            value: typeof variable.value === 'string' ? variable.value : String(variable.value ?? ''),
+            isSecret: variable.isSecret === true,
+          }]
+        })
+      : []
+    return [{ name, variables }]
+  })
+}
+
 /** Detects the format of an import file and converts it to Postly collections without touching the database. */
 export async function previewImport(text: string, options: { sourceUrl?: string } = {}): Promise<ImportPreview> {
   if (text.length > MAX_IMPORT_BYTES) throw new Error('The file is larger than 20 MB.')
@@ -83,7 +109,7 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
 
   const obj = doc as Record<string, unknown>
   if (typeof obj.$schema === 'string' && obj.$schema.startsWith('postly/') && Array.isArray(obj.collections)) {
-    const environments = Array.isArray(obj.environments) ? obj.environments as ExportEnvironment[] : undefined
+    const environments = normalizePreviewEnvironments(obj.environments)
     return { format: 'postly', collections: (obj.collections as ExportCollection[]).map(summarize), ...(environments ? { environments } : {}), warnings: [] }
   }
   if (isOpenApiDocument(obj)) {

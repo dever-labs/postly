@@ -4,6 +4,7 @@ import fs from 'fs'
 import { queryAll, runTransaction } from '../database'
 import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
 import { MAX_IMPORT_BYTES, previewFolder, previewImport } from '../services/import-formats'
+import { MAX_IMPORT_ENVIRONMENTS } from '../services/import-util'
 import { cleanVariables, collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
@@ -296,13 +297,28 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
 
 function environmentStatements(sources: Array<{ environments?: unknown }>, now: number): Statement[] {
   const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
+  const nextSuffix = new Map<string, number>()
   const out: Statement[] = []
+  let environmentCount = 0
   for (const source of sources) {
     const incoming = arrayField<ExportEnvironment>(source.environments, 'Environments must be arrays.')
     for (const environment of incoming) {
+      if (++environmentCount > MAX_IMPORT_ENVIRONMENTS) {
+        throw new Error(`The import has more than ${MAX_IMPORT_ENVIRONMENTS} environments.`)
+      }
       const base = String(environment.name ?? '').trim() || 'Imported'
       let name = base
-      for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n})`
+      const baseKey = base.toLowerCase()
+      if (taken.has(baseKey)) {
+        let suffix = nextSuffix.get(baseKey) ?? 2
+        do {
+          name = `${base} (${suffix})`
+          suffix++
+        } while (taken.has(name.toLowerCase()))
+        nextSuffix.set(baseKey, suffix)
+      } else {
+        nextSuffix.set(baseKey, 2)
+      }
       taken.add(name.toLowerCase())
       const id = crypto.randomUUID()
       out.push({ sql: 'INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', params: [id, name, now, now] })

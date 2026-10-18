@@ -20,7 +20,7 @@ interface ParsedCollection {
 
 interface ParsedEnvironment {
   name: string
-  variables: Array<{ key: string; value: string; isSecret: boolean }>
+  variables?: Array<{ key: string; value: string; isSecret: boolean }>
 }
 
 interface PreviewEntry {
@@ -335,12 +335,13 @@ export function ImportPage() {
                 <div className="mt-3 flex flex-col gap-3">
                   {previewEnvironments.map((environment, index) => {
                     const warnings = environmentWarnings(environment.name)
+                    const variableCount = environment.variables?.length ?? 0
                     return (
                       <div key={`${environment.name}-${index}`} className="rounded-lg border border-th-border px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
                           <span className="truncate text-sm font-medium text-th-text-primary">{environment.name}</span>
                           <span className="shrink-0 text-xs text-th-text-faint">
-                            {environment.variables.length} variable{environment.variables.length !== 1 ? 's' : ''}
+                            {variableCount} variable{variableCount !== 1 ? 's' : ''}
                           </span>
                         </div>
                         {warnings.length > 0 && (
