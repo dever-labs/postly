@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../shared/extract'
-import { parseBru } from '../bru-lang'
+import { parseBru, parseBruEnvironment } from '../bru-lang'
 import { previewFolder, previewImport } from '../import-formats'
-import { convertBrunoExport, convertBrunoFiles } from '../import-bruno'
+import { convertBrunoEnvironmentExport, convertBrunoExport, convertBrunoFiles } from '../import-bruno'
 
 const FIX = path.join(__dirname, 'fixtures', 'bruno')
 const rows = (v: string) => JSON.parse(v) as Array<{ key: string; value: string; enabled: boolean; fieldType?: string }>
@@ -60,6 +60,9 @@ function exportEntry(request: Record<string, unknown>, extra: Record<string, unk
   })
 }
 
+const envVars = (entry: ReturnType<typeof convertBrunoFiles>[number], name: string) =>
+  entry.collection.environments?.find((environment) => environment.name === name)?.variables ?? []
+
 describe('parseBru', () => {
   it('reads the real bruno-lang request fixture', () => {
     const doc = parseBru(fs.readFileSync(path.join(FIX, 'real-request.bru'), 'utf-8'))
@@ -113,6 +116,20 @@ body:json {
     expect(doc.dicts.get('headers')).toMatchObject([{ name: 'Accept', value: 'application/json', enabled: true }])
     expect(JSON.parse(doc.texts.get('body:json') ?? '')).toEqual({ ok: true })
   })
+
+  it('parses Bruno environment vars, secret vars, and malformed rows', () => {
+    const doc = parseBruEnvironment(fs.readFileSync(path.join(FIX, 'env-import/environments/Dev.bru'), 'utf-8'))
+    expect(doc.variables).toMatchObject([
+      { name: 'host', value: 'https://dev.example.com', enabled: true },
+      { name: 'disabledToken', value: 'should-not-import', enabled: false },
+      { name: 'fromProcess', value: '{{process.env.DEV_TOKEN}}', enabled: true },
+    ])
+    expect(doc.secretVariables).toMatchObject([
+      { name: 'apiKey', enabled: true },
+      { name: 'disabledSecret', enabled: false },
+    ])
+    expect(parseBruEnvironment(fs.readFileSync(path.join(FIX, 'env-import/environments/Broken.bru'), 'utf-8')).malformed).toBe(true)
+  })
 })
 
 describe('Bruno folder import', () => {
@@ -124,14 +141,128 @@ describe('Bruno folder import', () => {
     expect(entry.warnings.join('\n')).toMatch(/Scripts were not imported/)
   })
 
-  it('maps graphql, multipart, binary and digest requests and warns about environments', () => {
+  it('maps graphql, multipart, binary, digest, and Bruno environments', () => {
     const preview = previewFolder(folder('real-testbench'))
     expect(preview.format).toBe('bruno')
-    const reqs = convertBrunoFiles(folder('real-testbench'))[0].collection.requests
+    expect(preview.collections[0].environments).toBe(2)
+    const [entry] = convertBrunoFiles(folder('real-testbench'))
+    const reqs = entry.collection.requests
     const byName = (n: string) => reqs.find((r) => r.name === n)
     expect(byName('mutation')?.bodyType).toBe('graphql')
     expect(byName('multipart-mixed-form-data-file')?.bodyType).toBe('form-data')
-    expect(preview.warnings.join('\n')).toMatch(/environments were not imported/)
+    expect(entry.collection.environments?.map((environment) => environment.name)).toEqual(['Local', 'Prod'])
+    expect(envVars(entry, 'Local')).toEqual(expect.arrayContaining([
+      { key: 'host', value: 'http://localhost:8080', isSecret: false },
+      { key: 'typed_env_num', value: '300', isSecret: false },
+      { key: 'github_client_secret', value: '', isSecret: true },
+      { key: 'bark', value: '', isSecret: false },
+    ]))
+    expect(preview.warnings.join('\n')).toMatch(/secret variable.*blank values/i)
+    expect(preview.warnings.join('\n')).toMatch(/dotenv\/process\.env references were not imported/i)
+  })
+
+  it('imports .bru environments, skips disabled vars, keeps empty environments, and warns per malformed file', () => {
+    const [entry] = convertBrunoFiles(folder('env-import'))
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Broken',
+        variables: [],
+      },
+      {
+        name: 'Dev',
+        variables: [
+          { key: 'host', value: 'https://dev.example.com', isSecret: false },
+          { key: 'fromProcess', value: '', isSecret: false },
+          { key: 'apiKey', value: '', isSecret: true },
+        ],
+      },
+      {
+        name: 'Empty',
+        variables: [],
+      },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/skipped 2 disabled variables/i)
+    expect(entry.warnings.join('\n')).toMatch(/imported 1 secret variable with blank values/i)
+    expect(entry.warnings.join('\n')).toMatch(/Dev\.fromProcess/)
+    expect(entry.warnings.join('\n')).toMatch(/Broken\.bru": could not fully read the Bruno environment file/i)
+  })
+
+  it('resolves .bru environment inheritance, merges array-form parents in order, and warns on missing parents or cycles', () => {
+    const [entry] = convertBrunoFiles([
+      { path: 'picked/request.bru', text: bruRequest() },
+      { path: 'picked/environments/base.bru', text: `color: blue
+vars {
+  host: https://base.example.com
+  token: base
+}
+
+vars:externalsecrets:vault {
+}
+` },
+      { path: 'picked/environments/shared.bru', text: `vars {
+  token: shared
+  region: us-east-1
+}
+` },
+      { path: 'picked/environments/child.bru', text: `extends [
+  base
+  shared
+  missing
+]
+
+vars {
+  token: child
+}
+` },
+      { path: 'picked/environments/cycle-a.bru', text: 'extends: cycle-b\nvars {\n  a: 1\n}\n' },
+      { path: 'picked/environments/cycle-b.bru', text: 'extends: cycle-a\nvars {\n  b: 2\n}\n' },
+    ])
+
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'base',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'token', value: 'base', isSecret: false },
+        ],
+      },
+      {
+        name: 'child',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'region', value: 'us-east-1', isSecret: false },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+      { name: 'cycle-a', variables: [{ key: 'b', value: '2', isSecret: false }, { key: 'a', value: '1', isSecret: false }] },
+      { name: 'cycle-b', variables: [{ key: 'a', value: '1', isSecret: false }, { key: 'b', value: '2', isSecret: false }] },
+      {
+        name: 'shared',
+        variables: [
+          { key: 'token', value: 'shared', isSecret: false },
+          { key: 'region', value: 'us-east-1', isSecret: false },
+        ],
+      },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/parent "missing" was not found/i)
+    expect(entry.warnings.join('\n')).toMatch(/inheritance has a cycle/i)
+    expect(entry.warnings.join('\n')).toMatch(/external secret providers were not imported/i)
+    expect(entry.warnings.join('\n')).not.toMatch(/color was ignored/i)
+    expect(entry.warnings.join('\n')).not.toMatch(/inheritance was not imported/i)
+  })
+
+  it('assigns .bru environments to the nearest collection root', () => {
+    const entries = convertBrunoFiles([
+      { path: 'picked/root/bruno.json', text: '{"name":"Root"}' },
+      { path: 'picked/root/request.bru', text: bruRequest({ name: 'Root Request' }) },
+      { path: 'picked/root/environments/root.bru', text: 'vars {\n  host: https://root.test\n}\n' },
+      { path: 'picked/root/nested/bruno.json', text: '{"name":"Nested"}' },
+      { path: 'picked/root/nested/request.bru', text: bruRequest({ name: 'Nested Request', url: 'https://nested.test' }) },
+      { path: 'picked/root/nested/environments/nested.bru', text: 'vars {\n  host: https://nested.test\n}\n' },
+    ])
+    const byName = new Map(entries.map((entry) => [entry.collection.name, entry] as const))
+    expect(byName.get('Root')?.collection.environments).toEqual([{ name: 'root', variables: [{ key: 'host', value: 'https://root.test', isSecret: false }] }])
+    expect(byName.get('Nested')?.collection.environments).toEqual([{ name: 'nested', variables: [{ key: 'host', value: 'https://nested.test', isSecret: false }] }])
   })
 
   it('maps legacy query blocks, warns about unknown blocks, and reports tags once', () => {
@@ -537,6 +668,227 @@ describe('Bruno JSON export', () => {
     expect(entry.warnings.join('\n')).toMatch(/Multipart part content types were not imported/)
   })
 
+  it('resolves standalone environment export inheritance by index when duplicate names exist', () => {
+    const result = convertBrunoEnvironmentExport({
+      info: { type: 'bruno-environment' },
+      environments: [
+        { name: 'Dup', variables: [{ name: 'first', value: '1', enabled: true }] },
+        { name: 'Dup', extends: ['Base'], variables: [{ name: 'second', value: '2', enabled: true }] },
+        { name: 'Base', variables: [{ name: 'host', value: 'https://base.example.test', enabled: true }] },
+      ],
+    })
+
+    expect(result.environments).toEqual([
+      { name: 'Dup', variables: [{ key: 'first', value: '1', isSecret: false }] },
+      {
+        name: 'Dup',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'second', value: '2', isSecret: false },
+        ],
+      },
+      { name: 'Base', variables: [{ key: 'host', value: 'https://base.example.test', isSecret: false }] },
+    ])
+  })
+
+  it('resolves duplicate-name parent references to the sibling instead of self', () => {
+    const result = convertBrunoEnvironmentExport({
+      info: { type: 'bruno-environment' },
+      environments: [
+        { name: 'Dup', extends: ['Dup'], variables: [{ name: 'child', value: '2', enabled: true }] },
+        { name: 'Dup', variables: [{ name: 'host', value: 'https://base.example.test', enabled: true }] },
+      ],
+    })
+
+    expect(result.environments).toEqual([
+      {
+        name: 'Dup',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'child', value: '2', isSecret: false },
+        ],
+      },
+      {
+        name: 'Dup',
+        variables: [{ key: 'host', value: 'https://base.example.test', isSecret: false }],
+      },
+    ])
+    expect(result.warnings).toEqual(['1 environment extends another; the inherited variables were copied in.'])
+  })
+
+  it('keeps standalone environment export inheritance, child precedence, warnings, disabled rows, and blank secrets exact', () => {
+    const result = convertBrunoEnvironmentExport({
+      info: { type: 'bruno-environment' },
+      environments: [
+        {
+          name: 'Base',
+          variables: [
+            { name: 'host', value: 'https://base.example.test', enabled: true },
+            { name: 'token', value: 'base', enabled: true },
+            { name: 'disabledBase', value: 'skip', enabled: false },
+          ],
+        },
+        {
+          name: 'Left',
+          extends: ['Base'],
+          variables: [
+            { name: 'leftOnly', value: '1', enabled: true },
+            { name: 'token', value: 'left', enabled: true },
+          ],
+        },
+        {
+          name: 'Right',
+          extends: ['Base'],
+          variables: [
+            { name: 'rightOnly', value: '2', enabled: true },
+            { name: 'token', value: 'right', enabled: true },
+            { name: 'secretToken', value: 'shh', enabled: true, secret: true },
+          ],
+        },
+        {
+          name: 'Diamond',
+          extends: ['Left', 'Right', 'Missing'],
+          variables: [
+            { name: 'token', value: 'child', enabled: true },
+          ],
+        },
+        {
+          name: 'Cycle A',
+          extends: ['Cycle B'],
+          variables: [{ name: 'a', value: '1', enabled: true }],
+        },
+        {
+          name: 'Cycle B',
+          extends: ['Cycle A'],
+          variables: [{ name: 'b', value: '2', enabled: true }],
+        },
+      ],
+    })
+
+    expect(result.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'token', value: 'base', isSecret: false },
+        ],
+      },
+      {
+        name: 'Left',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'leftOnly', value: '1', isSecret: false },
+          { key: 'token', value: 'left', isSecret: false },
+        ],
+      },
+      {
+        name: 'Right',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'rightOnly', value: '2', isSecret: false },
+          { key: 'token', value: 'right', isSecret: false },
+          { key: 'secretToken', value: '', isSecret: true },
+        ],
+      },
+      {
+        name: 'Diamond',
+        variables: [
+          { key: 'leftOnly', value: '1', isSecret: false },
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'rightOnly', value: '2', isSecret: false },
+          { key: 'secretToken', value: '', isSecret: true },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+      {
+        name: 'Cycle A',
+        variables: [
+          { key: 'b', value: '2', isSecret: false },
+          { key: 'a', value: '1', isSecret: false },
+        ],
+      },
+      {
+        name: 'Cycle B',
+        variables: [
+          { key: 'a', value: '1', isSecret: false },
+          { key: 'b', value: '2', isSecret: false },
+        ],
+      },
+    ])
+    expect(result.warnings).toEqual([
+      '"Diamond": Bruno environment parent "Missing" was not found; its variables were skipped.',
+      '"Cycle A": Bruno environment inheritance has a cycle; cyclic parents were skipped.',
+      '5 environments extend another; the inherited variables were copied in.',
+      'Bruno environments skipped 1 disabled variable.',
+      'Bruno environments imported 1 secret variable with blank values; re-enter them in Postly.',
+    ])
+  })
+
+  it('resolves exported environment inheritance by index so duplicate names do not overwrite each other', () => {
+    const entry = convertBrunoExport({
+      name: 'Exported',
+      version: '1',
+      items: [],
+      environments: [
+        { name: 'Dup', variables: [{ name: 'first', value: '1', enabled: true }] },
+        { name: 'Dup', extends: ['Base'], variables: [{ name: 'second', value: '2', enabled: true }] },
+        { name: 'Base', variables: [{ name: 'host', value: 'https://base.example.test', enabled: true }] },
+      ],
+      brunoConfig: {},
+    })
+
+    expect(entry.collection.environments).toEqual([
+      { name: 'Dup', variables: [{ key: 'first', value: '1', isSecret: false }] },
+      {
+        name: 'Dup',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'second', value: '2', isSecret: false },
+        ],
+      },
+      { name: 'Base', variables: [{ key: 'host', value: 'https://base.example.test', isSecret: false }] },
+    ])
+  })
+
+  it('merges array-form exported parents in order', () => {
+    const entry = convertBrunoExport({
+      name: 'Exported',
+      version: '1',
+      items: [],
+      environments: [
+        { name: 'Base', variables: [{ name: 'token', value: 'base', enabled: true }, { name: 'host', value: 'https://base.example.test', enabled: true }] },
+        { name: 'Shared', variables: [{ name: 'token', value: 'shared', enabled: true }, { name: 'region', value: 'eu-west-1', enabled: true }] },
+        { name: 'Child', extends: ['Base', 'Shared'], variables: [{ name: 'token', value: 'child', enabled: true }] },
+      ],
+      brunoConfig: {},
+    })
+
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'token', value: 'base', isSecret: false },
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+        ],
+      },
+      {
+        name: 'Shared',
+        variables: [
+          { key: 'token', value: 'shared', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+        ],
+      },
+      {
+        name: 'Child',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+    ])
+  })
+
   it('maps every request auth mode from JSON exports', () => {
     const cases: Array<{
       auth: Record<string, unknown>
@@ -768,7 +1120,7 @@ describe('Bruno JSON export', () => {
           },
         ],
       }],
-      environments: [{ name: 'Dev' }],
+      environments: [{ name: 'Dev', variables: [{ name: 'token', value: 'secret', enabled: true, secret: true }, { name: 'disabled', value: 'skip', enabled: false }] }],
       brunoConfig: {},
     })
 
@@ -784,7 +1136,9 @@ describe('Bruno JSON export', () => {
     expect(entry.warnings.join('\n')).toMatch(/Collection: its headers were not imported/)
     expect(entry.warnings.join('\n')).toMatch(/Folder "API": its headers were not imported/)
     expect(entry.warnings.join('\n')).toMatch(/Scripts were not imported for 2 items \(Collection, Folder "API"\)\./)
-    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(Dev\)/)
+    expect(entry.collection.environments).toEqual([{ name: 'Dev', variables: [{ key: 'token', value: '', isSecret: true }] }])
+    expect(entry.warnings.join('\n')).toMatch(/skipped 1 disabled variable/i)
+    expect(entry.warnings.join('\n')).toMatch(/imported 1 secret variable with blank values/i)
     expect(entry.warnings.join('\n')).toMatch(/"Rpc": only HTTP and GraphQL requests are imported\./)
     expect(entry.warnings.join('\n')).toMatch(/one or more multipart file fields were not imported/)
     expect(entry.warnings.join('\n')).toMatch(/Multipart part content types were not imported/)

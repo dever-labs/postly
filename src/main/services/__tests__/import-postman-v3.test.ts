@@ -44,18 +44,27 @@ describe('convertPostmanV3Files', () => {
       { key: 'folderOnly', value: 'from-folder', isSecret: false },
       { key: 'id', value: '42', isSecret: false },
     ]))
+    expect(entry.collection.environments).toEqual([{
+      name: 'Stage',
+      variables: [
+        { key: 'baseUrl', value: 'https://stage.example.com', isSecret: false },
+        { key: 'apiToken', value: '', isSecret: true },
+      ],
+    }])
 
     const create = entry.collection.requests.find((request) => request.name === 'Create user')
-    expect(create).toBeTruthy()
-    expect(create?.url).toBe('{{baseUrl}}/users/{{id}}')
-    expect(rows(create?.params ? JSON.stringify(create.params) : '[]').map((row) => [row.key, row.value, row.enabled])).toEqual([
+    expect(create).toMatchObject({
+      name: 'Create user',
+      url: '{{baseUrl}}/users/{{id}}',
+      auth: { type: 'apikey', config: { key: 'X-Api-Key', value: 'abc123', in: 'query' } },
+      ssl: 'disabled',
+      network: { followRedirects: false, maxRedirects: 2 },
+      bodyType: 'raw-json',
+    })
+    expect(rows(JSON.stringify(create?.params ?? [])).map((row) => [row.key, row.value, row.enabled])).toEqual([
       ['draft', '1', true],
       ['verbose', '0', false],
     ])
-    expect(create?.auth).toEqual({ type: 'apikey', config: { key: 'X-Api-Key', value: 'abc123', in: 'query' } })
-    expect(create?.ssl).toBe('disabled')
-    expect(create?.network).toEqual({ followRedirects: false, maxRedirects: 2 })
-    expect(create?.bodyType).toBe('raw-json')
     expect(parseRules(create?.protocolConfig.extractRules as string)).toHaveLength(1)
 
     const users = entry.collection.folders[0]
@@ -66,7 +75,7 @@ describe('convertPostmanV3Files', () => {
     expect(entry.warnings.join('\n')).toMatch(/collection script scope/i)
     expect(entry.warnings.join('\n')).toMatch(/folder script scope/i)
     expect(entry.warnings.join('\n')).toMatch(/3 saved response example/i)
-    expect(entry.warnings.join('\n')).toMatch(/1 Postman environment file/i)
+    expect(entry.warnings.join('\n')).toMatch(/Stage\.yaml: skipped 1 disabled environment variable\./i)
     expect(entry.warnings.join('\n')).toMatch(/Unsupported Postman request kinds were skipped: 1 WebSocket request/i)
     expect(entry.warnings.join('\n')).toMatch(/Unknown keys were ignored/i)
     expect(entry.warnings.join('\n')).toMatch(/unsupported request settings were ignored: disableCookies/i)
@@ -350,8 +359,9 @@ describe('convertPostmanV3Files', () => {
     expect(entry.warnings.join('\n')).toMatch(/Postman dynamic variables Postly does not provide are used and will stay unresolved: \{\{\$custom\}\}\./)
   })
 
-  it('imports multiple folder roots and sorts folder requests by path', () => {
+  it('imports multiple folder roots, attaches workspace environments to the first collection, and sorts folder requests by path', () => {
     const entries = convertPostmanV3Files([
+      { path: 'environments/Stage.yaml', text: '$kind: environment\nname: Stage\nvalues:\n  - key: baseUrl\n    value: https://stage.test\n' },
       { path: 'Beta/B.request.yaml', text: '$kind: http-request\nname: B\nauth:\n  type: noauth\nurl: https://beta.test\n' },
       { path: 'Alpha/.resources/definition.yaml', text: '$kind: collection\nname: Alpha\n' },
       { path: 'Alpha/z-last.request.yaml', text: '$kind: http-request\nname: Z last\nurl: https://alpha.test/z\n' },
@@ -360,6 +370,11 @@ describe('convertPostmanV3Files', () => {
 
     expect(entries.map((entry) => entry.collection.name)).toEqual(['Alpha', 'Beta'])
     expect(entries[0].collection.requests.map((request) => request.name)).toEqual(['A first', 'Z last'])
+    expect(entries[0].collection.environments).toEqual([
+      { name: 'Stage', variables: [{ key: 'baseUrl', value: 'https://stage.test', isSecret: false }] },
+    ])
+    expect(entries[1].collection.environments).toBeUndefined()
+    expect(entries[0].warnings.join('\n')).toMatch(/1 workspace environment was attached to this collection/i)
     expect(entries[1].collection.requests[0]).toMatchObject({ name: 'B', auth: { type: 'none', config: {} } })
   })
 
@@ -391,15 +406,18 @@ describe('paths as sent by the folder picker', () => {
     const files = folder('workspace').map((f) => ({ ...f, path: `workspace/${f.path}` }))
     const [entry] = convertPostmanV3Files(files)
     expect(entry.collection.name).toBe('Native Git Sample')
-    expect(entry.warnings.join('\n')).toMatch(/environment/i)
+    expect(entry.collection.environments?.[0].name).toBe('Stage')
     expect(entry.warnings.join('\n')).not.toContain('workspace/postman')
   })
 })
 
 describe('additional Postman v3 edge cases', () => {
-  it('imports loose request files without a workspace definition and still counts environment files', () => {
+  it('imports loose request files without a workspace definition and attaches environments', () => {
     const [entry] = convertPostmanV3Files([
-      { path: 'picked/postman/environments/dev.yaml', text: '$kind: environment\nname: Dev\n' },
+      {
+        path: 'picked/postman/environments/dev.yaml',
+        text: '$kind: environment\nname: Dev\nvalues:\n  - key: baseUrl\n    value: https://dev.test\n  - key: apiKey\n    value: secret\n    type: secret\n',
+      },
       { path: 'picked/root.request.yaml', text: '$kind: http-request\nname: Root\nurl: https://root.test\nmethod: GET\n' },
       {
         path: 'picked/sub/search.request.yaml',
@@ -411,7 +429,40 @@ describe('additional Postman v3 edge cases', () => {
     expect(entry.collection.requests[0]).toMatchObject({ name: 'Root', method: 'GET', url: 'https://root.test' })
     expect(entry.collection.folders[0].requests[0]).toMatchObject({ name: 'Search', bodyType: 'graphql' })
     expect(JSON.parse(entry.collection.folders[0].requests[0].bodyContent)).toEqual({ query: 'query Search { ping }', variables: '{"page":1}' })
-    expect(entry.warnings.join('\n')).toMatch(/1 Postman environment file was found but environments are not imported\./)
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Dev',
+        variables: [
+          { key: 'baseUrl', value: 'https://dev.test', isSecret: false },
+          { key: 'apiKey', value: '', isSecret: true },
+        ],
+      },
+    ])
+  })
+
+  it('imports workspace environment files even when they omit $kind', () => {
+    const [entry] = convertPostmanV3Files([
+      {
+        path: 'picked/postman/environments/qa.yaml',
+        text: 'name: QA\nvalues:\n  - key: baseUrl\n    value: https://qa.test\n  - key: token\n    value: hidden\n    type: secret\n',
+      },
+      { path: 'picked/root.request.yaml', text: '$kind: http-request\nname: Root\nurl: https://root.test\nmethod: GET\n' },
+    ])
+
+    expect(entry.collection.name).toBe('Imported Postman v3 collection')
+    expect(entry.collection.requests).toEqual([
+      expect.objectContaining({ name: 'Root', url: 'https://root.test', method: 'GET' }),
+    ])
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'QA',
+        variables: [
+          { key: 'baseUrl', value: 'https://qa.test', isSecret: false },
+          { key: 'token', value: '', isSecret: true },
+        ],
+      },
+    ])
+    expect(entry.warnings).toEqual([])
   })
 
   it('falls back to the first matching auth entry and tolerates invalid request settings', () => {

@@ -4,7 +4,8 @@ import fs from 'fs'
 import { queryAll, runTransaction } from '../database'
 import { parseNetworkSettings, serializeNetworkSettings, type NetworkSettings } from '../services/network-settings'
 import { MAX_IMPORT_BYTES, previewFolder, previewImport } from '../services/import-formats'
-import { collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
+import { MAX_IMPORT_ENVIRONMENTS } from '../services/import-util'
+import { cleanVariables, collectionVariableStatements, exportCollectionVariables, type VariableRow } from '../services/variable-store'
 
 const SCHEMA = 'postly/v1'
 
@@ -38,6 +39,12 @@ export interface ExportFolder {
   groups?: ExportFolder[]
 }
 
+/** A named set of variables. Environments are global in Postly; importers attach them to the collection they came with. */
+export interface ExportEnvironment {
+  name: string
+  variables: VariableRow[]
+}
+
 export interface ExportCollection {
   name: string
   description: string
@@ -48,6 +55,8 @@ export interface ExportCollection {
   network?: NetworkSettings
   /** Collection-scoped variables. Secret values are exported blank. */
   variables?: VariableRow[]
+  /** Created as global environments next to the collection (imports only; never exported). */
+  environments?: ExportEnvironment[]
   requests: ExportRequest[]
   folders: ExportFolder[]
   /** @deprecated use folders — present in pre-v2 exports for backward compat */
@@ -58,6 +67,7 @@ export interface PostlyExportFile {
   $schema: string
   exportedAt: string
   collections: ExportCollection[]
+  environments?: ExportEnvironment[]
 }
 
 interface DbFolderRow {
@@ -201,8 +211,35 @@ export function buildExport(collectionIds?: string[]): PostlyExportFile {
 
 type Statement = { sql: string; params: unknown[] }
 
-function requestStatements(requests: ExportRequest[], folderId: string, now: number, out: Statement[]): void {
-  for (const [index, request] of requests.entries()) {
+function arrayField<T>(value: unknown, message: string): T[] {
+  if (value == null) return []
+  if (!Array.isArray(value)) throw new Error(message)
+  return value as T[]
+}
+
+function normalizeVariableValue(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function normalizeVariables(value: unknown, message: string): VariableRow[] | undefined {
+  if (value == null) return undefined
+  if (!Array.isArray(value)) throw new Error(message)
+  return value.flatMap((row) => {
+    if (typeof row !== 'object' || row === null) return []
+    const variable = row as Partial<VariableRow>
+    return [{
+      key: typeof variable.key === 'string' ? variable.key : String(variable.key ?? ''),
+      value: normalizeVariableValue(variable.value),
+      isSecret: !!variable.isSecret,
+    }]
+  })
+}
+
+function requestStatements(requests: unknown, folderId: string, now: number, out: Statement[]): void {
+  for (const [index, request] of arrayField<ExportRequest>(requests, 'Request lists must be arrays.').entries()) {
     out.push({
       sql: `INSERT INTO requests
          (id, folder_id, name, method, url, params, headers, body_type, body_content,
@@ -255,19 +292,63 @@ function folderStatements(folder: ExportFolder, parentId: string, sortOrder: num
       now,
     ],
   })
-  requestStatements(folder.requests ?? [], folderId, now, out)
+  requestStatements(folder.requests, folderId, now, out)
   // fall back to `groups` for exports created before the folder-tree refactor
-  const children = folder.folders ?? folder.groups ?? []
+  const children = folder.folders != null
+    ? arrayField<ExportFolder>(folder.folders, 'Folder lists must be arrays.')
+    : arrayField<ExportFolder>(folder.groups, 'Folder lists must be arrays.')
   for (const [index, child] of children.entries()) {
     folderStatements(child, folderId, index, now, out)
   }
 }
 
+function environmentStatements(sources: Array<{ environments?: unknown }>, now: number): Statement[] {
+  const taken = new Set(queryAll<{ name: string }>('SELECT name FROM environments').map((r) => r.name.toLowerCase()))
+  const nextSuffix = new Map<string, number>()
+  const out: Statement[] = []
+  let environmentCount = 0
+  for (const source of sources) {
+    const incoming = arrayField<ExportEnvironment>(source.environments, 'Environments must be arrays.')
+    for (const environment of incoming) {
+      if (++environmentCount > MAX_IMPORT_ENVIRONMENTS) {
+        throw new Error(`The import has more than ${MAX_IMPORT_ENVIRONMENTS} environments.`)
+      }
+      const base = String(environment.name ?? '').trim() || 'Imported'
+      let name = base
+      const baseKey = base.toLowerCase()
+      if (taken.has(baseKey)) {
+        let suffix = nextSuffix.get(baseKey) ?? 2
+        do {
+          name = `${base} (${suffix})`
+          suffix++
+        } while (taken.has(name.toLowerCase()))
+        nextSuffix.set(baseKey, suffix)
+      } else {
+        nextSuffix.set(baseKey, 2)
+      }
+      taken.add(name.toLowerCase())
+      const id = crypto.randomUUID()
+      out.push({ sql: 'INSERT INTO environments (id, name, is_active, created_at, updated_at) VALUES (?, ?, 0, ?, ?)', params: [id, name, now, now] })
+      for (const variable of cleanVariables(normalizeVariables(environment.variables, 'Environment variables must be arrays.') ?? [])) {
+        out.push({
+          sql: 'INSERT INTO env_vars (id, env_id, key, value, is_secret) VALUES (?, ?, ?, ?, ?)',
+          params: [crypto.randomUUID(), id, variable.key, variable.value, variable.isSecret ? 1 : 0],
+        })
+      }
+    }
+  }
+  return out
+}
+
 /** Imports every collection in one transaction: a failure leaves nothing behind. */
 export function importData(data: PostlyExportFile): number {
+  const collections = arrayField<ExportCollection>(data.collections, 'Invalid collections data.')
   const now = Date.now()
   const statements: Statement[] = []
-  for (const [collectionIndex, collection] of data.collections.entries()) {
+  for (const [collectionIndex, collection] of collections.entries()) {
+    if (typeof collection !== 'object' || collection === null) {
+      throw new Error('Each collection must be an object.')
+    }
     const collectionId = crypto.randomUUID()
     statements.push({
       sql: `INSERT INTO folders
@@ -288,16 +369,19 @@ export function importData(data: PostlyExportFile): number {
         now,
       ],
     })
-    statements.push(...collectionVariableStatements(collectionId, collection.variables))
-    requestStatements(collection.requests ?? [], collectionId, now, statements)
+    statements.push(...collectionVariableStatements(collectionId, normalizeVariables(collection.variables, 'Collection variables must be arrays.')))
+    requestStatements(collection.requests, collectionId, now, statements)
     // fall back to `groups` for exports created before the folder-tree refactor
-    const topFolders = collection.folders ?? collection.groups ?? []
+    const topFolders = collection.folders != null
+      ? arrayField<ExportFolder>(collection.folders, 'Folder lists must be arrays.')
+      : arrayField<ExportFolder>(collection.groups, 'Folder lists must be arrays.')
     for (const [folderIndex, folder] of topFolders.entries()) {
       folderStatements(folder, collectionId, folderIndex, now, statements)
     }
   }
+  statements.push(...environmentStatements([...collections, { environments: data.environments }], now))
   runTransaction(statements)
-  return data.collections.length
+  return collections.length
 }
 
 function winFromEvent(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
@@ -375,10 +459,10 @@ export function registerExportImportHandlers(): void {
     }
   })
 
-  ipcMain.handle('postly:import:collections', async (_event, args: { collections: ExportCollection[] }) => {
+  ipcMain.handle('postly:import:collections', async (_event, args: { collections: ExportCollection[]; environments?: ExportEnvironment[] }) => {
     try {
       if (!Array.isArray(args?.collections)) return { error: 'Invalid collections data.' }
-      const count = importData({ $schema: SCHEMA, exportedAt: new Date().toISOString(), collections: args.collections })
+      const count = importData({ $schema: SCHEMA, exportedAt: new Date().toISOString(), collections: args.collections, environments: args.environments })
       return { data: { count } }
     } catch (err) {
       return { error: String(err) }

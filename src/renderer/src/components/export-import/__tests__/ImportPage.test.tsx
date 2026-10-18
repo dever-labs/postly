@@ -9,6 +9,7 @@ const mockLoadCollections = vi.fn()
 const mockAddToast = vi.fn()
 const mockClearSelectedItem = vi.fn()
 const mockLoadVariables = vi.fn()
+const mockLoadEnvironments = vi.fn()
 const integrations = [{ id: 'gh-1', type: 'github', name: 'GitHub' }]
 
 vi.mock('@/components/ui/Select', () => ({
@@ -47,6 +48,12 @@ vi.mock('@/store/ui', () => ({
 vi.mock('@/store/variables', () => ({
   useVariablesStore: {
     getState: () => ({ load: mockLoadVariables }),
+  },
+}))
+
+vi.mock('@/store/environments', () => ({
+  useEnvironmentsStore: {
+    getState: () => ({ load: mockLoadEnvironments }),
   },
 }))
 
@@ -102,12 +109,20 @@ function fileInput(container: HTMLElement): HTMLInputElement {
   return input as HTMLInputElement
 }
 
+function folderInput(container: HTMLElement): HTMLInputElement {
+  const input = container.querySelector('input[data-testid="import-folder-input"]')
+  if (!input) throw new Error('folder input not found')
+  return input as HTMLInputElement
+}
+
 beforeEach(() => {
   setWindowApi()
   mockLoadCollections.mockResolvedValue(undefined)
   mockLoadVariables.mockResolvedValue(undefined)
+  mockLoadEnvironments.mockResolvedValue(undefined)
   mockAddToast.mockReset()
   mockClearSelectedItem.mockReset()
+  mockLoadEnvironments.mockReset()
   mockParse.mockReset()
   mockParseFolder.mockReset()
   mockImportCollections.mockReset()
@@ -128,7 +143,7 @@ describe('ImportPage', () => {
         format: 'bruno',
         warnings: ['Skipped auth helper'],
         collections: [
-          { collection: { name: 'Bruno Alpha', source: 'git' }, folders: 2, requests: 5 },
+          { collection: { name: 'Bruno Alpha', source: 'git' }, folders: 2, requests: 5, environments: 2 },
           { collection: { name: 'Bruno Beta', source: 'github', integrationName: 'GitHub' }, folders: 1, requests: 3 },
         ],
       },
@@ -163,7 +178,9 @@ describe('ImportPage', () => {
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('Bruno collection · 2 collections found')
     expect(screen.getByTestId('import-warnings').textContent).toContain('1 thing could not be fully mapped')
-    expect(screen.getByText('Skipped auth helper')).toBeDefined()
+    expect(screen.getByText('Skipped auth helper').textContent).toBe('Skipped auth helper')
+    expect(screen.getByText('2 folders · 5 requests · 2 environments').textContent).toBe('2 folders · 5 requests · 2 environments')
+    expect(screen.getByText('1 folder · 3 requests').textContent).toBe('1 folder · 3 requests')
 
     const sourceSelects = screen.getAllByRole('combobox')
     expect((sourceSelects[0] as HTMLSelectElement).value).toBe('local')
@@ -180,6 +197,7 @@ describe('ImportPage', () => {
     })
     await waitFor(() => expect(mockLoadCollections).toHaveBeenCalledTimes(1))
     expect(mockLoadVariables).toHaveBeenCalledTimes(1)
+    expect(mockLoadEnvironments).toHaveBeenCalledTimes(1)
     expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
   })
 
@@ -242,6 +260,7 @@ describe('ImportPage', () => {
 
   it('still parses a regular single file and can import it', async () => {
     const user = userEvent.setup()
+    mockImportCollections.mockResolvedValue({ data: { count: 1 } })
     mockParse.mockResolvedValue({
       data: {
         format: 'postman',
@@ -264,6 +283,156 @@ describe('ImportPage', () => {
     expect(mockImportCollections).toHaveBeenCalledWith({
       collections: [{ name: 'Postman Pets', source: 'local' }],
     })
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('Imported 1 collection', 'success'))
+  })
+
+  it('renders standalone environments and imports them without reloading collections', async () => {
+    const user = userEvent.setup()
+    mockImportCollections.mockResolvedValue({ data: { count: 0 } })
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postman-environment',
+        warnings: [
+          'Stage: skipped 1 disabled variable.',
+          'Stage: 1 secret variable was imported without a value. Re-enter it in Postly.',
+        ],
+        collections: [],
+        environments: [
+          {
+            name: 'Stage',
+            variables: [
+              { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+              { key: 'apiKey', value: '', isSecret: true },
+            ],
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"_postman_variable_scope":"environment"}'], 'stage.postman_environment.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Postman environment · 1 environment found')
+    expect(screen.getByText('Environments').textContent).toBe('Environments')
+    expect(screen.getByText('Stage').textContent).toBe('Stage')
+    expect(screen.getByText('2 variables').textContent).toBe('2 variables')
+    expect(screen.getByText('skipped 1 disabled variable.').textContent).toBe('skipped 1 disabled variable.')
+    expect(screen.getByText(/1 secret variable was imported without a value/).textContent).toMatch(/1 secret variable was imported without a value/)
+
+    await user.click(screen.getByRole('button', { name: /Import 1 environment/i }))
+
+    expect(mockImportCollections).toHaveBeenCalledWith({
+      collections: [],
+      environments: [
+        {
+          name: 'Stage',
+          variables: [
+            { key: 'baseUrl', value: 'https://stage.test', isSecret: false },
+            { key: 'apiKey', value: '', isSecret: true },
+          ],
+        },
+      ],
+    })
+    expect(mockLoadCollections).not.toHaveBeenCalled()
+    expect(mockLoadVariables).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockLoadEnvironments).toHaveBeenCalledTimes(1))
+    expect(mockAddToast).toHaveBeenCalledWith('Imported 1 environment', 'success')
+    expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders malformed preview environments defensively', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postly',
+        warnings: [],
+        collections: [],
+        environments: [
+          {
+            name: 'Broken Preview',
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"collections":[]}'], 'broken.postly.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Postly export · 1 environment found')
+    expect(screen.getByText('Broken Preview').textContent).toBe('Broken Preview')
+    expect(screen.getByText('0 variables').textContent).toBe('0 variables')
+  })
+
+  it('shows a parse error when a selected file cannot be converted', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({ error: 'Unsupported format' })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"bad":true}'], 'broken.json', { type: 'application/json' }))
+
+    await waitFor(() => expect(mockParse).toHaveBeenCalledTimes(1))
+    expect((await screen.findByTestId('import-error')).textContent).toContain('Unsupported format')
+    expect(screen.queryByTestId('import-format')).toBeNull()
+  })
+
+  it('renders singular preview counts and defaults missing sources to local', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'openapi',
+        warnings: [],
+        collections: [
+          {
+            collection: { name: 'One Request API', description: 'Generated from spec' },
+            folders: 1,
+            requests: 1,
+            environments: 1,
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['openapi: 3.0.0'], 'one.yaml', { type: 'application/yaml' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('OpenAPI / Swagger · 1 collection found')
+    expect(screen.getByText('Generated from spec').textContent).toBe('Generated from spec')
+    expect(screen.getByText('1 folder · 1 request · 1 environment').textContent).toBe('1 folder · 1 request · 1 environment')
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('local')
+  })
+
+  it('shows a file read error when the browser cannot read the selected file', async () => {
+    const OriginalFileReader = window.FileReader
+
+    class BrokenFileReader {
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null
+      onerror: ((event: ProgressEvent<FileReader>) => void) | null = null
+
+      readAsText() {
+        this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>)
+      }
+    }
+
+    window.FileReader = BrokenFileReader as unknown as typeof FileReader
+
+    try {
+      const { container } = render(<ImportPage />)
+
+      fireEvent.change(fileInput(container), {
+        target: {
+          files: [new File(['oops'], 'broken.json', { type: 'application/json' })],
+        },
+      })
+
+      expect((await screen.findByTestId('import-error')).textContent).toContain('Could not read the file.')
+      expect(mockParse).not.toHaveBeenCalled()
+    } finally {
+      window.FileReader = OriginalFileReader
+    }
   })
 
   it('shows URL fetch errors for single-document imports', async () => {
@@ -277,5 +446,139 @@ describe('ImportPage', () => {
 
     expect((await screen.findByTestId('import-error')).textContent).toContain('Could not fetch upstream document')
     expect(mockParse).not.toHaveBeenCalled()
+  })
+
+  it('opens the file and folder pickers from the browse actions', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postly',
+        warnings: [],
+        collections: [{ collection: { name: 'Picked', source: 'local' }, folders: 0, requests: 0 }],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+    const plainFileInput = fileInput(container)
+    const plainFolderInput = folderInput(container)
+    const fileClickSpy = vi.spyOn(plainFileInput, 'click')
+    const folderClickSpy = vi.spyOn(plainFolderInput, 'click')
+
+    await user.click(screen.getByRole('button', { name: /Browse for a file/i }))
+    await user.click(screen.getByTestId('import-folder'))
+
+    expect(fileClickSpy).toHaveBeenCalledTimes(1)
+    expect(folderClickSpy).toHaveBeenCalledTimes(1)
+
+    await user.upload(plainFileInput, new File(['{"collections":[]}'], 'picked.postly.json', { type: 'application/json' }))
+    await screen.findByText('Change file')
+
+    const changeFileClickSpy = vi.spyOn(fileInput(container), 'click')
+    const clicksBefore = changeFileClickSpy.mock.calls.length
+    await user.click(screen.getByRole('button', { name: /Change file/i }))
+    expect(changeFileClickSpy.mock.calls.length).toBe(clicksBefore + 1)
+  })
+
+  it('fetches a URL, parses it with sourceUrl context, and renders preview warnings for empty results', async () => {
+    const user = userEvent.setup()
+    mockFetchUrl.mockResolvedValue({ data: { text: 'openapi: 3.0.0' } })
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'openapi',
+        warnings: ['Missing auth scheme', 'Skipped unsupported callback'],
+        collections: [],
+      },
+    })
+
+    render(<ImportPage />)
+
+    await user.type(screen.getByTestId('import-url'), '  https://example.com/openapi.yaml  ')
+    await user.click(screen.getByTestId('import-url-fetch'))
+
+    await waitFor(() => expect(mockFetchUrl).toHaveBeenCalledWith({ url: 'https://example.com/openapi.yaml' }))
+    await waitFor(() =>
+      expect(mockParse).toHaveBeenCalledWith({
+        text: 'openapi: 3.0.0',
+        sourceUrl: 'https://example.com/openapi.yaml',
+      }),
+    )
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('OpenAPI / Swagger · 0 collections found')
+    expect(screen.getByTestId('import-warnings').textContent).toContain('2 things could not be fully mapped')
+    expect(screen.getByText('Missing auth scheme').textContent).toBe('Missing auth scheme')
+    expect(screen.getByText('Skipped unsupported callback').textContent).toBe('Skipped unsupported callback')
+    expect(screen.getByText('Change file').textContent).toBe('Change file')
+    expect(screen.queryByTestId('import-url')).toBeNull()
+    expect(screen.queryByTestId('import-folder')).toBeNull()
+  })
+
+  it('renders mixed collection and environment previews, hides env-specific warnings from the general list, and shows the combined success toast', async () => {
+    const user = userEvent.setup()
+    mockImportCollections.mockResolvedValue({ data: { count: 1 } })
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'bruno-environment',
+        warnings: [
+          'Shared: skipped 1 disabled variable.',
+          'Copied inherited values.',
+        ],
+        collections: [
+          { collection: { name: 'Imported API', source: 'local', description: 'From export' }, folders: 2, requests: 3, environments: 0 },
+        ],
+        environments: [
+          {
+            name: 'Shared',
+            variables: [{ key: 'baseUrl', value: 'https://api.example.test', isSecret: false }],
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"info":{"type":"bruno-environment"}}'], 'env.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Bruno environment · 1 collection and 1 environment found')
+    expect(screen.getByRole('button', { name: 'Import 1 collection and 1 environment' })).toBeTruthy()
+    expect(screen.getByTestId('import-warnings').textContent).toContain('Copied inherited values.')
+    expect(screen.getByTestId('import-warnings').textContent).not.toContain('skipped 1 disabled variable')
+    expect(screen.getByText('Shared').textContent).toBe('Shared')
+    expect(screen.getByText('skipped 1 disabled variable.').textContent).toBe('skipped 1 disabled variable.')
+
+    await user.click(screen.getByRole('button', { name: 'Import 1 collection and 1 environment' }))
+
+    expect(mockImportCollections).toHaveBeenCalledWith({
+      collections: [{ name: 'Imported API', source: 'local', description: 'From export' }],
+      environments: [{ name: 'Shared', variables: [{ key: 'baseUrl', value: 'https://api.example.test', isSecret: false }] }],
+    })
+    await waitFor(() => expect(mockLoadCollections).toHaveBeenCalledTimes(1))
+    expect(mockLoadVariables).toHaveBeenCalledTimes(1)
+    expect(mockLoadEnvironments).toHaveBeenCalledTimes(1)
+    expect(mockAddToast).toHaveBeenCalledWith('Imported 1 collection and 1 environment', 'success')
+    expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an import failure toast without reloading stores', async () => {
+    const user = userEvent.setup()
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'postly',
+        warnings: [],
+        collections: [{ collection: { name: 'Broken Import', source: 'local' }, folders: 0, requests: 0 }],
+      },
+    })
+    mockImportCollections.mockResolvedValue({ error: 'Renderer rejected import' })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"collections":[]}'], 'broken.postly.json', { type: 'application/json' }))
+    await screen.findByRole('button', { name: /Import 1 collection/i })
+    await user.click(screen.getByRole('button', { name: /Import 1 collection/i }))
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith('Import failed: Renderer rejected import', 'error'))
+    expect(mockLoadCollections).not.toHaveBeenCalled()
+    expect(mockLoadVariables).not.toHaveBeenCalled()
+    expect(mockLoadEnvironments).not.toHaveBeenCalled()
+    expect(mockClearSelectedItem).not.toHaveBeenCalled()
   })
 })

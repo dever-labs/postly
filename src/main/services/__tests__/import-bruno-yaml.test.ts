@@ -33,13 +33,100 @@ describe('Bruno YAML folder detection', () => {
 })
 
 describe('Bruno YAML import', () => {
-  it('imports the real runner fixture collection and warns about environments', () => {
+  it('imports the real runner fixture collection and its environments', () => {
     const [entry] = convertBrunoYamlFiles(folder('real-runner'))
     expect(entry.collection.name).toBe('Test OpenCollection')
     expect(entry.collection.requests.map((request) => request.name)).toEqual(['Get Users'])
     expect(entry.collection.folders[0].name).toBe('Users')
     expect(entry.collection.folders[0].requests[0]).toMatchObject({ name: 'Create User', method: 'POST', bodyType: 'raw-json' })
-    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(dev\)/)
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Development',
+        variables: [
+          { key: 'baseUrl', value: 'https://api.dev.example.com', isSecret: false },
+          { key: 'apiKey', value: 'dev-api-key-123', isSecret: false },
+        ],
+      },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/Inherited headers were not imported for 1 item \(Collection\)/)
+  })
+
+  it('imports YAML environments, skips disabled vars, keeps empty environments, and warns per malformed file', () => {
+    const [entry] = convertBrunoYamlFiles(folder('env-import'))
+    expect(entry.collection.environments).toEqual([
+      { name: 'Development', variables: [{ key: 'host', value: 'https://dev.example.com', isSecret: false }, { key: 'apiKey', value: '', isSecret: true }, { key: 'fromProcess', value: '', isSecret: false }] },
+      { name: 'Empty', variables: [] },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/"environments\/bad\.yml": expected a YAML object\./)
+    expect(entry.warnings.join('\n')).toMatch(/skipped 1 disabled variable/i)
+    expect(entry.warnings.join('\n')).toMatch(/imported 1 secret variable with blank values/i)
+    expect(entry.warnings.join('\n')).toMatch(/Development\.fromProcess/)
+  })
+
+  it('resolves YAML environment inheritance, merges array-form parents in order, and ignores color', () => {
+    const [entry] = convertBrunoYamlFiles([
+      { path: 'picked/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Env Inheritance\n' },
+      { path: 'picked/request.yml', text: 'info:\n  name: Ping\n  type: http\nhttp:\n  method: GET\n  url: https://example.com/ping\n' },
+      { path: 'picked/environments/base.yml', text: `name: Base
+variables:
+  - name: host
+    value: https://base.example.com
+  - name: token
+    value: base
+` },
+      { path: 'picked/environments/child.yml', text: `name: Child
+extends:
+  - Base
+  - Shared
+  - Missing
+externalSecrets:
+  - vault
+color: purple
+variables:
+  - name: token
+    value: child
+` },
+      { path: 'picked/environments/cycle-a.yml', text: 'name: Cycle A\nextends: Cycle B\nvariables:\n  - name: a\n    value: 1\n' },
+      { path: 'picked/environments/cycle-b.yml', text: 'name: Cycle B\nextends:\n  - Cycle A\nvariables:\n  - name: b\n    value: 2\n' },
+      { path: 'picked/environments/shared.yml', text: `name: Shared
+variables:
+  - name: token
+    value: shared
+  - name: region
+    value: eu-west-1
+` },
+    ])
+
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'token', value: 'base', isSecret: false },
+        ],
+      },
+      {
+        name: 'Child',
+        variables: [
+          { key: 'host', value: 'https://base.example.com', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+      { name: 'Cycle A', variables: [{ key: 'b', value: '2', isSecret: false }, { key: 'a', value: '1', isSecret: false }] },
+      { name: 'Cycle B', variables: [{ key: 'a', value: '1', isSecret: false }, { key: 'b', value: '2', isSecret: false }] },
+      {
+        name: 'Shared',
+        variables: [
+          { key: 'token', value: 'shared', isSecret: false },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+        ],
+      },
+    ])
+    expect(entry.warnings.join('\n')).toMatch(/parent "Missing" was not found/i)
+    expect(entry.warnings.join('\n')).toMatch(/inheritance has a cycle/i)
+    expect(entry.warnings.join('\n')).toMatch(/external secret providers were not imported/i)
+    expect(entry.warnings.join('\n')).not.toMatch(/color was ignored/i)
   })
 
   it('maps defaults, GraphQL, variables, actions, settings, and aggregate warnings', () => {
@@ -391,7 +478,7 @@ runtime:
       },
       {
         path: 'picked/root/environments/prod.yml',
-        text: 'vars:\n  token: prod\n',
+        text: 'name: Production\nvariables:\n  - name: token\n    value: prod\n',
       },
     ])
 
@@ -467,11 +554,11 @@ runtime:
       ['status', '', 'statusCode'],
       ['header', 'x-trace', 'trace'],
     ])
+    expect(entry.collection.environments).toEqual([{ name: 'Production', variables: [{ key: 'token', value: 'prod', isSecret: false }] }])
     expect(entry.warnings.join('\n')).toMatch(/"Unsupported Flow": OAuth 2.0 grant type "device_code" is not supported/)
     expect(entry.warnings.join('\n')).toMatch(/"Hawk": "hawk" authentication is not supported/)
     expect(entry.warnings.join('\n')).toMatch(/"Multipart Missing": one or more multipart file fields were not imported/)
     expect(entry.warnings.join('\n')).toMatch(/"GraphQL Object Vars": 1 post-response action could not be converted \(badHeader\)\./)
-    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(prod\)/)
     expect(entry.warnings.join('\n')).toMatch(/2 folder variables were imported as collection variables/)
     expect(entry.warnings.join('\n')).toMatch(/Dynamic variables Postly does not provide are used and will stay unresolved: \{\{\$customEdge\}\}\./)
     expect(entry.warnings.join('\n')).toMatch(/OAuth 2.0 settings were not imported: state\./)
@@ -484,15 +571,19 @@ runtime:
     const entries = convertBrunoYamlFiles([
       { path: 'picked/root/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Root\n' },
       { path: 'picked/root/root.yml', text: 'info:\n  name: Root Request\n  type: http\nhttp:\n  method: GET\n  url: https://root.test\n' },
+      { path: 'picked/root/environments/root.yml', text: 'name: Root Env\nvariables:\n  - name: host\n    value: https://root.test\n' },
       { path: 'picked/root/nested/opencollection.yml', text: 'opencollection: "1.0.0"\ninfo:\n  name: Nested\n' },
       { path: 'picked/root/nested/child.yml', text: 'info:\n  name: Nested Request\n  type: http\nhttp:\n  method: GET\n  url: https://nested.test\n' },
+      { path: 'picked/root/nested/environments/nested.yml', text: 'name: Nested Env\nvariables:\n  - name: host\n    value: https://nested.test\n' },
       { path: 'picked/root/nested/deeper/grandchild.yml', text: 'info:\n  name: Deep Request\n  type: http\nhttp:\n  method: GET\n  url: https://deep.test\n' },
     ])
 
     expect(entries).toHaveLength(2)
-    const byName = new Map(entries.map((entry) => [entry.collection.name, entry.collection] as const))
-    expect(allRequests(byName.get('Root') as ExportCollection).map((request) => request.name)).toEqual(['Root Request'])
-    expect(allRequests(byName.get('Nested') as ExportCollection).map((request) => request.name)).toEqual(['Nested Request', 'Deep Request'])
+    const byName = new Map(entries.map((entry) => [entry.collection.name, entry] as const))
+    expect(allRequests(byName.get('Root')?.collection as ExportCollection).map((request) => request.name)).toEqual(['Root Request'])
+    expect(allRequests(byName.get('Nested')?.collection as ExportCollection).map((request) => request.name)).toEqual(['Nested Request', 'Deep Request'])
+    expect(byName.get('Root')?.collection.environments).toEqual([{ name: 'Root Env', variables: [{ key: 'host', value: 'https://root.test', isSecret: false }] }])
+    expect(byName.get('Nested')?.collection.environments).toEqual([{ name: 'Nested Env', variables: [{ key: 'host', value: 'https://nested.test', isSecret: false }] }])
   })
 
   it('covers fallback variants, inferred request types, and inherited settings', () => {
@@ -813,7 +904,7 @@ graphql:
     const [entry] = convertBrunoYamlFiles([
       { path: 'picked/root/opencollection.yml', text: '- root\n- list\n' },
       { path: 'picked/root/sub/request.yml', text: 'info:\n  name: Nested\n  type: http\nhttp:\n  method: GET\n  url: https://nested.test\n' },
-      { path: 'picked/root/environments/dev.yml', text: 'vars:\n  token: dev\n' },
+      { path: 'picked/root/environments/dev.yml', text: 'name: Dev\nvariables:\n  - name: token\n    value: dev\n' },
       { path: 'picked/root/readme.txt', text: 'ignored\n' },
     ])
 
@@ -821,7 +912,7 @@ graphql:
     expect(entry.collection.requests).toEqual([])
     expect(entry.collection.folders[0].name).toBe('sub')
     expect(entry.collection.folders[0].requests[0]).toMatchObject({ name: 'Nested', url: 'https://nested.test' })
-    expect(entry.warnings.join('\n')).toMatch(/1 environment was not imported \(dev\)/)
+    expect(entry.collection.environments).toEqual([{ name: 'Dev', variables: [{ key: 'token', value: 'dev', isSecret: false }] }])
   })
 
   it('applies the import budget to deeply nested trees', () => {

@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import { EXTRACT_RULES_KEY, serializeRules, type ExtractRule } from '../../shared/extract'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
 import type { ImportResult } from './import-openapi'
 import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 
@@ -26,6 +26,24 @@ export function isPostmanCollection(doc: unknown): boolean {
 /** Postman environment exports are not collections; callers use this to give a specific message. */
 export function isPostmanEnvironment(doc: unknown): boolean {
   return isObj(doc) && doc._postman_variable_scope === 'environment'
+}
+
+export function convertPostmanEnvironment(doc: Obj): ExportEnvironment {
+  const variables = list(doc.values)
+    .filter((value) => value.disabled !== true && value.enabled !== false)
+    .map((value) => {
+      const isSecret = value.type === 'secret'
+      return {
+        key: str(value.key),
+        value: isSecret ? '' : str(value.value),
+        isSecret,
+      }
+    })
+    .filter((value) => value.key)
+  return {
+    name: str(doc.name) || 'Imported Postman environment',
+    variables,
+  }
 }
 
 /** The pre-v2 format (a flat `requests` array with ids) was dropped by Postman years ago. */

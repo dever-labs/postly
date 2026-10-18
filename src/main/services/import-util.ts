@@ -37,12 +37,21 @@ export function splitUrl(raw: string, pathVariables: Map<string, string>, declar
 
 export const MAX_IMPORT_NODES = 20_000
 export const MAX_IMPORT_DEPTH = 64
+export const MAX_IMPORT_ENVIRONMENTS = 5_000
 
 /** Bounds how much a converter may build, so shared YAML aliases cannot expand into a huge tree. */
 export class ImportBudget {
   private nodes = 0
+  private environments = 0
   take(depth = 0): void {
     if (depth > MAX_IMPORT_DEPTH) throw new Error(`The collection is nested deeper than ${MAX_IMPORT_DEPTH} levels.`)
     if (++this.nodes > MAX_IMPORT_NODES) throw new Error(`The collection has more than ${MAX_IMPORT_NODES} requests and folders.`)
+  }
+
+  takeEnvironment(count = 1): void {
+    this.environments += count
+    if (this.environments > MAX_IMPORT_ENVIRONMENTS) {
+      throw new Error(`The import has more than ${MAX_IMPORT_ENVIRONMENTS} environments.`)
+    }
   }
 }

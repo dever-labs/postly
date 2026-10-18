@@ -2,7 +2,7 @@ import path from 'node:path'
 import { CORE_SCHEMA, load as yamlLoad, mergeTag } from 'js-yaml'
 import { EXTRACT_RULES_KEY, serializeRules } from '../../shared/extract'
 import { DYNAMIC_VARIABLES } from '../../shared/variables'
-import type { ExportCollection, ExportFolder, ExportRequest } from '../ipc/export-import'
+import type { ExportCollection, ExportEnvironment, ExportFolder, ExportRequest } from '../ipc/export-import'
 import { convertPostmanScripts } from './import-postman'
 import { ImportBudget, isObj, kv, list, parseQuery, splitUrl, str, type Auth, type Obj } from './import-util'
 import type { NetworkSettings } from './network-settings'
@@ -32,7 +32,6 @@ interface ConvertContext {
   folderScriptScopes: number
   requestExamples: number
   requestsWithExamples: number
-  environmentFiles: number
   nonHttpKinds: Map<string, number>
   unknownByFile: Map<string, Set<string>>
 }
@@ -40,6 +39,11 @@ interface ConvertContext {
 interface FolderDoc {
   path: string
   raw: Obj
+}
+
+interface ParsedEnvironmentAttachment {
+  environments: ExportEnvironment[]
+  warnings: string[]
 }
 
 const NO_AUTH: Auth = { type: 'none', config: {} }
@@ -64,6 +68,7 @@ const isYamlPath = (p: string) => /\.ya?ml$/i.test(p)
 const isDefinitionPath = (p: string) => /(?:^|\/)\.resources\/definition\.ya?ml$/i.test(p)
 const isRequestPath = (p: string) => /\.request\.ya?ml$/i.test(p)
 const isExamplePath = (p: string) => /\.example\.ya?ml$/i.test(p)
+const isEnvironmentPath = (p: string) => /^(?:postman\/environments\/|environments\/).+\.ya?ml$/i.test(p)
 function normalizePath(raw: string): string {
   const normalized = path.posix.normalize(raw.replace(/\\/g, '/')).replace(/^\.(?:\/|$)/, '')
   return normalized === '.' ? '' : normalized.replace(/^\//, '')
@@ -100,6 +105,49 @@ function variableRows(raw: unknown): Array<{ key: string; value: string; isSecre
     rows.push({ key, value: str(variable.value), isSecret: variable.secret === true })
   }
   return rows
+}
+
+function convertEnvironmentVariables(raw: unknown): { variables: ExportEnvironment['variables']; disabled: number } {
+  const variables: ExportEnvironment['variables'] = []
+  let disabled = 0
+  for (const value of list(raw)) {
+    if (value.disabled === true || value.enabled === false) {
+      disabled++
+      continue
+    }
+    const key = str(value.key)
+    if (!key) continue
+    const isSecret = value.secret === true || str(value.type).toLowerCase() === 'secret'
+    variables.push({ key, value: isSecret ? '' : str(value.value), isSecret })
+  }
+  return { variables, disabled }
+}
+
+function parseWorkspaceEnvironments(files: ParsedFile[]): ParsedEnvironmentAttachment {
+  const environments: ExportEnvironment[] = []
+  const warnings: string[] = []
+  for (const file of files.filter((candidate) => isEnvironmentPath(candidate.path)).sort((a, b) => a.path.localeCompare(b.path))) {
+    if (file.error) {
+      warnings.push(`${warningLabel(file.path)}: ${file.error}`)
+      continue
+    }
+    if (!file.doc || !isObj(file.doc)) {
+      warnings.push(`${warningLabel(file.path)}: Postman environment files must contain a YAML object.`)
+      continue
+    }
+    const looksLikeEnvironment = file.doc.$kind === 'environment' || typeof file.doc.name === 'string' || Array.isArray(file.doc.values)
+    if (!looksLikeEnvironment) {
+      warnings.push(`${warningLabel(file.path)}: expected a Postman environment file.`)
+      continue
+    }
+    const { variables, disabled } = convertEnvironmentVariables(file.doc.values)
+    environments.push({
+      name: str(file.doc.name) || path.posix.basename(file.path).replace(/\.ya?ml$/i, ''),
+      variables,
+    })
+    if (disabled > 0) warnings.push(`${warningLabel(file.path)}: skipped ${disabled} disabled environment variable${disabled === 1 ? '' : 's'}.`)
+  }
+  return { environments, warnings }
 }
 
 function addScopeVariables(ctx: ConvertContext, raw: unknown, scope: 'collection' | 'folder'): void {
@@ -355,7 +403,6 @@ function pushSharedWarnings(
   const totalExamples = ctx.requestExamples + resourceExamples.examples
   const requestsWithExamples = ctx.requestsWithExamples + resourceExamples.requests
   if (totalExamples > 0) warnings.push(`${totalExamples} saved response example${totalExamples === 1 ? '' : 's'} across ${requestsWithExamples} request${requestsWithExamples === 1 ? '' : 's'} were not imported.`)
-  if (ctx.environmentFiles > 0) warnings.push(`${ctx.environmentFiles} Postman environment file${ctx.environmentFiles === 1 ? ' was' : 's were'} found but environments are not imported.`)
   if (ctx.nonHttpKinds.size > 0) {
     const labels = new Map<string, string>([
       ['grpc-request', 'gRPC request'],
@@ -479,7 +526,12 @@ function buildFolderTree(
   return convertDir('', 0) as { requests: ExportRequest[]; folders: ExportFolder[] }
 }
 
-function convertFolderCollection(rootPath: string, allFiles: ParsedFile[], environmentFiles: number, budget: ImportBudget): { collection: ExportCollection; warnings: string[] } | null {
+function convertFolderCollection(
+  rootPath: string,
+  allFiles: ParsedFile[],
+  environmentAttachment: ParsedEnvironmentAttachment,
+  budget: ImportBudget,
+): { collection: ExportCollection; warnings: string[] } | null {
   const rootPrefix = rootPath ? `${rootPath}/` : ''
   const files = allFiles.filter((file) => file.path === rootPath || file.path.startsWith(rootPrefix) || (!rootPath && !/^postman\//.test(file.path)))
   const rootYaml = rootPath ? `${rootPath}/.resources/definition.yaml` : '.resources/definition.yaml'
@@ -498,7 +550,6 @@ function convertFolderCollection(rootPath: string, allFiles: ParsedFile[], envir
     folderScriptScopes: 0,
     requestExamples: 0,
     requestsWithExamples: 0,
-    environmentFiles,
     nonHttpKinds: new Map<string, number>(),
     unknownByFile: new Map<string, Set<string>>(),
   }
@@ -515,11 +566,15 @@ function convertFolderCollection(rootPath: string, allFiles: ParsedFile[], envir
     auth: rootAuth.type === 'inherit' ? { ...NO_AUTH } : rootAuth,
     ssl: 'inherit',
     variables: [...ctx.variables].map(([key, value]) => ({ key, value: value.isSecret ? '' : value.value, isSecret: value.isSecret })),
+    ...(environmentAttachment.environments.length > 0 ? { environments: environmentAttachment.environments } : {}),
     requests: tree.requests,
     folders: tree.folders,
   }
 
-  return { collection, warnings: pushSharedWarnings(collection, ctx, countResourceExamples(allFiles, rootPath)) }
+  return {
+    collection,
+    warnings: [...pushSharedWarnings(collection, ctx, countResourceExamples(allFiles, rootPath)), ...environmentAttachment.warnings],
+  }
 }
 
 function convertCollectionItems(items: unknown, ctx: ConvertContext, depth: number): { requests: ExportRequest[]; folders: ExportFolder[] } {
@@ -570,7 +625,6 @@ function convertSingleFileCollection(file: ParsedFile, budget: ImportBudget): { 
     folderScriptScopes: 0,
     requestExamples: 0,
     requestsWithExamples: 0,
-    environmentFiles: 0,
     nonHttpKinds: new Map<string, number>(),
     unknownByFile: new Map<string, Set<string>>(),
   }
@@ -639,13 +693,6 @@ function topCollectionRoots(paths: string[]): string[] {
   return [...topLevel].sort()
 }
 
-function environmentFileCount(files: ParsedFile[]): number {
-  const hasWorkspaceRoot = files.some((file) => /^(postman\/collections\/|collections\/|postman\/environments\/|environments\/)/.test(file.path))
-  return files.filter((file) => hasWorkspaceRoot
-    ? /^(postman\/environments\/|environments\/).+\.ya?ml$/i.test(file.path)
-    : /^postman\/environments\/.+\.ya?ml$/i.test(file.path)).length
-}
-
 export function isPostmanV3Folder(files: PostmanV3File[]): boolean {
   const parsed = parseFiles(files)
   if (parsed.length === 1 && parsed[0].doc && isObj(parsed[0].doc) && parsed[0].doc.$kind === 'collection') return true
@@ -662,8 +709,16 @@ export function convertPostmanV3Files(files: PostmanV3File[]): Array<{ collectio
     return single ? [single] : []
   }
 
-  const envFiles = environmentFileCount(parsed)
+  const workspaceEnvironments = parseWorkspaceEnvironments(parsed)
   const roots = topCollectionRoots(parsed.map((file) => file.path).filter((filePath) => filePath && !/^postman\/environments\//.test(filePath) && !/^environments\//.test(filePath)))
-  const entries = roots.map((root) => convertFolderCollection(root, parsed, envFiles, budget)).filter((entry): entry is { collection: ExportCollection; warnings: string[] } => entry !== null)
+  const entries = roots.map((root, index) => convertFolderCollection(root, parsed, {
+    environments: index === 0 ? workspaceEnvironments.environments : [],
+    warnings: [
+      ...(index === 0 ? workspaceEnvironments.warnings : []),
+      ...(index === 0 && workspaceEnvironments.environments.length > 0 && roots.length > 1
+        ? [`${workspaceEnvironments.environments.length} workspace environment${workspaceEnvironments.environments.length === 1 ? ' was' : 's were'} attached to this collection because Postman Native Git stores environments at workspace scope and this import created multiple collections.`]
+        : []),
+    ],
+  }, budget)).filter((entry): entry is { collection: ExportCollection; warnings: string[] } => entry !== null)
   return entries
 }

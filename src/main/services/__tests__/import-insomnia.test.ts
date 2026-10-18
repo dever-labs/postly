@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { previewImport } from '../import-formats'
+import { convertInsomniaEnvironment } from '../import-insomnia'
 import type { ExportCollection, ExportRequest } from '../../ipc/export-import'
 
 const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf-8')
@@ -34,7 +35,22 @@ describe('Insomnia v4 import', () => {
     const create = c.requests.find((r) => r.method === 'POST' && r.url.endsWith('/pet'))
     expect(create).toMatchObject({ bodyType: 'raw-json', url: '{{base_url}}/pet' })
     expect(c.variables).toEqual(expect.arrayContaining([{ key: 'base_url', value: '{{scheme}}://{{host}}{{base_path}}', isSecret: false }]))
-    expect(preview.warnings.join('\n')).toMatch(/1 sub-environment was not imported/)
+    expect(c.environments).toEqual([
+      {
+        name: 'Base environment',
+        variables: [{ key: 'base_url', value: '{{scheme}}://{{host}}{{base_path}}', isSecret: false }],
+      },
+      {
+        name: 'OpenAPI env',
+        variables: [
+          { key: 'base_url', value: '{{scheme}}://{{host}}{{base_path}}', isSecret: false },
+          { key: 'scheme', value: 'http', isSecret: false },
+          { key: 'base_path', value: '/v2', isSecret: false },
+          { key: 'host', value: 'petstore.swagger.io', isSecret: false },
+          { key: 'apiKey', value: 'apiKey', isSecret: false },
+        ],
+      },
+    ])
     expect(preview.warnings.join('\n')).toMatch(/2 unit tests were not imported/)
   })
 
@@ -122,7 +138,7 @@ describe('Insomnia v4 import', () => {
     expect(preview.warnings.join('\n')).toMatch(/cookie handling, URL encoding, auto-rebuild path/)
   })
 
-  it('imports enabled kvPairData from environments and folders, warning about secret and typed rows', async () => {
+  it('imports enabled kvPairData from environments and folders, blanking secret base variables in collection scope', async () => {
     const preview = await previewImport(v4(
       {
         _id: 'env_1',
@@ -152,11 +168,78 @@ describe('Insomnia v4 import', () => {
     ))
     expect(preview.collections[0].collection.variables).toEqual([
       { key: 'baseVar', value: '1', isSecret: false },
-      { key: 'secretVar', value: 'shh', isSecret: false },
+      { key: 'secretVar', value: '', isSecret: true },
       { key: 'folderJson', value: '{"ok":true}', isSecret: false },
     ])
-    expect(preview.warnings.join('\n')).toMatch(/secret and typed environment variables were imported as plain text collection variables/)
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'baseVar', value: '1', isSecret: false },
+          { key: 'secretVar', value: 'shh', isSecret: true },
+        ],
+      },
+    ])
+    expect(preview.warnings.join('\n')).toMatch(/The base environment: 1 secret environment variable was added to the collection variables without its value/)
+    expect(preview.warnings.join('\n')).toMatch(/Folder "Folder": secret and typed environment variables were imported as plain text collection variables/)
     expect(preview.warnings.join('\n')).toMatch(/Folder "Folder": its environment variables were added to the collection variables/)
+  })
+
+  it('imports v4 sub-environments per workspace, including merged base values and secrets', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        { _id: 'wrk_1', _type: 'workspace', parentId: null, name: 'One', description: '' },
+        { _id: 'wrk_2', _type: 'workspace', parentId: null, name: 'Two', description: '' },
+        { _id: 'env_base_1', _type: 'environment', parentId: 'wrk_1', name: 'Base One', data: { base_url: 'https://{{ _.host }}' } },
+        { _id: 'env_dev_1', _type: 'environment', parentId: 'env_base_1', name: 'Dev', metaSortKey: 20, data: { api: { url: '{{ _.base_url }}/v1' } } },
+        { _id: 'env_prod_1', _type: 'environment', parentId: 'env_base_1', name: 'Prod', metaSortKey: 10, isPrivate: true, data: { token: 'shh', nested: { enabled: true } } },
+        { _id: 'req_1', _type: 'request', parentId: 'wrk_1', name: 'R1', method: 'GET', url: '{{ _.base_url }}/ping' },
+        { _id: 'env_base_2', _type: 'environment', parentId: 'wrk_2', name: 'Base Two', kvPairData: [{ id: 'pair_1', name: 'region', value: 'us-east-1', type: 'str', enabled: true }] },
+        { _id: 'env_qa_2', _type: 'environment', parentId: 'env_base_2', name: 'QA', kvPairData: [{ id: 'pair_2', name: 'secretToken', value: 'token-2', type: 'secret', enabled: true }] },
+        { _id: 'req_2', _type: 'request', parentId: 'wrk_2', name: 'R2', method: 'GET', url: 'https://two.test' },
+      ],
+    }))
+
+    expect(preview.collections.map((entry) => entry.collection.name)).toEqual(['One', 'Two'])
+    expect(preview.collections[0].collection.variables).toEqual([{ key: 'base_url', value: 'https://{{host}}', isSecret: false }])
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: 'Base One',
+        variables: [{ key: 'base_url', value: 'https://{{host}}', isSecret: false }],
+      },
+      {
+        name: 'Prod',
+        variables: [
+          { key: 'base_url', value: 'https://{{host}}', isSecret: false },
+          { key: 'token', value: 'shh', isSecret: true },
+          { key: 'nested.enabled', value: 'true', isSecret: true },
+        ],
+      },
+      {
+        name: 'Dev',
+        variables: [
+          { key: 'base_url', value: 'https://{{host}}', isSecret: false },
+          { key: 'api.url', value: '{{base_url}}/v1', isSecret: false },
+        ],
+      },
+    ])
+    expect(preview.collections[1].collection.variables).toEqual([{ key: 'region', value: 'us-east-1', isSecret: false }])
+    expect(preview.collections[1].collection.environments).toEqual([
+      {
+        name: 'Base Two',
+        variables: [{ key: 'region', value: 'us-east-1', isSecret: false }],
+      },
+      {
+        name: 'QA',
+        variables: [
+          { key: 'region', value: 'us-east-1', isSecret: false },
+          { key: 'secretToken', value: 'token-2', isSecret: true },
+        ],
+      },
+    ])
+    expect(preview.warnings.join('\n')).not.toMatch(/sub-environment/)
   })
 })
 
@@ -227,10 +310,23 @@ describe('Insomnia v5 import', () => {
     expect(c.requests[0].url).toBe('{{base_url}}/test/extra-data')
     expect(c.requests[0].auth.type).toBe('basic')
     expect(rows(c.requests[0].headers)[0]).toMatchObject({ key: 'x-inherited-value', value: '{{inherited_value}}' })
+    expect(c.environments).toEqual([
+      {
+        name: 'Security Collection-level Env',
+        variables: [{ key: 'inherited_value', value: 'from-collection-env', isSecret: false }],
+      },
+      {
+        name: 'Shared Child Collection Env',
+        variables: [{ key: 'inherited_value', value: 'from-shared-child-collection-env', isSecret: false }],
+      },
+      {
+        name: 'Empty Env',
+        variables: [{ key: 'inherited_value', value: 'from-collection-env', isSecret: false }],
+      },
+    ])
     expect(preview.collections[1]).toMatchObject({ collection: { name: 'Security & Testing (API spec)' } })
     expect(preview.collections[1].requests).toBeGreaterThan(2)
     expect(preview.warnings.join('\n')).toMatch(/Scripts were not imported for \d+ items/)
-    expect(preview.warnings.join('\n')).toMatch(/2 sub-environments were not imported/)
   })
 
   it('lets folder variables override broader environments and warns about the collision', async () => {
@@ -316,14 +412,429 @@ environments:
       ['file', '/workspace/file.txt', 'file'],
       ['note', 'hi', 'text'],
     ])
+    expect(preview.collections[0].collection.environments).toEqual([
+      { name: 'Base Environment', variables: [] },
+      { name: 'Dev', variables: [] },
+    ])
     expect(preview.collections[1].requests).toBeGreaterThan(0)
     expect(preview.warnings.join('\n')).toMatch(/The cookie jar was not imported/)
     expect(preview.warnings.join('\n')).toMatch(/1 unit test was not imported/)
-    expect(preview.warnings.join('\n')).toMatch(/1 sub-environment was not imported/)
   })
 
-  it('explains environment and other Insomnia file types', async () => {
-    await expect(previewImport(fixture('real-insomnia-v5-environment.yaml'))).rejects.toThrow(/environment file/)
+  it('imports mixed v5 string specs from JSON and YAML, and warns for malformed strings', async () => {
+    const jsonSpec = await previewImport(minimalV5(`  - url: https://x.test/json
+    name: JSON request
+    meta:
+      id: req_json
+    method: GET
+spec:
+  contents: '{"openapi":"3.0.3","info":{"title":"JSON Spec","version":"1"},"paths":{"/ping":{"get":{"responses":{"200":{"description":"ok"}}}}}}'
+`))
+    expect(jsonSpec.collections.map((entry) => entry.collection.name)).toEqual(['V5', 'V5 (API spec)'])
+    expect(jsonSpec.collections[1].requests).toBe(1)
+
+    const yamlSpec = await previewImport(minimalV5(`  - url: https://x.test/yaml
+    name: YAML request
+    meta:
+      id: req_yaml
+    method: GET
+spec:
+  contents: |
+    openapi: 3.0.3
+    info:
+      title: YAML Spec
+      version: "1"
+    paths:
+      /pong:
+        get:
+          responses:
+            "200":
+              description: ok
+`))
+    expect(yamlSpec.collections.map((entry) => entry.collection.name)).toEqual(['V5', 'V5 (API spec)'])
+    expect(yamlSpec.collections[1].requests).toBe(1)
+    expect(yamlSpec.warnings).toEqual([
+      'V5 (API spec): No server URL found; set {{baseUrl}} in the collection variables.',
+    ])
+
+    const malformed = await previewImport(minimalV5(`  - url: https://x.test/bad
+    name: Bad spec request
+    meta:
+      id: req_bad
+    method: GET
+spec:
+  contents: '{not json'
+`))
+    expect(malformed.collections.map((entry) => entry.collection.name)).toEqual(['V5'])
+    expect(malformed.warnings).toContain('The embedded API spec was skipped because it is not a valid OpenAPI document.')
+  })
+
+  it('imports v5 sub-environments with nested and secret variables and warns only for unsupported templates left as text', async () => {
+    const preview = await previewImport(minimalV5(`  - url: "{{ _.base_url }}/users"
+    name: R
+    meta:
+      id: req_env_1
+    method: GET
+environments:
+  name: Base
+  meta:
+    id: env_base
+    isPrivate: false
+  data:
+    base_url: https://api.example.com
+    token: base-token
+  subEnvironments:
+    - name: Dev
+      meta:
+        id: env_dev
+        sortKey: 20
+        isPrivate: false
+      data:
+        nested:
+          url: "{{ _.base_url }}/v2"
+        tags:
+          - a
+          - b
+        leftAsText: "{% prompt 'name' %}"
+    - name: Secret
+      meta:
+        id: env_secret
+        sortKey: 10
+        isPrivate: true
+      data:
+        token: "{{ _.token }}"
+        region: us
+`))
+    const collection = preview.collections[0].collection
+    expect(collection.variables).toEqual([
+      { key: 'base_url', value: 'https://api.example.com', isSecret: false },
+      { key: 'token', value: 'base-token', isSecret: false },
+    ])
+    expect(collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'base_url', value: 'https://api.example.com', isSecret: false },
+          { key: 'token', value: 'base-token', isSecret: false },
+        ],
+      },
+      {
+        name: 'Secret',
+        variables: [
+          { key: 'base_url', value: 'https://api.example.com', isSecret: false },
+          { key: 'token', value: '{{token}}', isSecret: true },
+          { key: 'region', value: 'us', isSecret: true },
+        ],
+      },
+      {
+        name: 'Dev',
+        variables: [
+          { key: 'base_url', value: 'https://api.example.com', isSecret: false },
+          { key: 'token', value: 'base-token', isSecret: false },
+          { key: 'nested.url', value: '{{base_url}}/v2', isSecret: false },
+          { key: 'tags', value: '["a","b"]', isSecret: false },
+          { key: 'leftAsText', value: "{% prompt 'name' %}", isSecret: false },
+        ],
+      },
+    ])
+    expect(preview.warnings.join('\n')).toMatch(/Environment "Dev": uses Insomnia template tags that were left as text/)
+  })
+
+  it('imports the base v5 environment even when there are no sub-environments', async () => {
+    const preview = await previewImport(minimalV5(`  - url: https://x.test/ping
+    name: Ping
+    meta:
+      id: req_ping
+    method: GET
+environments:
+  name: Base
+  meta:
+    id: env_base_only
+    isPrivate: false
+  data:
+    base_url: https://x.test
+`))
+    expect(preview.collections[0].collection.variables).toEqual([{ key: 'base_url', value: 'https://x.test', isSecret: false }])
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [{ key: 'base_url', value: 'https://x.test', isSecret: false }],
+      },
+    ])
+  })
+
+  it('imports standalone v5 environment files', async () => {
+    const preview = await previewImport(fixture('real-insomnia-v5-environment.yaml'))
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [{
+        name: 'Dev',
+        variables: [
+          { key: 'base_url', value: 'http://localhost:8000', isSecret: false },
+          { key: 'auth_token', value: 'e1015e6d-039b-42dd-b038-31068702935d', isSecret: false },
+          { key: 'inherited_value', value: 'from_global_env', isSecret: false },
+        ],
+      }],
+    })
+    expect(preview.warnings).toEqual([])
+  })
+
+  it('imports standalone v5 sub-environments in sort order and preserves template warnings', async () => {
+    const preview = await previewImport(`
+type: environment.insomnia.rest/5.0
+schema_version: "5.1"
+name: Standalone environments
+meta:
+  id: wrk_env
+environments:
+  name: Base
+  meta:
+    id: env_base
+  data:
+    base_url: https://api.example.test
+  subEnvironments:
+    - name: Later
+      meta:
+        id: env_later
+        sortKey: 20
+      data:
+        note: last
+    - name: Earlier
+      meta:
+        id: env_earlier
+        sortKey: 10
+      data:
+        derived: "{% prompt 'name' %}"
+`)
+
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [
+        {
+          name: 'Base',
+          variables: [{ key: 'base_url', value: 'https://api.example.test', isSecret: false }],
+        },
+        {
+          name: 'Earlier',
+          variables: [{ key: 'derived', value: "{% prompt 'name' %}", isSecret: false }],
+        },
+        {
+          name: 'Later',
+          variables: [{ key: 'note', value: 'last', isSecret: false }],
+        },
+      ],
+    })
+    expect(preview.warnings).toEqual([
+      `Earlier: uses Insomnia template tags that were left as text ({% prompt 'name' %}).`,
+    ])
+  })
+
+  it('imports standalone v4 environment exports with empty, nested, and secret values', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        {
+          _id: 'env_base',
+          _type: 'environment',
+          parentId: null,
+          name: 'Base',
+          isPrivate: false,
+          data: {
+            base_url: 'https://x.test',
+            nested: { auth: { user: 'alice' } },
+          },
+        },
+        {
+          _id: 'env_private',
+          _type: 'environment',
+          parentId: 'env_base',
+          name: 'Private',
+          isPrivate: true,
+          data: {
+            token: 'secret-token',
+          },
+        },
+        {
+          _id: 'env_empty',
+          _type: 'environment',
+          parentId: null,
+          name: 'Empty',
+          data: {},
+        },
+      ],
+    }))
+
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [
+        {
+          name: 'Base',
+          variables: [
+            { key: 'base_url', value: 'https://x.test', isSecret: false },
+            { key: 'nested.auth.user', value: 'alice', isSecret: false },
+          ],
+        },
+        {
+          name: 'Private',
+          variables: [{ key: 'token', value: 'secret-token', isSecret: true }],
+        },
+        {
+          name: 'Empty',
+          variables: [],
+        },
+      ],
+    })
+  })
+
+  it('rejects v4 workspace imports with more than 5000 environments', async () => {
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        { _id: 'wrk_1', _type: 'workspace', parentId: null, name: 'W', description: '' },
+        { _id: 'env_base', _type: 'environment', parentId: 'wrk_1', name: 'Base', data: {} },
+        ...Array.from({ length: 5000 }, (_, index) => ({
+          _id: `env_${index + 1}`,
+          _type: 'environment',
+          parentId: 'env_base',
+          name: `Env ${index + 1}`,
+          data: {},
+        })),
+      ],
+    }))).rejects.toThrow(/more than 5000 environments/i)
+  })
+
+  it('bounds standalone v4 environment nesting depth instead of recursing indefinitely', async () => {
+    const resources: Array<Record<string, unknown>> = []
+    let parentId: string | null = null
+    for (let depth = 0; depth <= 65; depth += 1) {
+      const id = `env_${depth}`
+      resources.push({
+        _id: id,
+        _type: 'environment',
+        parentId,
+        name: `Env ${depth}`,
+        data: {},
+      })
+      parentId = id
+    }
+
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources,
+    }))).rejects.toThrow(/nested deeper than 64 levels/i)
+  })
+
+  it('counts kvPairData environment rows against the import budget', async () => {
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        {
+          _id: 'env_base',
+          _type: 'environment',
+          parentId: null,
+          name: 'Base',
+          kvPairData: Array.from({ length: 20001 }, (_, index) => ({
+            id: `pair_${index + 1}`,
+            name: `key_${index + 1}`,
+            value: String(index + 1),
+            type: 'str',
+            enabled: true,
+          })),
+        },
+      ],
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('counts merged base environment rows against the import budget in v5 collections', async () => {
+    await expect(previewImport(JSON.stringify({
+      type: 'collection.insomnia.rest/5.0',
+      schema_version: '5.1',
+      name: 'Huge envs',
+      meta: { id: 'wrk_huge' },
+      collection: [],
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: Object.fromEntries(Array.from({ length: 12000 }, (_, index) => [`base_${index + 1}`, `${index + 1}`])),
+        subEnvironments: [
+          {
+            name: 'Merged',
+            meta: { id: 'env_merged', sortKey: 1 },
+            data: Object.fromEntries(Array.from({ length: 9001 }, (_, index) => [`child_${index + 1}`, `${index + 1}`])),
+          },
+        ],
+      },
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('counts duplicated merged base rows against the import budget in v5 collections', async () => {
+    await expect(previewImport(JSON.stringify({
+      type: 'collection.insomnia.rest/5.0',
+      schema_version: '5.1',
+      name: 'Merged env budget',
+      meta: { id: 'wrk_merged_budget' },
+      collection: [],
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: Object.fromEntries(Array.from({ length: 7000 }, (_, index) => [`base_${index + 1}`, `${index + 1}`])),
+        subEnvironments: [
+          {
+            name: 'Merged',
+            meta: { id: 'env_merged', sortKey: 1 },
+            data: Object.fromEntries(Array.from({ length: 6500 }, (_, index) => [`child_${index + 1}`, `${index + 1}`])),
+          },
+        ],
+      },
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('rejects standalone v5 environment files with more than 5000 sub-environments', async () => {
+    const subEnvironments = Array.from({ length: 5001 }, (_, index) => `    - name: Env ${index + 1}
+      meta:
+        id: env_${index + 1}
+      data: {}
+`).join('')
+
+    await expect(previewImport(`
+type: environment.insomnia.rest/5.0
+schema_version: "5.1"
+name: Too many envs
+meta:
+  id: wrk_env_limit
+environments:
+  name: Base
+  meta:
+    id: env_base
+  data: {}
+  subEnvironments:
+${subEnvironments}`)).rejects.toThrow(/more than 5000 environments/i)
+  })
+
+  it('caps standalone v5 environment counts before preview normalization', () => {
+    expect(() => convertInsomniaEnvironment({
+      type: 'environment.insomnia.rest/5.0',
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: {},
+        subEnvironments: Array.from({ length: 5001 }, (_, index) => ({
+          name: `Env ${index + 1}`,
+          meta: { id: `env_${index + 1}` },
+          data: {},
+        })),
+      },
+    })).toThrow(/more than 5000 environments/i)
+  })
+
+  it('explains other unsupported Insomnia file types', async () => {
     await expect(previewImport('type: mcpClient.insomnia/5.0\nname: x\n')).rejects.toThrow(/not supported/)
   })
 
