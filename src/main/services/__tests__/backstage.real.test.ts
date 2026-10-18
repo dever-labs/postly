@@ -10,7 +10,6 @@ vi.mock('../../database', () => ({
 const { createdWindows } = vi.hoisted(() => ({ createdWindows: [] as Array<{
   webContents: {
     url: string
-    executeJavaScriptImpl: (() => Promise<unknown>) | null
     emit: (event: 'did-finish-load') => void
   }
   close: () => void
@@ -20,7 +19,6 @@ const { createdWindows } = vi.hoisted(() => ({ createdWindows: [] as Array<{
 vi.mock('electron', () => {
   class FakeWebContents {
     url = ''
-    executeJavaScriptImpl: (() => Promise<unknown>) | null = null
     private listeners: Record<string, Array<() => void>> = {}
     on(event: string, cb: () => void) { (this.listeners[event] ??= []).push(cb); return this }
     off(event: string, cb: () => void) {
@@ -29,7 +27,6 @@ vi.mock('electron', () => {
     }
     emit(event: 'did-finish-load') { for (const cb of [...(this.listeners[event] ?? [])]) cb() }
     getURL() { return this.url }
-    async executeJavaScript() { return this.executeJavaScriptImpl ? this.executeJavaScriptImpl() : null }
   }
 
   class BrowserWindow {
@@ -53,7 +50,13 @@ vi.mock('electron', () => {
     }
   }
 
-  return { BrowserWindow }
+  const session = {
+    defaultSession: {},
+    // The partition session fetch hits the live test server directly
+    fromPartition: () => ({ fetch: (url: string, init?: RequestInit) => fetch(url, init) }),
+  }
+
+  return { BrowserWindow, session }
 })
 
 import { queryOne, run } from '../../database'
@@ -191,10 +194,6 @@ describe('backstage service over real HTTP', () => {
     const win = createdWindows.at(-1)
     if (!win) throw new Error('Missing auth window')
 
-    win.webContents.executeJavaScriptImpl = async () => {
-      const response = await fetch(`${base}/api/auth/github/refresh`)
-      return response.json()
-    }
     win.webContents.url = `${base}/after-login`
     win.webContents.emit('did-finish-load')
 
