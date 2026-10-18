@@ -1,30 +1,25 @@
-import http from 'node:http'
-import type { AddressInfo } from 'node:net'
 import { test, expect } from './fixtures'
 
 test.describe('Request history', () => {
-  let server: http.Server
-  let base = ''
-
-  test.beforeAll(async () => {
-    server = http.createServer((_, res) => {
-      res.setHeader('content-type', 'application/json')
-      res.end('{"hello":"history"}')
-    })
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-  })
-
-  test.afterAll(() => { server.close() })
-
   test.afterEach(async ({ window }) => {
     await window.evaluate(() => window.api.proxy.set({ mode: 'system', url: '', username: '', password: '', bypass: '' }))
   })
 
-  test('sent requests are listed and can be reopened with their response', async ({ window }) => {
+  test('sent requests are listed and can be reopened with their response', async ({ window, server }) => {
     const suffix = Date.now()
     const colName = `E2E History ${suffix}`
     const reqName = `History Request ${suffix}`
+    const endpointId = `history-${suffix}`
+    const requestUrl = `${server.httpBase}/thing`
+    await server.addMock({
+      id: endpointId,
+      request: { method: 'GET', path: '/thing' },
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: '{"hello":"history"}',
+      },
+    })
     await window.evaluate(() => window.api.proxy.set({ mode: 'none', url: '', username: '', password: '', bypass: '' }))
     const colId = await window.evaluate(async (name: string) => {
       const res = await window.api.collections.create({ name })
@@ -44,24 +39,23 @@ test.describe('Request history', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.locator('[data-testid="url-input"]')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
-    await urlInput.fill(`${base}/thing`)
-    await expect(urlInput).toHaveValue(`${base}/thing`)
-    await window.waitForTimeout(200) // URL input debounces writes to the store
-    await window.locator('[data-testid="send-button"]').click()
+    await urlInput.fill(requestUrl)
+    await expect(urlInput).toHaveValue(requestUrl)
+    await urlInput.press('Enter')
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
+    expect((await server.waitForCalls(endpointId, 1)).count).toBe(1)
 
     await window.getByTestId('tab-history').click()
-    const item = window.getByTestId('history-item').filter({ hasText: `${base}/thing` })
+    const item = window.getByTestId('history-item').filter({ hasText: requestUrl })
     await expect(item).toHaveCount(1)
 
     await item.locator('button').first().click()
     await expect(window.getByTestId('history-banner')).toBeVisible()
-    await expect(urlInput).toHaveValue(`${base}/thing`)
+    await expect(urlInput).toHaveValue(requestUrl)
     await expect(window.getByTestId('response-status')).toContainText('200')
 
     await item.hover()
     await item.getByRole('button', { name: 'Delete entry' }).click()
-    await expect(window.getByTestId('history-item').filter({ hasText: `${base}/thing` })).toHaveCount(0)
+    await expect(window.getByTestId('history-item').filter({ hasText: requestUrl })).toHaveCount(0)
   })
 })

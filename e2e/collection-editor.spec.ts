@@ -7,6 +7,7 @@
  * Requires a built app (`npm run build` before `npm run test:e2e`).
  */
 import { test, expect } from './fixtures'
+import { waitForCollectionDraft, waitForGroupDraft } from './helpers'
 
 const SAVED_NAME = `E2E Col`
 const EDITED_NAME = `E2E Col Edited`
@@ -15,6 +16,14 @@ let collectionId: string
 let groupId: string
 let collectionName: string
 let groupName: string
+
+function dirtyCollectionRow(window: import('@playwright/test').Page, name: string) {
+  return window.locator(`[aria-label="${name} local, unsaved changes"]`)
+}
+
+function dirtyGroupRow(window: import('@playwright/test').Page, name: string) {
+  return window.locator(`[aria-label="${name}, unsaved changes"]`)
+}
 
 test.describe('Collection editor', () => {
   test.beforeAll(async ({ window }) => {
@@ -50,7 +59,7 @@ test.describe('Collection editor', () => {
   })
 
   test('sidebar shows no dirty dot on clean collection', async ({ window }) => {
-    await expect(window.locator('[data-testid="collection-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyCollectionRow(window, collectionName)).toHaveCount(0)
   })
 
   test('editing name makes save button blue', async ({ window }) => {
@@ -60,7 +69,7 @@ test.describe('Collection editor', () => {
   })
 
   test('dirty dot appears in sidebar after edit', async ({ window }) => {
-    await expect(window.locator('[data-testid="collection-dirty-dot"]')).toBeVisible()
+    await expect(dirtyCollectionRow(window, collectionName)).toBeVisible()
   })
 
   test('discard button appears when dirty', async ({ window }) => {
@@ -70,7 +79,7 @@ test.describe('Collection editor', () => {
   test('draft persists after reload', async ({ window }) => {
     const nameInput = window.locator('[data-testid="collection-name-input"]')
     await nameInput.fill(EDITED_NAME)
-    await window.waitForTimeout(700) // wait for 500ms draft debounce
+    await waitForCollectionDraft(window, collectionId, (draft) => draft?.name === EDITED_NAME)
 
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
@@ -82,7 +91,7 @@ test.describe('Collection editor', () => {
   })
 
   test('dirty indicator shown after reload with draft', async ({ window }) => {
-    await expect(window.locator('[data-testid="collection-dirty-dot"]')).toBeVisible()
+    await expect(dirtyCollectionRow(window, collectionName)).toBeVisible()
     await expect(window.locator('[data-testid="collection-save-button"]')).toHaveClass(/bg-blue-600/)
   })
 
@@ -102,7 +111,7 @@ test.describe('Collection editor', () => {
     await window.locator('[data-testid="collection-save-button"]').click()
 
     await expect(window.locator('[data-testid="collection-save-button"]')).not.toHaveClass(/bg-blue-600/, { timeout: 5_000 })
-    await expect(window.locator('[data-testid="collection-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyCollectionRow(window, EDITED_NAME)).toHaveCount(0)
     await expect(window.locator('[data-testid="collection-discard-button"]')).not.toBeVisible()
   })
 
@@ -114,7 +123,7 @@ test.describe('Collection editor', () => {
 
     await expect(nameInput).toHaveValue(EDITED_NAME)
     await expect(window.locator('[data-testid="collection-save-button"]')).not.toHaveClass(/bg-blue-600/)
-    await expect(window.locator('[data-testid="collection-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyCollectionRow(window, EDITED_NAME)).toHaveCount(0)
   })
 })
 
@@ -144,7 +153,7 @@ test.describe('Group editor', () => {
   })
 
   test('sidebar shows no dirty dot on clean group', async ({ window }) => {
-    await expect(window.locator('[data-testid="group-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyGroupRow(window, groupName)).toHaveCount(0)
   })
 
   test('editing name makes save button blue', async ({ window }) => {
@@ -154,7 +163,7 @@ test.describe('Group editor', () => {
   })
 
   test('dirty dot appears in sidebar after group edit', async ({ window }) => {
-    await expect(window.locator('[data-testid="group-dirty-dot"]')).toBeVisible()
+    await expect(dirtyGroupRow(window, groupName)).toBeVisible()
   })
 
   test('discard button appears when group is dirty', async ({ window }) => {
@@ -164,7 +173,7 @@ test.describe('Group editor', () => {
   test('group draft persists after reload', async ({ window }) => {
     const nameInput = window.locator('[data-testid="group-name-input"]')
     await nameInput.fill(EDITED_GROUP_NAME)
-    await window.waitForTimeout(700)
+    await waitForGroupDraft(window, groupId, (draft) => draft?.name === EDITED_GROUP_NAME)
 
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
@@ -182,7 +191,7 @@ test.describe('Group editor', () => {
   })
 
   test('dirty indicator shown after reload with group draft', async ({ window }) => {
-    await expect(window.locator('[data-testid="group-dirty-dot"]')).toBeVisible()
+    await expect(dirtyGroupRow(window, groupName)).toBeVisible()
     await expect(window.locator('[data-testid="group-save-button"]')).toHaveClass(/bg-blue-600/)
   })
 
@@ -201,7 +210,7 @@ test.describe('Group editor', () => {
     await window.locator('[data-testid="group-save-button"]').click()
 
     await expect(window.locator('[data-testid="group-save-button"]')).not.toHaveClass(/bg-blue-600/, { timeout: 5_000 })
-    await expect(window.locator('[data-testid="group-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyGroupRow(window, EDITED_GROUP_NAME)).toHaveCount(0)
     await expect(window.locator('[data-testid="group-discard-button"]')).not.toBeVisible()
   })
 
@@ -213,6 +222,6 @@ test.describe('Group editor', () => {
 
     await expect(nameInput).toHaveValue(EDITED_GROUP_NAME)
     await expect(window.locator('[data-testid="group-save-button"]')).not.toHaveClass(/bg-blue-600/)
-    await expect(window.locator('[data-testid="group-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyGroupRow(window, EDITED_GROUP_NAME)).toHaveCount(0)
   })
 })

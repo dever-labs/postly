@@ -48,10 +48,8 @@ test.describe('Streaming responses', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
     await urlInput.fill(`${base}/events`)
-    await window.waitForTimeout(200)
-    await window.getByTestId('send-button').click()
+    await urlInput.press('Enter')
     await expect(window.getByTestId('stream-tab-trigger')).toBeVisible({ timeout: 10_000 })
     await window.getByTestId('stream-tab-trigger').click()
 

@@ -1,6 +1,14 @@
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
+import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
+
+async function getUnsavedCount(window: Page): Promise<number> {
+  const badge = window.getByTestId('working-set-unsaved')
+  if ((await badge.count()) === 0) return 0
+  const text = await badge.textContent()
+  return Number.parseInt(text?.split(' ')[0] ?? '0', 10)
+}
 
 test.describe('Keyboard shortcuts', () => {
   let server: http.Server
@@ -43,7 +51,7 @@ test.describe('Keyboard shortcuts', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
+    const unsavedBefore = await getUnsavedCount(window)
 
     // Ctrl+Enter sends (from the URL bar, with freshly typed text)
     await urlInput.fill(`${base}/fast`)
@@ -58,9 +66,9 @@ test.describe('Keyboard shortcuts', () => {
     await expect(window.getByTestId('send-button')).toBeVisible({ timeout: 10_000 })
 
     // Ctrl+S saves: the unsaved marker disappears from the working set
-    await expect(window.getByTestId('working-set-unsaved')).toHaveText('1 unsaved')
+    await expect.poll(() => getUnsavedCount(window)).toBe(unsavedBefore + 1)
     await window.keyboard.press('Control+s')
-    await expect(window.getByTestId('working-set-unsaved')).toHaveCount(0)
+    await expect.poll(() => getUnsavedCount(window)).toBe(unsavedBefore)
 
     // Ctrl+N creates and opens a new request next to this one
     await window.keyboard.press('Control+n')
@@ -80,12 +88,19 @@ test.describe('Keyboard shortcuts', () => {
     await expect(window.getByTestId('command-palette')).toBeVisible()
     const before = await window.getByTestId('working-set-item').count()
     await window.keyboard.press('Control+n')
-    await window.waitForTimeout(300)
-    expect(await window.getByTestId('working-set-item').count()).toBe(before)
+    await expect.poll(() => window.getByTestId('working-set-item').count()).toBe(before)
     await window.keyboard.press('Escape')
   })
 
   test('settings and sidebar search shortcuts, and tooltips show the keys', async ({ window }) => {
+    const suffix = Date.now()
+    const colName = `Tooltip ${suffix}`
+    const reqName = `Tooltip Request ${suffix}`
+    await window.evaluate(async ([col, req]: [string, string]) => {
+      const created = await window.api.collections.create({ name: col }) as { data: { id: string } }
+      await window.api.requests.create({ folderId: created.data.id, name: req, method: 'GET' })
+    }, [colName, reqName] as [string, string])
+
     await window.keyboard.press('Control+,')
     await expect(window.getByTestId('settings-modal')).toBeVisible()
     await window.keyboard.press('Escape')
@@ -94,6 +109,11 @@ test.describe('Keyboard shortcuts', () => {
     await window.keyboard.press('Control+Shift+F')
     await expect(window.getByTestId('sidebar-search')).toBeFocused()
 
+    await window.reload()
+    await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
+    await window.getByText(colName).first().click()
+    await window.getByText(reqName).first().click()
+    await expect(window.getByPlaceholder('Request name')).toBeVisible()
     await expect(window.getByTestId('nav-back')).toHaveAttribute('title', /Alt\+←/)
   })
 

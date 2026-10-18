@@ -76,15 +76,25 @@ test.describe('Request editor', () => {
     await expect(window.locator('text=Send a request to see the response')).toBeVisible()
   })
 
-  test('pressing Enter in the URL bar triggers a send (loading state appears)', async ({ window }) => {
+  test('pressing Enter in the URL bar sends the request', async ({ window, server }) => {
+    const endpointId = `request-enter-${Date.now()}`
+    await server.addMock({
+      id: endpointId,
+      request: { method: 'GET', path: '/enter-send' },
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sent: true }),
+      },
+    })
+
     const urlInput = window.locator('[data-testid="url-input"]')
-    // Use a URL that will immediately fail (no real server) so the test is fast
-    await urlInput.fill('http://localhost:1')
+    await urlInput.fill(`${server.httpBase}/enter-send`)
     await urlInput.press('Enter')
-    // Send button should briefly show "Sending" or the response panel should update
-    // We wait for either the send button label change or the response to arrive
-    await expect(window.locator('[data-testid="send-button"]').or(
-      window.locator('text=Send a request to see the response')
-    )).toBeVisible()
+
+    await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
+    await expect(window.getByTestId('response-panel')).toContainText('"sent": true')
+    const calls = await server.waitForCalls(endpointId, 1)
+    expect(calls.count).toBe(1)
   })
 })

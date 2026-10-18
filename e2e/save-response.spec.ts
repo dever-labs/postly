@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import http from 'node:http'
-import os from 'node:os'
 import path from 'node:path'
 import type { AddressInfo } from 'node:net'
 import { test, expect } from './fixtures'
@@ -14,7 +13,9 @@ test.describe('Save response', () => {
   let dir = ''
 
   test.beforeAll(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postly-e2e-save-'))
+    dir = path.join(__dirname, '.scratch-save-response')
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
     server = http.createServer((req, res) => {
       if (req.url === '/logo.png') {
         res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Disposition': 'attachment; filename="pixel.png"' })
@@ -60,7 +61,6 @@ test.describe('Save response', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
 
     // The native save dialog cannot be driven, so answer it from the main process
     const target = path.join(dir, 'saved.png')
@@ -72,10 +72,9 @@ test.describe('Save response', () => {
         return { canceled: false, filePath }
       }) as typeof dialog.showSaveDialog
     }, target)
-
     await urlInput.fill(`${base}/logo.png`)
-    await window.waitForTimeout(200)
-    await window.getByTestId('send-button').click()
+    await urlInput.fill(`${base}/logo.png`)
+    await urlInput.press('Enter')
 
     await expect(window.getByTestId('response-notice')).toContainText('Binary response')
     await expect(window.getByTestId('response-copy')).toBeDisabled()

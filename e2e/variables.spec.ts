@@ -59,10 +59,8 @@ test.describe('Variable scopes', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
     await urlInput.fill('{{HOST}}/{{SEG}}/{{$guid}}')
-    await window.waitForTimeout(200)
-    await window.getByTestId('send-button').click()
+    await urlInput.press('Enter')
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
 
     expect(seen.at(-1)).toMatch(/^\/from-collection\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
