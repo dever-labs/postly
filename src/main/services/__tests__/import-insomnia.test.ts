@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { previewImport } from '../import-formats'
+import { convertInsomniaEnvironment } from '../import-insomnia'
 import type { ExportCollection, ExportRequest } from '../../ipc/export-import'
 
 const fixture = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf-8')
@@ -420,6 +421,54 @@ environments:
     expect(preview.warnings.join('\n')).toMatch(/1 unit test was not imported/)
   })
 
+  it('imports mixed v5 string specs from JSON and YAML, and warns for malformed strings', async () => {
+    const jsonSpec = await previewImport(minimalV5(`  - url: https://x.test/json
+    name: JSON request
+    meta:
+      id: req_json
+    method: GET
+spec:
+  contents: '{"openapi":"3.0.3","info":{"title":"JSON Spec","version":"1"},"paths":{"/ping":{"get":{"responses":{"200":{"description":"ok"}}}}}}'
+`))
+    expect(jsonSpec.collections.map((entry) => entry.collection.name)).toEqual(['V5', 'V5 (API spec)'])
+    expect(jsonSpec.collections[1].requests).toBe(1)
+
+    const yamlSpec = await previewImport(minimalV5(`  - url: https://x.test/yaml
+    name: YAML request
+    meta:
+      id: req_yaml
+    method: GET
+spec:
+  contents: |
+    openapi: 3.0.3
+    info:
+      title: YAML Spec
+      version: "1"
+    paths:
+      /pong:
+        get:
+          responses:
+            "200":
+              description: ok
+`))
+    expect(yamlSpec.collections.map((entry) => entry.collection.name)).toEqual(['V5', 'V5 (API spec)'])
+    expect(yamlSpec.collections[1].requests).toBe(1)
+    expect(yamlSpec.warnings).toEqual([
+      'V5 (API spec): No server URL found; set {{baseUrl}} in the collection variables.',
+    ])
+
+    const malformed = await previewImport(minimalV5(`  - url: https://x.test/bad
+    name: Bad spec request
+    meta:
+      id: req_bad
+    method: GET
+spec:
+  contents: '{not json'
+`))
+    expect(malformed.collections.map((entry) => entry.collection.name)).toEqual(['V5'])
+    expect(malformed.warnings).toContain('The embedded API spec was skipped because it is not a valid OpenAPI document.')
+  })
+
   it('imports v5 sub-environments with nested and secret variables and warns only for unsupported templates left as text', async () => {
     const preview = await previewImport(minimalV5(`  - url: "{{ _.base_url }}/users"
     name: R
@@ -529,6 +578,57 @@ environments:
       }],
     })
     expect(preview.warnings).toEqual([])
+  })
+
+  it('imports standalone v5 sub-environments in sort order and preserves template warnings', async () => {
+    const preview = await previewImport(`
+type: environment.insomnia.rest/5.0
+schema_version: "5.1"
+name: Standalone environments
+meta:
+  id: wrk_env
+environments:
+  name: Base
+  meta:
+    id: env_base
+  data:
+    base_url: https://api.example.test
+  subEnvironments:
+    - name: Later
+      meta:
+        id: env_later
+        sortKey: 20
+      data:
+        note: last
+    - name: Earlier
+      meta:
+        id: env_earlier
+        sortKey: 10
+      data:
+        derived: "{% prompt 'name' %}"
+`)
+
+    expect(preview).toMatchObject({
+      format: 'insomnia-environment',
+      collections: [],
+      environments: [
+        {
+          name: 'Base',
+          variables: [{ key: 'base_url', value: 'https://api.example.test', isSecret: false }],
+        },
+        {
+          name: 'Earlier',
+          variables: [{ key: 'derived', value: "{% prompt 'name' %}", isSecret: false }],
+        },
+        {
+          name: 'Later',
+          variables: [{ key: 'note', value: 'last', isSecret: false }],
+        },
+      ],
+    })
+    expect(preview.warnings).toEqual([
+      `Earlier: uses Insomnia template tags that were left as text ({% prompt 'name' %}).`,
+    ])
   })
 
   it('imports standalone v4 environment exports with empty, nested, and secret values', async () => {
@@ -672,6 +772,66 @@ environments:
         ],
       },
     }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('counts duplicated merged base rows against the import budget in v5 collections', async () => {
+    await expect(previewImport(JSON.stringify({
+      type: 'collection.insomnia.rest/5.0',
+      schema_version: '5.1',
+      name: 'Merged env budget',
+      meta: { id: 'wrk_merged_budget' },
+      collection: [],
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: Object.fromEntries(Array.from({ length: 7000 }, (_, index) => [`base_${index + 1}`, `${index + 1}`])),
+        subEnvironments: [
+          {
+            name: 'Merged',
+            meta: { id: 'env_merged', sortKey: 1 },
+            data: Object.fromEntries(Array.from({ length: 6500 }, (_, index) => [`child_${index + 1}`, `${index + 1}`])),
+          },
+        ],
+      },
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('rejects standalone v5 environment files with more than 5000 sub-environments', async () => {
+    const subEnvironments = Array.from({ length: 5001 }, (_, index) => `    - name: Env ${index + 1}
+      meta:
+        id: env_${index + 1}
+      data: {}
+`).join('')
+
+    await expect(previewImport(`
+type: environment.insomnia.rest/5.0
+schema_version: "5.1"
+name: Too many envs
+meta:
+  id: wrk_env_limit
+environments:
+  name: Base
+  meta:
+    id: env_base
+  data: {}
+  subEnvironments:
+${subEnvironments}`)).rejects.toThrow(/more than 5000 environments/i)
+  })
+
+  it('caps standalone v5 environment counts before preview normalization', () => {
+    expect(() => convertInsomniaEnvironment({
+      type: 'environment.insomnia.rest/5.0',
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: {},
+        subEnvironments: Array.from({ length: 5001 }, (_, index) => ({
+          name: `Env ${index + 1}`,
+          meta: { id: `env_${index + 1}` },
+          data: {},
+        })),
+      },
+    })).toThrow(/more than 5000 environments/i)
   })
 
   it('explains other unsupported Insomnia file types', async () => {

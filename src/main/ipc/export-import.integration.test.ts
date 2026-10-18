@@ -1,9 +1,11 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import initSqlJs, { type Database } from 'sql.js'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PostlyExportFile } from './export-import'
+import { previewImport } from '../services/import-formats'
 
 const handlers: Record<string, (event: unknown, args: unknown) => Promise<unknown> | unknown> = {}
 
@@ -42,6 +44,8 @@ vi.mock('../database', () => ({
 }))
 
 import { importData, registerExportImportHandlers } from './export-import'
+
+const fixture = (name: string) => fs.readFileSync(path.join(__dirname, '..', 'services', '__tests__', 'fixtures', name), 'utf-8')
 
 function invoke(channel: string, args: unknown) {
   return Promise.resolve(handlers[channel]({ sender: {} }, args)) as Promise<Record<string, unknown>>
@@ -442,6 +446,128 @@ describe('importData integration', () => {
     )).toEqual([
       { key: 'base_url', value: 'https://shared.example.test', is_secret: 0 },
       { key: 'token', value: 'shared-secret', is_secret: 1 },
+    ])
+  })
+
+  it('persists OpenAPI preview environments and request URLs end to end', async () => {
+    const preview = await previewImport(fixture('petstore-oas3.yaml'))
+
+    const countImported = importData({
+      $schema: 'postly/v1',
+      exportedAt: new Date().toISOString(),
+      collections: preview.collections.map((entry) => entry.collection),
+    })
+
+    expect(countImported).toBe(1)
+    expect(rows<{ name: string }>('SELECT name FROM environments ORDER BY name ASC')).toEqual([
+      { name: 'api.example.com' },
+      { name: 'staging.example.com' },
+    ])
+    expect(rows<{ key: string; value: string; is_secret: number }>(
+      `SELECT env_vars.key, env_vars.value, env_vars.is_secret
+       FROM env_vars
+       JOIN environments ON environments.id = env_vars.env_id
+       WHERE environments.name = 'api.example.com'
+       ORDER BY env_vars.key ASC`,
+    )).toEqual([
+      { key: 'baseUrl', value: 'https://{{env}}.example.com/v1', is_secret: 0 },
+      { key: 'env', value: 'api', is_secret: 0 },
+    ])
+    expect(rows<{ name: string; url: string }>(
+      `SELECT name, url FROM requests ORDER BY name ASC`,
+    )).toEqual(expect.arrayContaining([
+      { name: 'getPet', url: '{{baseUrl}}/pets/{{petId}}' },
+      { name: 'List pets', url: '{{baseUrl}}/pets' },
+      { name: 'Log in', url: '{{baseUrl}}/login' },
+    ]))
+  })
+
+  it('persists Insomnia preview environments, secrets, and request URLs end to end', async () => {
+    const preview = await previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        { _id: 'wrk_1', _type: 'workspace', parentId: null, name: 'Workspace', description: '' },
+        {
+          _id: 'env_base',
+          _type: 'environment',
+          parentId: 'wrk_1',
+          name: 'Base',
+          kvPairData: [
+            { id: 'pair_1', name: 'base_url', value: 'https://api.example.test', type: 'str', enabled: true },
+            { id: 'pair_2', name: 'token', value: 'shh', type: 'secret', enabled: true },
+          ],
+        },
+        {
+          _id: 'env_child',
+          _type: 'environment',
+          parentId: 'env_base',
+          name: 'Prod',
+          kvPairData: [
+            { id: 'pair_3', name: 'region', value: 'eu-west-1', type: 'str', enabled: true },
+          ],
+        },
+        {
+          _id: 'req_1',
+          _type: 'request',
+          parentId: 'wrk_1',
+          name: 'Ping',
+          method: 'GET',
+          url: '{{ _.base_url }}/ping?token={{ _.token }}',
+          headers: [{ name: 'X-Region', value: '{{ _.region }}' }],
+        },
+      ],
+    }))
+
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'base_url', value: 'https://api.example.test', isSecret: false },
+          { key: 'token', value: 'shh', isSecret: true },
+        ],
+      },
+      {
+        name: 'Prod',
+        variables: [
+          { key: 'base_url', value: 'https://api.example.test', isSecret: false },
+          { key: 'token', value: 'shh', isSecret: true },
+          { key: 'region', value: 'eu-west-1', isSecret: false },
+        ],
+      },
+    ])
+
+    const countImported = importData({
+      $schema: 'postly/v1',
+      exportedAt: new Date().toISOString(),
+      collections: preview.collections.map((entry) => entry.collection),
+    })
+
+    expect(countImported).toBe(1)
+    expect(rows<{ name: string }>('SELECT name FROM environments ORDER BY name ASC')).toEqual([
+      { name: 'Base' },
+      { name: 'Prod' },
+    ])
+    expect(rows<{ key: string; value: string; is_secret: number }>(
+      `SELECT env_vars.key, env_vars.value, env_vars.is_secret
+       FROM env_vars
+       JOIN environments ON environments.id = env_vars.env_id
+       WHERE environments.name = 'Prod'
+       ORDER BY env_vars.key ASC`,
+    )).toEqual([
+      { key: 'base_url', value: 'https://api.example.test', is_secret: 0 },
+      { key: 'region', value: 'eu-west-1', is_secret: 0 },
+      { key: 'token', value: 'shh', is_secret: 1 },
+    ])
+    expect(rows<{ name: string; url: string; params: string; headers: string }>(
+      `SELECT name, url, params, headers FROM requests ORDER BY name ASC`,
+    )).toEqual([
+      {
+        name: 'Ping',
+        url: '{{base_url}}/ping',
+        params: expect.stringContaining('"key":"token"'),
+        headers: expect.stringContaining('"key":"X-Region"'),
+      },
     ])
   })
 })

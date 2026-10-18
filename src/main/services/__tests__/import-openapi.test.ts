@@ -144,7 +144,21 @@ describe('previewImport', () => {
 
   it('does not follow external references', async () => {
     const doc = { openapi: '3.0.0', info: { title: 'T', version: '1' }, paths: { '/a': { get: { responses: { 200: { $ref: 'http://127.0.0.1:1/x.json' } } } } } }
-    await expect(previewImport(JSON.stringify(doc))).resolves.toBeTruthy()
+    await expect(previewImport(JSON.stringify(doc))).resolves.toMatchObject({
+      format: 'openapi',
+      collections: [expect.objectContaining({
+        collection: expect.objectContaining({
+          name: 'T',
+          folders: [expect.objectContaining({
+            name: 'a',
+            requests: [expect.objectContaining({ name: 'GET /a', url: '/a' })],
+          })],
+        }),
+      })],
+      warnings: expect.arrayContaining([
+        expect.stringContaining('reference to other files or URLs were not followed'),
+      ]),
+    })
   })
 
   it.each([
@@ -367,6 +381,52 @@ describe('OpenAPI edge cases', () => {
     ])
   })
 
+  it('lets operation query parameters override same-name server query parameters instead of duplicating them', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Conflicting Server Query', version: '1' },
+      servers: [{ url: 'https://edge.example.test/v2?tenant=blue&fixed=1' }],
+      paths: {
+        '/pets': {
+          get: {
+            parameters: [
+              { name: 'tenant', in: 'query', schema: { type: 'string' }, example: 'green' },
+              { name: 'kind', in: 'query', schema: { type: 'string' }, example: 'cat' },
+            ],
+            responses: {},
+          },
+        },
+      },
+    }))
+
+    const request = walk(preview.collections[0].collection)[0]
+    expect(request.url).toBe('{{baseUrl}}/pets')
+    expect((request.params as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])).toEqual([
+      ['fixed', '1'],
+      ['tenant', 'green'],
+      ['kind', 'cat'],
+    ])
+  })
+
+  it('warns when a path or operation server stays relative without a source URL', async () => {
+    const { requests, warnings } = await run({
+      '/from-path': {
+        servers: [{ url: '/relative-path' }],
+        get: { responses: {} },
+        post: { servers: [{ url: 'relative-op' }], responses: {} },
+      },
+    })
+
+    expect(requests.map((request) => [request.name, request.url])).toEqual([
+      ['GET /from-path', '/relative-path/from-path'],
+      ['POST /from-path', 'relative-op/from-path'],
+    ])
+    expect(warnings).toEqual(expect.arrayContaining([
+      'GET /from-path: The server URL "/relative-path" is relative; set {{baseUrl}} to the full address (for example https://host/relative-path).',
+      'POST /from-path: The server URL "relative-op" is relative; set {{baseUrl}} to the full address (for example https://host/relative-op).',
+    ]))
+  })
+
   it('warns about references to other files instead of silently dropping them', async () => {
     const { warnings } = await run({
       '/a': { post: { requestBody: { content: { 'application/json': { schema: { $ref: './pet.yaml' } } } }, responses: {} } },
@@ -565,6 +625,40 @@ describe('OpenAPI helper coverage', () => {
     }), { sourceUrl: 'https://legacy.example.com/swagger.json' })
 
     expect(swagger.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://legacy.example.com/api', isSecret: false })
+  })
+
+  it('keeps server variables without defaults or enums empty instead of inventing values', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Server Variables', version: '1' },
+      servers: [
+        {
+          url: 'https://{stage}.example.com/{baseUrl}',
+          variables: {
+            stage: { enum: ['beta', 'prod'] },
+            baseUrl: { description: 'chosen later' },
+          },
+        },
+        { url: 'https://fallback.example.com' },
+      ],
+      paths: { '/pets': { get: { responses: {} } } },
+    }))
+
+    expect(preview.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://{stage}.example.com/{baseUrl}', isSecret: false })
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: '{stage}.example.com',
+        variables: [
+          { key: 'baseUrl', value: 'https://{{stage}}.example.com/{{serverBaseUrl}}', isSecret: false },
+          { key: 'stage', value: 'beta', isSecret: false },
+          { key: 'serverBaseUrl', value: '', isSecret: false },
+        ],
+      },
+      {
+        name: 'fallback.example.com',
+        variables: [{ key: 'baseUrl', value: 'https://fallback.example.com', isSecret: false }],
+      },
+    ])
   })
 
   it('warns for unsupported security scheme variants instead of pretending they were imported', async () => {
