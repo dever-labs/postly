@@ -136,11 +136,11 @@ export interface LogEntry {
 export interface Token {
   id: string
   oauthConfigId: string
-  accessToken: string
-  refreshToken?: string
   tokenType: string
   expiresAt?: number
   scope?: string
+  createdAt: number
+  hasRefreshToken: boolean
 }
 
 export interface HttpRequest {
@@ -200,6 +200,7 @@ export interface HttpResponse {
 export interface BackstageSettings {
   baseUrl: string
   token: string
+  hasToken?: boolean
   autoSync: boolean
   authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
   connectedUser?: { name: string; email?: string; picture?: string }
@@ -211,6 +212,8 @@ export interface GitHubSettings {
   clientId: string
   clientSecret: string
   token: string
+  hasClientSecret?: boolean
+  hasToken?: boolean
   connectedUser?: { login: string; name: string; avatarUrl: string }
   repo: string
   orgs: string[]
@@ -220,6 +223,7 @@ export interface GitLabSettings {
   baseUrl: string
   clientId: string
   token: string
+  hasToken?: boolean
   connectedUser?: { username: string; name: string; avatarUrl: string }
   repo: string
   groups: string[]

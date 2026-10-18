@@ -15,6 +15,8 @@ vi.mock('axios', () => ({
 
 vi.mock('../../security', () => ({
   SECURE_WEB_PREFERENCES: { sandbox: true, contextIsolation: true },
+  denySessionPermissions: vi.fn(),
+  lockDownAuthWindow: vi.fn(),
   openExternalSafe: mockOpenExternalSafe,
 }))
 
@@ -66,7 +68,15 @@ vi.mock('electron', () => {
     return instance
   })
 
-  return { BrowserWindow }
+  return {
+    BrowserWindow,
+    session: {
+      fromPartition: vi.fn(() => ({
+        setPermissionRequestHandler: vi.fn(),
+        setPermissionCheckHandler: vi.fn(),
+      })),
+    },
+  }
 })
 
 import axios from 'axios'

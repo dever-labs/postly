@@ -1,5 +1,5 @@
-import { BrowserWindow } from 'electron'
-import { SECURE_WEB_PREFERENCES } from '../security'
+import { BrowserWindow, session } from 'electron'
+import { SECURE_WEB_PREFERENCES, lockDownAuthWindow } from '../security'
 import axios from 'axios'
 import https from 'https'
 import crypto from 'crypto'
@@ -60,6 +60,30 @@ function resolveOpenApiSpec(definition: string | Record<string, unknown>): objec
 
 function refName(ref: string): string {
   return ref.replace(/^[^:]+:/i, '').split('/').pop() ?? ref
+}
+
+function resolveBackstageSpecRequest(specUrl: string, baseUrl: string, authHeaders: Record<string, string>): { url: string; headers: Record<string, string> } {
+  const resolved = new URL(specUrl, `${baseUrl.replace(/\/$/, '')}/`)
+  if (resolved.protocol !== 'https:' && resolved.protocol !== 'http:') {
+    throw new Error('Backstage API spec URL must use http:// or https://')
+  }
+
+  const base = new URL(baseUrl)
+  const sameOrigin = resolved.origin === base.origin
+  return { url: resolved.toString(), headers: sameOrigin ? authHeaders : {} }
+}
+
+function shouldTryBackstageRefresh(currentUrl: string, baseUrl: string): boolean {
+  try {
+    const current = new URL(currentUrl)
+    const base = new URL(baseUrl)
+    if (current.origin !== base.origin) return false
+    return !current.pathname.startsWith('/api/auth/')
+      && !current.pathname.includes('/oauth/')
+      && !current.pathname.includes('/login')
+  } catch {
+    return false
+  }
 }
 
 export async function syncCatalog(settings: BackstageSettings): Promise<SyncResult> {
@@ -155,7 +179,8 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
             const specUrl = api.metadata.annotations?.['backstage.io/api-spec']
             if (specUrl) {
               try {
-                spec = (await axios.get(specUrl, { headers, httpsAgent })).data
+                const request = resolveBackstageSpecRequest(specUrl, settings.baseUrl, headers)
+                spec = (await axios.get(request.url, { headers: request.headers, httpsAgent })).data
               } catch (err) {
                 result.errors.push(`${collection.label}/${apiName}: failed to fetch spec — ${String(err)}`)
                 continue
@@ -225,6 +250,7 @@ export async function syncCatalog(settings: BackstageSettings): Promise<SyncResu
 }
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000
+const BACKSTAGE_AUTH_PARTITION_PREFIX = 'backstage-auth:'
 
 export async function authenticateWithBackstageGuest(
   baseUrl: string,
@@ -263,14 +289,17 @@ export async function authenticateWithBackstage(
   }
   const safeProvider = provider as OAuthProvider
   const base = baseUrl.replace(/\/$/, '')
+  const partition = `${BACKSTAGE_AUTH_PARTITION_PREFIX}${safeProvider}:${crypto.randomUUID()}`
+  const authSession = session.fromPartition(partition)
 
   const win = new BrowserWindow({
     width: 1000,
     height: 700,
     title: `Sign in to Backstage via ${safeProvider}`,
     autoHideMenuBar: true,
-    webPreferences: { ...SECURE_WEB_PREFERENCES },
+    webPreferences: { ...SECURE_WEB_PREFERENCES, partition },
   })
+  lockDownAuthWindow(win)
 
   win.loadURL(`${base}/api/auth/${safeProvider}/start?env=production`)
 
@@ -292,17 +321,12 @@ export async function authenticateWithBackstage(
 
     const tryExtract = async () => {
       const url = win.webContents.getURL()
-      if (url.includes('/api/auth/') || url.includes('/oauth/') || url.includes('/login')) return
+      if (!shouldTryBackstageRefresh(url, base)) return
       try {
-        const result = await win.webContents.executeJavaScript(`
-          (async () => {
-            try {
-              const resp = await fetch('/api/auth/${safeProvider}/refresh', { credentials: 'include' })
-              if (!resp.ok) return null
-              return await resp.json()
-            } catch { return null }
-          })()
-        `) as { backstageIdentity?: { token?: string }; profile?: { displayName?: string; email?: string; picture?: string } } | null
+        const refreshUrl = `${base}/api/auth/${safeProvider}/refresh`
+        const resp = await authSession.fetch(refreshUrl, { method: 'GET', headers: { Accept: 'application/json' } })
+        if (!resp.ok) return
+        const result = await resp.json() as { backstageIdentity?: { token?: string }; profile?: { displayName?: string; email?: string; picture?: string } } | null
 
         const token = result?.backstageIdentity?.token
         if (token) {
