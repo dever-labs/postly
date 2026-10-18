@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { platform } from 'process'
-import { initDatabase, preloadSqlJs, flushPersist, quarantineUnreadableDatabase } from './database'
+import { initDatabase, preloadSqlJs, flushPersist, quarantineUnreadableDatabase, installPersistFlushHandlers } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
@@ -130,7 +130,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', flushPersist)
-process.on('exit', flushPersist)
+installPersistFlushHandlers()
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

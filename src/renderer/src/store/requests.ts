@@ -4,6 +4,7 @@ import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from './collections'
 import { useEnvironmentsStore } from './environments'
+import { useHistoryStore } from './history'
 import { useVariablesStore } from './variables'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../shared/extract'
 import { MAX_STREAM_EVENTS, type StreamEvent, type StreamKind } from '../../../shared/stream'
@@ -400,6 +401,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
     } finally {
+      void useHistoryStore.getState().load()
       setTimeout(() => {
         if (activeStreamGeneration === streamGeneration) activeStreamGeneration = null
         offStream()

@@ -396,7 +396,11 @@ export function schedulePersist(delayMs = PERSIST_DEBOUNCE_MS): void {
   if (deferredPersistTimer) clearTimeout(deferredPersistTimer)
   deferredPersistTimer = setTimeout(() => {
     deferredPersistTimer = null
-    persistDb()
+    try {
+      persistDb()
+    } catch (err) {
+      console.error('Failed to persist database:', err)
+    }
   }, delayMs)
 }
 
@@ -450,16 +454,16 @@ export function queryOne<T = Record<string, unknown>>(sql: string, params?: unkn
   return result
 }
 
-/** Execute an INSERT / UPDATE / DELETE statement and schedule a coalesced persist. */
+/** Execute an INSERT / UPDATE / DELETE statement and persist immediately. */
 export function run(sql: string, params?: unknown[]): void {
   db.run(sql, params as Parameters<typeof db.run>[1])
-  schedulePersist()
+  persistDb()
 }
 
 /**
  * Execute multiple write statements inside a single SQLite transaction.
  * Unlike calling `run` multiple times, this does NOT call `persistDb()` between
- * statements — it schedules exactly one persist after a successful COMMIT.
+ * statements — it persists exactly once after a successful COMMIT.
  * Rolls back automatically on error.
  */
 export function runTransaction(statements: Array<{ sql: string; params?: unknown[] }>): void {
@@ -473,7 +477,7 @@ export function runTransaction(statements: Array<{ sql: string; params?: unknown
     try { db.run('ROLLBACK') } catch { /* ignore rollback errors */ }
     throw err
   }
-  schedulePersist()
+  persistDb()
 }
 
 /**
@@ -483,4 +487,42 @@ export function runTransaction(statements: Array<{ sql: string; params?: unknown
 export function runDraft(sql: string, params?: unknown[]): void {
   db.run(sql, params as Parameters<typeof db.run>[1])
   schedulePersist()
+}
+
+export function installPersistFlushHandlers(options?: {
+  onSignal?: (signal: 'SIGTERM' | 'SIGINT', handler: () => void) => void
+  onUncaughtException?: (handler: (error: unknown) => void) => void
+  flush?: () => void
+  exit?: (code: number) => void
+  log?: (message: string, error?: unknown) => void
+}): void {
+  const onSignal = options?.onSignal ?? ((signal, handler) => { process.once(signal, handler) })
+  const onUncaughtException = options?.onUncaughtException ?? ((handler) => { process.once('uncaughtException', handler) })
+  const flush = options?.flush ?? flushPersist
+  const exit = options?.exit ?? ((code) => { process.exit(code) })
+  const log = options?.log ?? ((message, error) => { console.error(message, error) })
+
+  const flushSafely = (reason: string): void => {
+    try {
+      flush()
+    } catch (err) {
+      log(`Failed to flush database during ${reason}:`, err)
+    }
+  }
+
+  onSignal('SIGTERM', () => {
+    flushSafely('SIGTERM')
+    exit(143)
+  })
+
+  onSignal('SIGINT', () => {
+    flushSafely('SIGINT')
+    exit(130)
+  })
+
+  onUncaughtException((error) => {
+    flushSafely('uncaughtException')
+    log('Uncaught exception in main process:', error)
+    exit(1)
+  })
 }

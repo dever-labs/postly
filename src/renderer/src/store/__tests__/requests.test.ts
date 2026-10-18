@@ -12,12 +12,14 @@ const mockOnStream = vi.fn((cb: (m: unknown) => void) => {
 const mockDraftsGet = vi.fn()
 const mockDraftsUpsert = vi.fn()
 const mockDraftsDelete = vi.fn()
+const mockHistoryList = vi.fn()
 const mockRequestsGet = vi.fn()
 const mockRequestsUpdate = vi.fn()
 
 vi.stubGlobal('window', {
   api: {
     http: { execute: mockHttpExecute, cancel: mockHttpCancel, onStream: mockOnStream },
+    history: { list: mockHistoryList },
     drafts: { request: { get: mockDraftsGet, upsert: mockDraftsUpsert, delete: mockDraftsDelete } },
     requests: { get: mockRequestsGet, update: mockRequestsUpdate },
   },
@@ -69,6 +71,7 @@ beforeEach(() => {
   mockDraftsGet.mockResolvedValue({ data: null })
   mockDraftsUpsert.mockResolvedValue({})
   mockDraftsDelete.mockResolvedValue({})
+  mockHistoryList.mockResolvedValue({ data: [] })
   mockRequestsGet.mockResolvedValue({ data: null })
   mockRequestsUpdate.mockResolvedValue({ error: null })
   useRequestsStore.setState({
