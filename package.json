@@ -3,6 +3,9 @@
   "version": "0.8.4",
   "description": "Cross-platform API client with Backstage and source control integration",
   "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -12,7 +15,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "dist": "electron-vite build && electron-builder",
     "dist:win": "electron-vite build && electron-builder --win",
@@ -163,7 +166,6 @@
     "@dever-labs/mockly-driver": "^0.15.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/notarize": "^3.1.2",
-    "@electron/rebuild": "^4.2.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.3.3",
@@ -236,8 +238,5 @@
     "tough-cookie": "^6.0.2",
     "ws": "^8.22.0",
     "zustand": "^5.0.15"
-  },
-  "optionalDependencies": {
-    "rolldown": "^1.2.13"
   }
 }

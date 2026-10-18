@@ -8,12 +8,12 @@
 
 ### macOS
 
-**Recommended — via Homebrew (no Gatekeeper warning):**
+**Recommended — via Homebrew (best macOS install path):**
 ```bash
 brew install dever-labs/tap/postly
 ```
 
-**Direct download:** grab the `.dmg` below, then run once after installing:
+**Direct download:** the release workflow signs and notarizes macOS assets only when the required Apple secrets are configured. If this release was published without notarization, grab the `.dmg` below, then run once after installing:
 ```bash
 xattr -cr /Applications/Postly.app
 ```
