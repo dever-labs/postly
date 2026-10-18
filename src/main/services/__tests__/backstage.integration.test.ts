@@ -95,7 +95,8 @@ vi.mock('electron', () => {
 
 import { queryOne, run } from '../../database'
 import { syncCatalog, authenticateWithBackstageGuest, authenticateWithBackstage } from '../backstage'
-import { startTestServer, type TestServer } from './helpers/test-server'
+import { MocklyServer } from '@dever-labs/mockly-driver'
+import type { MocklyHttpMock } from './helpers/mockly-driver'
 
 // ─── Minimal OpenAPI spec for testing ────────────────────────────────────────
 
@@ -122,10 +123,14 @@ const MINIMAL_OAS3 = JSON.stringify({
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
 
-let server: TestServer
+type MocklyServerWithMatchers = Omit<MocklyServer, 'addMock'> & {
+  addMock(mock: MocklyHttpMock): Promise<void>
+}
+
+let server: MocklyServerWithMatchers
 
 beforeAll(async () => {
-  server = await startTestServer()
+  server = await MocklyServer.create() as MocklyServerWithMatchers
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -141,14 +146,14 @@ beforeEach(async () => {
 
 function settings(overrides: Record<string, unknown> = {}) {
   return {
-    baseUrl: server.baseUrl,
+    baseUrl: server.httpBase,
     token: 'test-token',
     autoSync: false,
     ...overrides,
   }
 }
 
-const EMPTY_CATALOG_MOCKS = [
+const EMPTY_CATALOG_MOCKS: MocklyHttpMock[] = [
   {
     id: 'catalog-apis',
     request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
@@ -162,7 +167,7 @@ const EMPTY_CATALOG_MOCKS = [
 ]
 
 async function setupEmptyCatalog() {
-  for (const mock of EMPTY_CATALOG_MOCKS) await server.stub(mock)
+  for (const mock of EMPTY_CATALOG_MOCKS) await server.addMock(mock)
 }
 
 // ─── syncCatalog — empty catalog ─────────────────────────────────────────────
@@ -190,7 +195,7 @@ describe('syncCatalog — standalone API entity', () => {
   }
 
   beforeEach(async () => {
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -199,7 +204,7 @@ describe('syncCatalog — standalone API entity', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -278,12 +283,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
       metadata: {
         name: 'pet-store-annotated',
         namespace: 'default',
-        annotations: { 'backstage.io/api-spec': `${server.baseUrl}${specPath}` },
+        annotations: { 'backstage.io/api-spec': `${server.httpBase}${specPath}` },
       },
       spec: { type: 'openapi' }, // no inline definition
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -292,12 +297,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.stub({
+    await server.addMock({
       id: 'api-spec',
       request: { method: 'GET', path: specPath },
       response: {
@@ -322,12 +327,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
       metadata: {
         name: 'broken-api',
         namespace: 'default',
-        annotations: { 'backstage.io/api-spec': `${server.baseUrl}/no-such-spec` },
+        annotations: { 'backstage.io/api-spec': `${server.httpBase}/no-such-spec` },
       },
       spec: { type: 'openapi' },
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -336,12 +341,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.stub({
+    await server.addMock({
       id: 'missing-spec',
       request: { method: 'GET', path: '/no-such-spec' },
       response: { status: 404, body: 'Not Found' },
@@ -364,7 +369,7 @@ describe('syncCatalog — API with no definition', () => {
       spec: { type: 'openapi' }, // no definition, no annotation
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -373,7 +378,7 @@ describe('syncCatalog — API with no definition', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -400,7 +405,7 @@ describe('syncCatalog — component owning API via providesApis', () => {
       relations: [],
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -409,7 +414,7 @@ describe('syncCatalog — component owning API via providesApis', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: {
@@ -443,7 +448,7 @@ describe('syncCatalog — component owning API via relations', () => {
       relations: [{ type: 'providesApi', targetRef: 'api:default/pet-store' }],
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -452,7 +457,7 @@ describe('syncCatalog — component owning API via relations', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: {
@@ -481,7 +486,7 @@ describe('syncCatalog — GraphQL API type', () => {
       spec: { type: 'graphql', definition: 'type Query { hello: String }' },
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -490,7 +495,7 @@ describe('syncCatalog — GraphQL API type', () => {
         body: JSON.stringify([GRAPHQL_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -523,7 +528,7 @@ describe('syncCatalog — gRPC API type', () => {
       spec: { type: 'grpc', definition: 'syntax = "proto3"; service Greeter {}' },
     }
 
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -532,7 +537,7 @@ describe('syncCatalog — gRPC API type', () => {
         body: JSON.stringify([GRPC_ENTITY]),
       },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -561,7 +566,7 @@ describe('syncCatalog — gRPC API type', () => {
 
 describe('syncCatalog — auth token', () => {
   it('forwards the Bearer token as Authorization header', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'catalog-apis',
       request: {
         method: 'GET',
@@ -571,7 +576,7 @@ describe('syncCatalog — auth token', () => {
       },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.stub({
+    await server.addMock({
       id: 'catalog-components',
       request: {
         method: 'GET',
@@ -597,7 +602,7 @@ describe('authenticateWithBackstageGuest', () => {
   }
 
   it('returns token and user profile on success', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -607,7 +612,7 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    const result = await authenticateWithBackstageGuest(server.baseUrl)
+    const result = await authenticateWithBackstageGuest(server.httpBase)
     expect(result.token).toBe('guest-token-abc')
     expect(result.user.name).toBe('Guest User')
     expect(result.user.email).toBe('guest@example.com')
@@ -615,7 +620,7 @@ describe('authenticateWithBackstageGuest', () => {
   })
 
   it('strips trailing slash from baseUrl', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -626,12 +631,12 @@ describe('authenticateWithBackstageGuest', () => {
     })
 
     // Pass URL with trailing slash — should still work
-    const result = await authenticateWithBackstageGuest(`${server.baseUrl}/`)
+    const result = await authenticateWithBackstageGuest(`${server.httpBase}/`)
     expect(result.token).toBe('guest-token-abc')
   })
 
   it('defaults user name to Guest when displayName is absent', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -641,12 +646,12 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    const result = await authenticateWithBackstageGuest(server.baseUrl)
+    const result = await authenticateWithBackstageGuest(server.httpBase)
     expect(result.user.name).toBe('Guest')
   })
 
   it('throws when response has no token', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -656,19 +661,19 @@ describe('authenticateWithBackstageGuest', () => {
       },
     })
 
-    await expect(authenticateWithBackstageGuest(server.baseUrl)).rejects.toThrow(
+    await expect(authenticateWithBackstageGuest(server.httpBase)).rejects.toThrow(
       'Guest refresh did not return a token',
     )
   })
 
   it('throws when server returns non-2xx', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: { status: 401, body: 'Unauthorized' },
     })
 
-    await expect(authenticateWithBackstageGuest(server.baseUrl)).rejects.toThrow()
+    await expect(authenticateWithBackstageGuest(server.httpBase)).rejects.toThrow()
   })
 })
 
@@ -690,16 +695,16 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
     // Mock the real Backstage "/start" route so navigation isn't just
     // asserted as a string — the stub server must actually receive the request,
     // catching a wrong/typo'd URL that a string-only assertion would miss.
-    const startRoute = await server.stub({
+    await server.addMock({
       id: `${provider}-start`,
       request: { method: 'GET', path: `/api/auth/${provider}/start`, query: { env: 'production' } },
       response: { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<html>signing in…</html>' },
     })
 
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
-    expect(win.webContents.url).toBe(`${server.baseUrl}/api/auth/${provider}/start?env=production`)
-    await server.waitForRequests(startRoute, 1, { timeoutMs: 2_000 })
+    expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
+    await server.waitForCalls(`${provider}-start`, 1, '2s')
 
     // Finish the flow so the test doesn't leave a dangling promise.
     win.webContents.executeJavaScriptImpl = async () => null
@@ -709,25 +714,25 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('resolves with the token and profile once the in-page refresh succeeds', async () => {
-    await server.stub({
+    await server.addMock({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(OAUTH_RESPONSE) },
     })
 
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
 
     // Still on the provider's own login/auth pages — must not attempt extraction yet.
-    win.webContents.url = `${server.baseUrl}/api/auth/${provider}/start?env=production`
+    win.webContents.url = `${server.httpBase}/api/auth/${provider}/start?env=production`
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
     win.webContents.emit('did-finish-load')
 
     // Real navigation away from the auth pages back to the Backstage app.
-    win.webContents.url = `${server.baseUrl}/`
+    win.webContents.url = `${server.httpBase}/`
     win.webContents.emit('did-finish-load')
 
     const result = await promise
@@ -738,7 +743,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('defaults user name to the provider id when profile has no displayName', async () => {
-    await server.stub({
+    await server.addMock({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: {
@@ -748,13 +753,13 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
       },
     })
 
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
-    win.webContents.url = `${server.baseUrl}/`
+    win.webContents.url = `${server.httpBase}/`
     win.webContents.emit('did-finish-load')
 
     const result = await promise
@@ -762,19 +767,19 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('keeps waiting (does not resolve or reject) while executeJavaScript returns no token', async () => {
-    await server.stub({
+    await server.addMock({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: { status: 401, body: 'not logged in yet' },
     })
 
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.baseUrl}/api/auth/${provider}/refresh`)
+      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
       return resp.ok ? await resp.json() : null
     }
-    win.webContents.url = `${server.baseUrl}/`
+    win.webContents.url = `${server.httpBase}/`
     win.webContents.emit('did-finish-load')
 
     // Give the microtask queue a chance to run tryExtract; the promise
@@ -788,14 +793,14 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('rejects when the user closes the auth window before completing sign-in', async () => {
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     win.close()
     await expect(promise).rejects.toThrow('Authentication window closed')
   })
 
   it('closes the window once the flow settles', async () => {
-    const promise = authenticateWithBackstage(server.baseUrl, provider)
+    const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     win.close()
     await promise.catch(() => { /* expected rejection */ })
@@ -806,7 +811,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 describe('authenticateWithBackstage — provider validation', () => {
   it('rejects unsupported providers without opening a window', async () => {
     const before = createdWindows.length
-    await expect(authenticateWithBackstage(server.baseUrl, 'facebook')).rejects.toThrow(
+    await expect(authenticateWithBackstage(server.httpBase, 'facebook')).rejects.toThrow(
       'Unsupported Backstage OAuth provider',
     )
     expect(createdWindows.length).toBe(before)
@@ -817,7 +822,7 @@ describe('authenticateWithBackstage — timeout', () => {
   it('rejects if sign-in is not completed within the timeout window', async () => {
     vi.useFakeTimers()
     try {
-      const promise = authenticateWithBackstage(server.baseUrl, 'github')
+      const promise = authenticateWithBackstage(server.httpBase, 'github')
       const assertion = expect(promise).rejects.toThrow('Backstage authentication timed out')
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1)
       await assertion

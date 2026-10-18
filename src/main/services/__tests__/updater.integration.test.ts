@@ -18,7 +18,7 @@
  *   • Enterprise URL      — applyFeedUrl() correctly routes requests
  *   • Enterprise config   — getEnterpriseConfig() reads enterprise.json from disk
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
+ * The Mockly binary is resolved from @dever-labs/mockly-driver.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
@@ -26,7 +26,7 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import type { BrowserWindow } from 'electron'
-import { startTestServer, type TestServer, getFreePort } from './helpers/test-server'
+import { MocklyServer, getFreePort } from '@dever-labs/mockly-driver'
 import type { UpdaterEvent } from '../updater'
 
 // ─── Mock electron ─────────────────────────────────────────────────────────────
@@ -241,17 +241,17 @@ let checkForUpdates: () => void
 let downloadUpdate: () => void
 let getEnterpriseConfig: () => { updateUrl?: string }
 let shim: RealHttpAutoUpdater
-let server: TestServer
+let server: MocklyServer
 
 // ─── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
-  server = await startTestServer({
+  server = await MocklyServer.create({
     scenarios: [
       {
         id: 'server-down',
         name: 'Update server returns 503',
-        patches: [{ stubId: 'latest-yml', status: 503, body: 'Service Unavailable' }],
+        patches: [{ mock_id: 'latest-yml', status: 503, body: 'Service Unavailable' }],
       },
     ],
   })
@@ -282,7 +282,7 @@ beforeEach(async () => {
 
 describe('update available', () => {
   it('fires checking then available when server returns newer version', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -292,7 +292,7 @@ describe('update available', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
 
     const checking = await waitForEvent('checking')
@@ -304,7 +304,7 @@ describe('update available', () => {
   })
 
   it('includes the version from the manifest in the available event', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -314,7 +314,7 @@ describe('update available', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
 
     const available = await waitForEvent('available')
@@ -326,7 +326,7 @@ describe('update available', () => {
 
 describe('no update available', () => {
   it('fires checking then not-available when server returns current version', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -336,7 +336,7 @@ describe('no update available', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
 
     const checking = await waitForEvent('checking')
@@ -351,13 +351,13 @@ describe('no update available', () => {
 
 describe('server error handling', () => {
   it('fires error event when latest.yml returns 404', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml-404',
       request: { method: 'GET', path: '/404/latest.yml' },
       response: { status: 404, body: 'Not Found' },
     })
 
-    applyFeedUrl(`${server.baseUrl}/404`)
+    applyFeedUrl(`${server.httpBase}/404`)
     checkForUpdates()
 
     const error = await waitForEvent('error')
@@ -366,13 +366,13 @@ describe('server error handling', () => {
   })
 
   it('fires error event when server returns 503', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: { status: 503, body: 'Service Unavailable' },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
 
     const error = await waitForEvent('error')
@@ -397,7 +397,7 @@ describe('server error handling', () => {
 describe('fault injection', () => {
   it('fires error event when scenario activates 503 on the update endpoint', async () => {
     // 'latest-yml' mock must exist for the scenario patch to apply
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -408,7 +408,7 @@ describe('fault injection', () => {
     })
 
     // Without scenario: update is available
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
     const first = await waitForEvent('available')
     expect(first.version).toBe('2.0.0')
@@ -423,7 +423,7 @@ describe('fault injection', () => {
   })
 
   it('still returns update event when server adds a small delay', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -434,7 +434,7 @@ describe('fault injection', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
 
     const available = await waitForEvent('available', 6000)
@@ -449,7 +449,7 @@ describe('downloadUpdate', () => {
     const version = '2.0.0'
     const filename = `postly-${version}.zip`
 
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -459,7 +459,7 @@ describe('downloadUpdate', () => {
       },
     })
 
-    await server.stub({
+    await server.addMock({
       id: 'binary',
       request: { method: 'GET', path: `/${filename}` },
       response: {
@@ -469,7 +469,7 @@ describe('downloadUpdate', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     downloadUpdate()
 
     const progress = await waitForEvent('progress')
@@ -485,7 +485,7 @@ describe('downloadUpdate', () => {
     const version = '2.0.0'
     const filename = `postly-${version}.zip`
 
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -495,13 +495,13 @@ describe('downloadUpdate', () => {
       },
     })
 
-    await server.stub({
+    await server.addMock({
       id: 'binary-missing',
       request: { method: 'GET', path: `/${filename}` },
       response: { status: 404, body: 'Not Found' },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     downloadUpdate()
 
     const error = await waitForEvent('error')
@@ -510,13 +510,13 @@ describe('downloadUpdate', () => {
   })
 
   it('fires error event when manifest returns 404 during download', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml-missing',
       request: { method: 'GET', path: '/missing/latest.yml' },
       response: { status: 404, body: 'Not Found' },
     })
 
-    applyFeedUrl(`${server.baseUrl}/missing`)
+    applyFeedUrl(`${server.httpBase}/missing`)
     downloadUpdate()
 
     const error = await waitForEvent('error')
@@ -528,7 +528,7 @@ describe('downloadUpdate', () => {
     const version = '2.1.0'
     const filename = `postly-${version}.zip`
 
-    const manifest = await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -537,7 +537,7 @@ describe('downloadUpdate', () => {
         body: makeLatestYml(version, filename),
       },
     })
-    const binary = await server.stub({
+    await server.addMock({
       id: 'binary',
       request: { method: 'GET', path: `/${filename}` },
       response: {
@@ -547,16 +547,16 @@ describe('downloadUpdate', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     downloadUpdate()
     await waitForEvent('downloaded')
 
-    const manifestCalls = await server.requests(manifest)
-    expect(manifestCalls.length).toBeGreaterThanOrEqual(1)
+    const manifestCalls = await server.getCalls('latest-yml')
+    expect(manifestCalls.count).toBeGreaterThanOrEqual(1)
 
-    const binaryCalls = await server.requests(binary)
-    expect(binaryCalls).toHaveLength(1)
-    expect(binaryCalls[0].path).toBe(`/${filename}`)
+    const binaryCalls = await server.getCalls('binary')
+    expect(binaryCalls.count).toBe(1)
+    expect(binaryCalls.calls[0].path).toBe(`/${filename}`)
   })
 })
 
@@ -564,7 +564,7 @@ describe('downloadUpdate', () => {
 
 describe('enterprise URL routing', () => {
   it('routes update checks to the configured enterprise server URL', async () => {
-    const manifest = await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -574,12 +574,12 @@ describe('enterprise URL routing', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
     await waitForEvent('available')
 
-    const calls = await server.requests(manifest)
-    expect(calls.length).toBeGreaterThanOrEqual(1)
+    const calls = await server.getCalls('latest-yml')
+    expect(calls.count).toBeGreaterThanOrEqual(1)
   })
 
   it('reverts to GitHub provider (not the enterprise server) when URL is cleared', () => {
@@ -591,7 +591,7 @@ describe('enterprise URL routing', () => {
 
   it('updates the feed URL when applyFeedUrl is called again', async () => {
     // First URL
-    await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -601,8 +601,8 @@ describe('enterprise URL routing', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
-    expect(shim.getConfiguredUrl()).toBe(server.baseUrl)
+    applyFeedUrl(server.httpBase)
+    expect(shim.getConfiguredUrl()).toBe(server.httpBase)
 
     // Switch to a dead URL
     applyFeedUrl('http://127.0.0.1:1')
@@ -610,7 +610,7 @@ describe('enterprise URL routing', () => {
   })
 
   it('enterprise mirror request includes the correct path (latest.yml)', async () => {
-    const manifest = await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -620,12 +620,12 @@ describe('enterprise URL routing', () => {
       },
     })
 
-    applyFeedUrl(server.baseUrl)
+    applyFeedUrl(server.httpBase)
     checkForUpdates()
     await waitForEvent('available')
 
-    const calls = await server.requests(manifest)
-    const call = calls[0]
+    const calls = await server.getCalls('latest-yml')
+    const call = calls.calls[0]
     expect(call.path).toBe('/latest.yml')
     expect(call.method).toBe('GET')
   })
@@ -684,7 +684,7 @@ describe('getEnterpriseConfig — real filesystem', () => {
   })
 
   it('applies the enterprise URL to the update feed when config is present', async () => {
-    const manifest = await server.stub({
+    await server.addMock({
       id: 'latest-yml',
       request: { method: 'GET', path: '/latest.yml' },
       response: {
@@ -695,7 +695,7 @@ describe('getEnterpriseConfig — real filesystem', () => {
     })
 
     // Write enterprise config pointing to our mockly server
-    const config = { updateUrl: server.baseUrl }
+    const config = { updateUrl: server.httpBase }
     fs.writeFileSync(path.join(tmpDir, 'enterprise.json'), JSON.stringify(config))
     ;(process as NodeJS.Process & { resourcesPath?: string }).resourcesPath = tmpDir
 
@@ -707,7 +707,7 @@ describe('getEnterpriseConfig — real filesystem', () => {
     expect(available.version).toBe('2.0.0')
 
     // The mockly server was hit via the enterprise URL
-    const calls = await server.requests(manifest)
-    expect(calls.length).toBeGreaterThanOrEqual(1)
+    const calls = await server.getCalls('latest-yml')
+    expect(calls.count).toBeGreaterThanOrEqual(1)
   })
 })

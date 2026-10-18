@@ -1,7 +1,7 @@
 import { test as base, _electron as electron, expect } from '@playwright/test'
 import type { Page, ElectronApplication } from '@playwright/test'
 import path from 'path'
-import { startTestServer, type TestServer } from '../src/main/services/__tests__/helpers/test-server'
+import { ensureMocklyServer, type MocklyServer } from '../src/main/services/__tests__/helpers/mockly-driver'
 
 const ROOT = path.join(__dirname, '..')
 const MAIN = path.join(ROOT, 'out', 'main', 'index.js')
@@ -10,11 +10,11 @@ const RENDERER_URL = `file://${path.join(ROOT, 'out', 'renderer', 'index.html').
 type Fixtures = {
   electronApp: ElectronApplication
   window: Page
-  stubServer: TestServer
+  server: MocklyServer
 }
 
 type WorkerFixtures = {
-  stubServerWorker: TestServer
+  serverWorker: MocklyServer
 }
 
 /**
@@ -23,9 +23,9 @@ type WorkerFixtures = {
  * launching and tearing down a process for every test case.
  */
 export const test = base.extend<Fixtures, WorkerFixtures>({
-  stubServerWorker: [
+  serverWorker: [
     async ({}, use) => {
-      const server = await startTestServer({ ensureInstalled: true })
+      const server = await ensureMocklyServer()
       await use(server)
       await server.stop()
     },
@@ -60,10 +60,10 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     { scope: 'worker' },
   ],
 
-  stubServer: async ({ stubServerWorker }, use) => {
-    await stubServerWorker.reset()
-    await use(stubServerWorker)
-    await stubServerWorker.reset()
+  server: async ({ serverWorker }, use) => {
+    await serverWorker.reset()
+    await use(serverWorker)
+    await serverWorker.reset()
   },
 })
 

@@ -11,11 +11,16 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { executeRequest, HttpRequest } from '../http-executor'
-import { startTestServer, type TestServer, getFreePort } from './helpers/test-server'
+import { MocklyServer, getFreePort } from '@dever-labs/mockly-driver'
+import type { MocklyHttpMock } from './helpers/mockly-driver'
 
 // ─── Shared server setup ─────────────────────────────────────────────────────
 
-let server: TestServer
+type MocklyServerWithMatchers = Omit<MocklyServer, 'addMock'> & {
+  addMock(mock: MocklyHttpMock): Promise<void>
+}
+
+let server: MocklyServerWithMatchers
 
 function req(overrides: Partial<HttpRequest> & { url: string }): HttpRequest {
   return {
@@ -29,15 +34,15 @@ function req(overrides: Partial<HttpRequest> & { url: string }): HttpRequest {
 }
 
 beforeAll(async () => {
-  server = await startTestServer({
+  server = await MocklyServer.create({
     scenarios: [
       {
         id: 'service-down',
         name: 'Service unavailable',
-        patches: [{ stubId: 'health-check', status: 503, body: '{"error":"down"}' }],
+        patches: [{ mock_id: 'health-check', status: 503, body: '{"error":"down"}' }],
       },
     ],
-  })
+  }) as MocklyServerWithMatchers
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -48,7 +53,7 @@ beforeEach(() => server.reset())
 
 describe('basic request/response', () => {
   it('GET returns correct status, body, and response headers', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'get-items',
       request: { method: 'GET', path: '/items' },
       response: {
@@ -58,7 +63,7 @@ describe('basic request/response', () => {
       },
     })
 
-    const result = await executeRequest(req({ url: `${server.baseUrl}/items` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/items` }))
 
     expect(result.status).toBe(200)
     expect(result.body).toContain('"id"')
@@ -67,27 +72,27 @@ describe('basic request/response', () => {
   })
 
   it('POST request returns 201', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'create-item',
       request: { method: 'POST', path: '/items' },
       response: { status: 201, body: '{"created":true}' },
     })
 
     const result = await executeRequest(
-      req({ method: 'POST', url: `${server.baseUrl}/items`, body: '{"name":"test"}', bodyType: 'raw-json' }),
+      req({ method: 'POST', url: `${server.httpBase}/items`, body: '{"name":"test"}', bodyType: 'raw-json' }),
     )
 
     expect(result.status).toBe(201)
   })
 
   it('DELETE request returns 204 with empty body', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'delete-item',
       request: { method: 'DELETE', path: '/items/1' },
       response: { status: 204 },
     })
 
-    const result = await executeRequest(req({ method: 'DELETE', url: `${server.baseUrl}/items/1` }))
+    const result = await executeRequest(req({ method: 'DELETE', url: `${server.httpBase}/items/1` }))
 
     expect(result.status).toBe(204)
     expect(result.body).toBe('')
@@ -98,27 +103,27 @@ describe('basic request/response', () => {
 
 describe('error status handling', () => {
   it('returns 404 body when resource not found', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'not-found',
       request: { method: 'GET', path: '/missing' },
       response: { status: 404, body: '{"error":"not found"}' },
     })
 
-    const result = await executeRequest(req({ url: `${server.baseUrl}/missing` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/missing` }))
 
     expect(result.status).toBe(404)
     expect(result.body).toContain('not found')
   })
 
   it('logs warn for 4xx responses and still returns the status', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'unauthorized',
       request: { method: 'GET', path: '/protected' },
       response: { status: 401, body: '{"error":"unauthorized"}' },
     })
 
     const logs: Array<{ level: string; message: string }> = []
-    const result = await executeRequest(req({ url: `${server.baseUrl}/protected` }), {
+    const result = await executeRequest(req({ url: `${server.httpBase}/protected` }), {
       onLog: (entry) => logs.push(entry),
     })
 
@@ -127,13 +132,13 @@ describe('error status handling', () => {
   })
 
   it('returns 500 body intact', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'server-error',
       request: { method: 'GET', path: '/crash' },
       response: { status: 500, body: '{"error":"internal server error"}' },
     })
 
-    const result = await executeRequest(req({ url: `${server.baseUrl}/crash` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/crash` }))
 
     expect(result.status).toBe(500)
     expect(result.body).toContain('internal server error')
@@ -144,32 +149,32 @@ describe('error status handling', () => {
 
 describe('redirects', () => {
   it('follows 301 redirect by default', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'old-endpoint',
       request: { method: 'GET', path: '/old' },
-      response: { status: 301, headers: { Location: `${server.baseUrl}/new` } },
+      response: { status: 301, headers: { Location: `${server.httpBase}/new` } },
     })
-    await server.stub({
+    await server.addMock({
       id: 'new-endpoint',
       request: { method: 'GET', path: '/new' },
       response: { status: 200, body: 'redirected' },
     })
 
-    const result = await executeRequest(req({ url: `${server.baseUrl}/old` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/old` }))
 
     expect(result.status).toBe(200)
     expect(result.body).toBe('redirected')
   })
 
   it('stops at 301 when followRedirects is false', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'old-no-follow',
       request: { method: 'GET', path: '/old-no-follow' },
-      response: { status: 301, headers: { Location: `${server.baseUrl}/new` } },
+      response: { status: 301, headers: { Location: `${server.httpBase}/new` } },
     })
 
     const result = await executeRequest(
-      req({ url: `${server.baseUrl}/old-no-follow` }),
+      req({ url: `${server.httpBase}/old-no-follow` }),
       { followRedirects: false },
     )
 
@@ -181,14 +186,14 @@ describe('redirects', () => {
 
 describe('timeout', () => {
   it('returns status 0 when request exceeds timeout', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'slow-endpoint',
       request: { method: 'GET', path: '/slow' },
       response: { status: 200, delay: '500ms' },
     })
 
     const result = await executeRequest(
-      req({ url: `${server.baseUrl}/slow` }),
+      req({ url: `${server.httpBase}/slow` }),
       { timeout: 100 },
     )
 
@@ -205,13 +210,13 @@ const DELAY_TOLERANCE_MS = DELAY_MS * 0.8
 
 describe('duration', () => {
   it('measures response duration in milliseconds', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'timed',
       request: { method: 'GET', path: '/timed' },
       response: { status: 200, body: 'ok', delay: `${DELAY_MS}ms` },
     })
 
-    const result = await executeRequest(req({ url: `${server.baseUrl}/timed` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/timed` }))
 
     expect(result.duration).toBeGreaterThanOrEqual(DELAY_TOLERANCE_MS)
     expect(result.status).toBe(200)
@@ -222,7 +227,7 @@ describe('duration', () => {
 
 describe('body types', () => {
   it('sends raw-json body with Content-Type application/json', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'json-echo',
       request: { method: 'POST', path: '/json' },
       response: { status: 200, body: 'received' },
@@ -231,7 +236,7 @@ describe('body types', () => {
     const result = await executeRequest(
       req({
         method: 'POST',
-        url: `${server.baseUrl}/json`,
+        url: `${server.httpBase}/json`,
         body: '{"key":"value"}',
         bodyType: 'raw-json',
       }),
@@ -241,7 +246,7 @@ describe('body types', () => {
   })
 
   it('sends x-www-form-urlencoded body', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'form-echo',
       request: { method: 'POST', path: '/form' },
       response: { status: 200, body: 'received' },
@@ -255,7 +260,7 @@ describe('body types', () => {
     const result = await executeRequest(
       req({
         method: 'POST',
-        url: `${server.baseUrl}/form`,
+        url: `${server.httpBase}/form`,
         body: formBody,
         bodyType: 'x-www-form-urlencoded',
       }),
@@ -270,46 +275,46 @@ describe('body types', () => {
 describe('auth', () => {
   it('attaches Bearer token and it is received by the server', async () => {
     // Mockly uses exact header value matching — use the token we'll send
-    await server.stub({
+    await server.addMock({
       id: 'bearer-authed',
       request: { method: 'GET', path: '/bearer', headers: { Authorization: 'Bearer test-token' } },
       response: { status: 200, body: 'authorized' },
     })
-    await server.stub({
+    await server.addMock({
       id: 'bearer-unauthed',
       request: { method: 'GET', path: '/bearer' },
       response: { status: 401, body: 'unauthorized' },
     })
 
     const withAuth = await executeRequest(
-      req({ url: `${server.baseUrl}/bearer`, authType: 'bearer', authConfig: { token: 'test-token' } }),
+      req({ url: `${server.httpBase}/bearer`, authType: 'bearer', authConfig: { token: 'test-token' } }),
     )
     expect(withAuth.status).toBe(200)
 
-    const withoutAuth = await executeRequest(req({ url: `${server.baseUrl}/bearer` }))
+    const withoutAuth = await executeRequest(req({ url: `${server.httpBase}/bearer` }))
     expect(withoutAuth.status).toBe(401)
   })
 
   it('attaches Basic auth credentials and they are received by the server', async () => {
     // Pre-compute Basic header: base64('alice:secret') = YWxpY2U6c2VjcmV0
     const encoded = Buffer.from('alice:secret').toString('base64')
-    await server.stub({
+    await server.addMock({
       id: 'basic-authed',
       request: { method: 'GET', path: '/basic', headers: { Authorization: `Basic ${encoded}` } },
       response: { status: 200, body: 'authorized' },
     })
-    await server.stub({
+    await server.addMock({
       id: 'basic-unauthed',
       request: { method: 'GET', path: '/basic' },
       response: { status: 401, body: 'unauthorized' },
     })
 
     const withAuth = await executeRequest(
-      req({ url: `${server.baseUrl}/basic`, authType: 'basic', authConfig: { username: 'alice', password: 'secret' } }),
+      req({ url: `${server.httpBase}/basic`, authType: 'basic', authConfig: { username: 'alice', password: 'secret' } }),
     )
     expect(withAuth.status).toBe(200)
 
-    const withoutAuth = await executeRequest(req({ url: `${server.baseUrl}/basic` }))
+    const withoutAuth = await executeRequest(req({ url: `${server.httpBase}/basic` }))
     expect(withoutAuth.status).toBe(401)
   })
 
@@ -317,14 +322,14 @@ describe('auth', () => {
     // Mockly drives the full NTLM challenge/response automatically when
     // auth.type = "ntlm". No credential validation is performed — any
     // structurally-valid type-3 authenticate token is accepted.
-    await server.stub({
+    await server.addMock({
       id: 'ntlm-protected',
       request: { method: 'GET', path: '/ntlm', auth: { type: 'ntlm' } },
       response: { status: 200, body: 'ntlm-ok' },
     })
 
     const res = await executeRequest(
-      req({ url: `${server.baseUrl}/ntlm`, authType: 'ntlm', authConfig: { username: 'alice', password: 'secret', domain: 'CORP' } }),
+      req({ url: `${server.httpBase}/ntlm`, authType: 'ntlm', authConfig: { username: 'alice', password: 'secret', domain: 'CORP' } }),
     )
     expect(res.status).toBe(200)
     expect(res.body).toBe('ntlm-ok')
@@ -335,14 +340,14 @@ describe('auth', () => {
 
 describe('fault injection', () => {
   it('global delay increases response duration', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'fast-endpoint',
       request: { method: 'GET', path: '/fast' },
       response: { status: 200, body: 'ok' },
     })
 
     await server.setFault({ enabled: true, delay: '100ms' })
-    const result = await executeRequest(req({ url: `${server.baseUrl}/fast` }), { timeout: 5000 })
+    const result = await executeRequest(req({ url: `${server.httpBase}/fast` }), { timeout: 5000 })
     await server.clearFault()
 
     expect(result.status).toBe(200)
@@ -350,14 +355,14 @@ describe('fault injection', () => {
   })
 
   it('status override returns configured status for all endpoints', async () => {
-    await server.stub({
+    await server.addMock({
       id: 'ok-endpoint',
       request: { method: 'GET', path: '/ok' },
       response: { status: 200, body: 'ok' },
     })
 
     await server.setFault({ enabled: true, status: 503 })
-    const result = await executeRequest(req({ url: `${server.baseUrl}/ok` }))
+    const result = await executeRequest(req({ url: `${server.httpBase}/ok` }))
     await server.clearFault()
 
     expect(result.status).toBe(503)
@@ -390,21 +395,21 @@ describe('HTTPS', () => {
 describe('scenario activation', () => {
   it('activating a scenario overrides mock responses', async () => {
     // health-check mock is referenced in the 'service-down' scenario (defined at startup)
-    await server.stub({
+    await server.addMock({
       id: 'health-check',
       request: { method: 'GET', path: '/health' },
       response: { status: 200, body: '{"status":"ok"}' },
     })
 
     // Without scenario: 200
-    const before = await executeRequest(req({ url: `${server.baseUrl}/health` }))
+    const before = await executeRequest(req({ url: `${server.httpBase}/health` }))
     expect(before.status).toBe(200)
 
     // Activate the scenario
     await server.activateScenario('service-down')
 
     // With scenario active: 503
-    const after = await executeRequest(req({ url: `${server.baseUrl}/health` }))
+    const after = await executeRequest(req({ url: `${server.httpBase}/health` }))
     expect(after.status).toBe(503)
     expect(after.body).toContain('down')
   })

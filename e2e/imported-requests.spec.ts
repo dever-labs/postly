@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
+import type { CallEntry, MocklyServer } from '@dever-labs/mockly-driver'
 import { test, expect } from './fixtures'
-import type { TestServer, StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 type PreparedFixtures = {
   postmanCollection: string
@@ -11,11 +11,11 @@ type PreparedFixtures = {
 }
 
 type ImportStubs = {
-  postmanRequest: StubHandle
-  openApiSecondary: StubHandle
-  urlSpec: StubHandle
-  urlRedirect: StubHandle
-  urlMissing: StubHandle
+  postmanRequest: string
+  openApiSecondary: string
+  urlSpec: string
+  urlRedirect: string
+  urlMissing: string
 }
 
 const stamp = Date.now()
@@ -39,6 +39,14 @@ const postmanVars = {
   traceId: `trace-${stamp}`,
   stage: `stage-${stamp}`,
   widgetName: `Widget ${stamp}`,
+}
+
+const stubIds: ImportStubs = {
+  postmanRequest: 'import-postman-request',
+  openApiSecondary: 'import-openapi-secondary',
+  urlSpec: 'import-url-spec',
+  urlRedirect: 'import-url-redirect',
+  urlMissing: 'import-url-missing',
 }
 
 let prepared: PreparedFixtures | null = null
@@ -220,9 +228,27 @@ async function openRequest(window: Page, collectionName: string, requestName: st
   await window.getByTestId('url-input').waitFor({ state: 'visible' })
 }
 
-async function installImportStubs(baseUrl: string, stubServer: TestServer): Promise<ImportStubs> {
+function normalizeHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]),
+  )
+}
+
+function normalizeCall(call: CallEntry) {
+  const parsed = new URL(call.path, 'http://stub.local')
   return {
-    postmanRequest: await stubServer.stub({
+    method: call.method ?? 'GET',
+    path: parsed.pathname,
+    query: Object.fromEntries(parsed.searchParams.entries()),
+    headers: normalizeHeaders(call.headers),
+    body: call.body,
+  }
+}
+
+async function installImportStubs(baseUrl: string, server: MocklyServer): Promise<ImportStubs> {
+  await server.addMock({
+    id: stubIds.postmanRequest,
+    request: {
       method: 'POST',
       path: `/imported/widgets/${postmanVars.widgetId}`,
       query: {
@@ -232,29 +258,33 @@ async function installImportStubs(baseUrl: string, stubServer: TestServer): Prom
       headers: {
         'X-Stage': postmanVars.stage,
       },
-      response: {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: { ok: true, source: 'postman-import' },
-      },
-    }),
-    openApiSecondary: await stubServer.stub({
+    },
+    response: {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, source: 'postman-import' }),
+    },
+  })
+  await server.addMock({
+    id: stubIds.openApiSecondary,
+    request: {
       method: 'GET',
       path: `/secondary/orders/order-${stamp}`,
       query: { view: 'compact' },
-      response: {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: { ok: true, source: 'openapi-import' },
-      },
-    }),
-    urlSpec: await stubServer.stub({
-      method: 'GET',
-      path: '/docs/url-openapi.yaml',
-      response: {
-        status: 200,
-        headers: { 'Content-Type': 'application/yaml' },
-        body: `openapi: 3.0.3
+    },
+    response: {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true, source: 'openapi-import' }),
+    },
+  })
+  await server.addMock({
+    id: stubIds.urlSpec,
+    request: { method: 'GET', path: '/docs/url-openapi.yaml' },
+    response: {
+      status: 200,
+      headers: { 'Content-Type': 'application/yaml' },
+      body: `openapi: 3.0.3
 info:
   title: ${names.urlCollection}
   version: '1'
@@ -265,35 +295,32 @@ paths:
     get:
       summary: Ping imported URL
 `,
-      },
-    }),
-    urlRedirect: await stubServer.stub({
-      method: 'GET',
-      path: '/docs/redirect',
-      response: {
-        status: 302,
-        headers: { Location: `${baseUrl}/docs/url-openapi.yaml` },
-      },
-    }),
-    urlMissing: await stubServer.stub({
-      method: 'GET',
-      path: '/docs/missing',
-      response: {
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' },
-        body: 'missing',
-      },
-    }),
-  }
+    },
+  })
+  await server.addMock({
+    id: stubIds.urlRedirect,
+    request: { method: 'GET', path: '/docs/redirect' },
+    response: {
+      status: 302,
+      headers: { Location: `${baseUrl}/docs/url-openapi.yaml` },
+    },
+  })
+  await server.addMock({
+    id: stubIds.urlMissing,
+    request: { method: 'GET', path: '/docs/missing' },
+    response: {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'missing',
+    },
+  })
+
+  return stubIds
 }
 
-function requestHeaders(call: { headers: Record<string, string> }): Record<string, string> {
-  return call.headers
-}
-
-test.beforeEach(async ({ window, stubServer }) => {
-  prepared ??= prepareFixtures(stubServer.baseUrl)
-  stubs = await installImportStubs(stubServer.baseUrl, stubServer)
+test.beforeEach(async ({ window, server }) => {
+  prepared ??= prepareFixtures(server.httpBase)
+  stubs = await installImportStubs(server.httpBase, server)
   await reloadApp(window)
   await window.evaluate(async () => {
     await window.api.proxy.set({ mode: 'none', url: '', username: '', password: '', bypass: '' })
@@ -333,7 +360,7 @@ test.afterAll(async ({ window }) => {
 })
 
 test.describe('Imported requests', () => {
-  test('imports a Postman collection and environment and sends the imported request', async ({ window, stubServer }) => {
+  test('imports a Postman collection and environment and sends the imported request', async ({ window, server }) => {
     if (!prepared) throw new Error('Expected fixtures to be prepared')
 
     await importFile(window, prepared.postmanCollection)
@@ -352,33 +379,32 @@ test.describe('Imported requests', () => {
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
     await expect(window.getByTestId('response-panel')).toContainText('postman-import')
 
-    const requests = await stubServer.waitForRequests(stubs.postmanRequest, 1, { timeoutMs: 8_000 })
+    const requests = (await server.waitForCalls(stubs.postmanRequest, 1, '8s')).calls.map(normalizeCall)
     expect(requests).toHaveLength(1)
     expect(JSON.parse(requests[0].body ?? '{}')).toEqual({
       name: postmanVars.widgetName,
       secret: 'resolved-secret-token',
     })
 
-    const headers = requestHeaders(requests[0])
-    expect(headers.authorization).toMatch(/^Bearer /)
-    expect(headers['x-stage']).toBe(postmanVars.stage)
+    expect(requests[0].headers.authorization).toMatch(/^Bearer\s+\S+$/)
+    expect(requests[0].headers['x-stage']).toBe(postmanVars.stage)
     expect(requests[0].method).toBe('POST')
     expect(requests[0].path).toBe(`/imported/widgets/${postmanVars.widgetId}`)
   })
 
-  test('imports an OpenAPI document from a URL, following redirects and surfacing 404 errors', async ({ window, stubServer }) => {
+  test('imports an OpenAPI document from a URL, following redirects and surfacing 404 errors', async ({ window, server }) => {
     await openImport(window)
-    await window.getByTestId('import-url').fill(`${stubServer.baseUrl}/docs/missing`)
+    await window.getByTestId('import-url').fill(`${server.httpBase}/docs/missing`)
     await window.getByTestId('import-url-fetch').click()
     await expect(window.getByTestId('import-error')).toContainText('404')
 
-    await window.getByTestId('import-url').fill(`${stubServer.baseUrl}/docs/redirect`)
+    await window.getByTestId('import-url').fill(`${server.httpBase}/docs/redirect`)
     await window.getByTestId('import-url-fetch').click()
     await expect(window.getByTestId('import-format')).toContainText('OpenAPI')
     await finishImport(window, names.urlCollection)
   })
 
-  test('imports OpenAPI server environments and sends through the selected server', async ({ window, stubServer }) => {
+  test('imports OpenAPI server environments and sends through the selected server', async ({ window, server }) => {
     if (!prepared) throw new Error('Expected fixtures to be prepared')
 
     await importFile(window, prepared.openApiFile)
@@ -392,7 +418,7 @@ test.describe('Imported requests', () => {
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
     await expect(window.getByTestId('response-panel')).toContainText('openapi-import')
 
-    const requests = await stubServer.waitForRequests(stubs.openApiSecondary, 1, { timeoutMs: 8_000 })
+    const requests = (await server.waitForCalls(stubs.openApiSecondary, 1, '8s')).calls.map(normalizeCall)
     expect(requests).toHaveLength(1)
     expect(requests[0].method).toBe('GET')
     expect(requests[0].path).toBe(`/secondary/orders/order-${stamp}`)

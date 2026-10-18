@@ -1,7 +1,6 @@
 import { test, expect } from './fixtures'
 import http from 'http'
 import type { AddressInfo } from 'net'
-import type { StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 interface AuthServer {
   url: string
@@ -42,7 +41,7 @@ function startAuthServer(): Promise<AuthServer> {
 }
 
 let authServer: AuthServer
-let tokenEndpoint: StubHandle
+const TOKEN_ENDPOINT_ID = 'oauth-token-endpoint'
 
 const REDIRECT_URI = 'http://localhost:19999/callback'
 
@@ -55,20 +54,20 @@ test.describe('OAuth session persistence', () => {
     authServer?.stop()
   })
 
-  test.beforeEach(async ({ electronApp, stubServer }) => {
-    tokenEndpoint = await stubServer.stub({
-      method: 'POST',
-      path: '/oauth2/token',
+  test.beforeEach(async ({ electronApp, server }) => {
+    await server.addMock({
+      id: TOKEN_ENDPOINT_ID,
+      request: { method: 'POST', path: '/oauth2/token' },
       response: {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: {
+        body: JSON.stringify({
           access_token: 'e2e-access-token',
           token_type: 'Bearer',
           expires_in: 3600,
           refresh_token: 'e2e-refresh-token',
           scope: 'read',
-        },
+        }),
       },
     })
 
@@ -83,7 +82,7 @@ test.describe('OAuth session persistence', () => {
     })
   })
 
-  test('completes the authorization_code flow end-to-end via the stubbed provider', async ({ window, stubServer }) => {
+  test('completes the authorization_code flow end-to-end via the stubbed provider', async ({ window, server }) => {
     const configId = await window.evaluate(
       async (args: { name: string; grantType: string; clientId: string; tokenUrl: string; authUrl: string; redirectUri: string; scopes: string }) => {
         const res = await window.api.oauth.configs.create(args)
@@ -93,7 +92,7 @@ test.describe('OAuth session persistence', () => {
         name: 'E2E Full Flow',
         grantType: 'authorization_code',
         clientId: 'e2e-client',
-        tokenUrl: `${stubServer.baseUrl}/oauth2/token`,
+        tokenUrl: `${server.httpBase}/oauth2/token`,
         authUrl: authServer.url,
         redirectUri: REDIRECT_URI,
         scopes: 'read',
@@ -107,15 +106,15 @@ test.describe('OAuth session persistence', () => {
     expect((result as { data: { accessToken: string; tokenType: string } }).data.accessToken).toBe('e2e-access-token')
     expect((result as { data: { accessToken: string; tokenType: string } }).data.tokenType).toBe('Bearer')
 
-    const requests = await stubServer.waitForRequests(tokenEndpoint, 1)
-    expect(requests).toHaveLength(1)
+    const requests = await server.waitForCalls(TOKEN_ENDPOINT_ID, 1)
+    expect(requests.count).toBe(1)
 
     await window.evaluate(async (id: string) => {
       await window.api.oauth.configs.delete({ id })
     }, configId)
   })
 
-  test('IDP session cookie set during first auth is present before second auth', async ({ window, electronApp, stubServer }) => {
+  test('IDP session cookie set during first auth is present before second auth', async ({ window, electronApp, server }) => {
     const configId = await window.evaluate(
       async (args: { name: string; grantType: string; clientId: string; tokenUrl: string; authUrl: string; redirectUri: string; scopes: string }) => {
         const res = await window.api.oauth.configs.create(args)
@@ -125,7 +124,7 @@ test.describe('OAuth session persistence', () => {
         name: 'E2E Persistence',
         grantType: 'authorization_code',
         clientId: 'e2e-client',
-        tokenUrl: `${stubServer.baseUrl}/oauth2/token`,
+        tokenUrl: `${server.httpBase}/oauth2/token`,
         authUrl: authServer.url,
         redirectUri: REDIRECT_URI,
         scopes: 'read',
@@ -154,8 +153,8 @@ test.describe('OAuth session persistence', () => {
     expect(cookiesAfterSecond).toHaveLength(1)
     expect(cookiesAfterSecond[0].value).toBe('active')
 
-    const requests = await stubServer.waitForRequests(tokenEndpoint, 2)
-    expect(requests).toHaveLength(2)
+    const requests = await server.waitForCalls(TOKEN_ENDPOINT_ID, 2)
+    expect(requests.count).toBe(2)
 
     await window.evaluate(async (id: string) => {
       await window.api.oauth.clearToken({ configId: id })
@@ -163,17 +162,17 @@ test.describe('OAuth session persistence', () => {
     }, configId)
   })
 
-  test('surfaces the provider error when the token endpoint returns 503', async ({ window, stubServer }) => {
-    const unavailableTokenEndpoint = await stubServer.stub({
-      method: 'POST',
-      path: '/oauth2/token-down',
+  test('surfaces the provider error when the token endpoint returns 503', async ({ window, server }) => {
+    await server.addMock({
+      id: 'oauth-token-down',
+      request: { method: 'POST', path: '/oauth2/token-down' },
       response: {
         status: 503,
         headers: { 'Content-Type': 'application/json' },
-        body: {
+        body: JSON.stringify({
           error: 'temporarily_unavailable',
           error_description: 'Auth server down',
-        },
+        }),
       },
     })
 
@@ -186,7 +185,7 @@ test.describe('OAuth session persistence', () => {
         name: 'E2E Error Test',
         grantType: 'authorization_code',
         clientId: 'e2e-client',
-        tokenUrl: `${stubServer.baseUrl}/oauth2/token-down`,
+        tokenUrl: `${server.httpBase}/oauth2/token-down`,
         authUrl: authServer.url,
         redirectUri: REDIRECT_URI,
         scopes: 'read',
@@ -198,7 +197,7 @@ test.describe('OAuth session persistence', () => {
     }, configId)
 
     expect((result as { error: string }).error).toContain('503')
-    expect(await stubServer.waitForRequests(unavailableTokenEndpoint, 1)).toHaveLength(1)
+    expect((await server.waitForCalls('oauth-token-down', 1)).count).toBe(1)
 
     await window.evaluate(async (id: string) => {
       await window.api.oauth.configs.delete({ id })

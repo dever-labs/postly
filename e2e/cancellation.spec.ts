@@ -1,14 +1,13 @@
 import { test, expect } from './fixtures'
 import type { Page } from '@playwright/test'
-import type { StubHandle } from '../src/main/services/__tests__/helpers/test-server'
 
 let requestId = ''
 let collectionId = ''
-let fastEndpoint: StubHandle
-let slowEndpoint: StubHandle
 const runId = Date.now()
 const collectionName = `E2E Send & Cancel ${runId}`
 const requestName = `Stubbed Request ${runId}`
+const FAST_ENDPOINT_ID = 'fast-endpoint'
+const SLOW_ENDPOINT_ID = 'slow-endpoint'
 
 async function openRequestEditor(window: Page, options: { clearDraft?: boolean } = {}): Promise<void> {
   if (options.clearDraft) {
@@ -62,45 +61,45 @@ test.describe('Send & cancel request', () => {
     }
   })
 
-  test.beforeEach(async ({ window, stubServer }) => {
-    fastEndpoint = await stubServer.stub({
-      method: 'GET',
-      path: '/fast',
+  test.beforeEach(async ({ window, server }) => {
+    await server.addMock({
+      id: FAST_ENDPOINT_ID,
+      request: { method: 'GET', path: '/fast' },
       response: {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: { message: 'hello from the stub server' },
+        body: JSON.stringify({ message: 'hello from the stub server' }),
       },
     })
 
-    slowEndpoint = await stubServer.stub({
-      method: 'GET',
-      path: '/slow',
+    await server.addMock({
+      id: SLOW_ENDPOINT_ID,
+      request: { method: 'GET', path: '/slow' },
       response: {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: { message: 'this should be cancelled' },
-        delayMs: 10_000,
+        body: JSON.stringify({ message: 'this should be cancelled' }),
+        delay: '10s',
       },
     })
 
     await openRequestEditor(window, { clearDraft: true })
   })
 
-  test('successful request shows response with status 200', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/fast`
+  test('successful request shows response with status 200', async ({ window, server }) => {
+    const url = `${server.httpBase}/fast`
     await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
     await expect(window.locator('[data-testid="response-panel"]')).toBeVisible({ timeout: 10_000 })
     await expect(window.locator('[data-testid="response-status"]')).toContainText('200')
 
-    const requests = await stubServer.waitForRequests(fastEndpoint, 1)
-    expect(requests).toHaveLength(1)
+    const requests = await server.waitForCalls(FAST_ENDPOINT_ID, 1)
+    expect(requests.count).toBe(1)
   })
 
-  test('response body contains the JSON returned by the stub server', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/fast`
+  test('response body contains the JSON returned by the stub server', async ({ window, server }) => {
+    const url = `${server.httpBase}/fast`
     await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
@@ -108,8 +107,8 @@ test.describe('Send & cancel request', () => {
     await expect(window.locator('[data-testid="response-panel"]')).toContainText('hello from the stub server')
   })
 
-  test('send button is replaced by Cancel while a slow request is in flight', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/slow`
+  test('send button is replaced by Cancel while a slow request is in flight', async ({ window, server }) => {
+    const url = `${server.httpBase}/slow`
     await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
@@ -120,12 +119,12 @@ test.describe('Send & cancel request', () => {
     await window.locator('[data-testid="cancel-button"]').click()
     await expect(window.locator('[data-testid="send-button"]')).toBeVisible({ timeout: 10_000 })
 
-    const requests = await stubServer.waitForRequests(slowEndpoint, 1)
-    expect(requests).toHaveLength(1)
+    const requests = await server.waitForCalls(SLOW_ENDPOINT_ID, 1)
+    expect(requests.count).toBe(1)
   })
 
-  test('clicking Cancel aborts the request and restores Send button', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/slow`
+  test('clicking Cancel aborts the request and restores Send button', async ({ window, server }) => {
+    const url = `${server.httpBase}/slow`
     await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
@@ -137,8 +136,8 @@ test.describe('Send & cancel request', () => {
     await expect(window.locator('[data-testid="response-panel"]')).toBeVisible()
   })
 
-  test('pressing Enter in URL bar sends the request', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/fast`
+  test('pressing Enter in URL bar sends the request', async ({ window, server }) => {
+    const url = `${server.httpBase}/fast`
     const urlInput = window.locator('[data-testid="url-input"]')
     await urlInput.fill(url)
     await expect(urlInput).toHaveValue(url)
@@ -148,8 +147,8 @@ test.describe('Send & cancel request', () => {
     await expect(window.locator('[data-testid="response-status"]')).toContainText('200')
   })
 
-  test('second send is blocked while a request is in flight', async ({ window, stubServer }) => {
-    const url = `${stubServer.baseUrl}/slow`
+  test('second send is blocked while a request is in flight', async ({ window, server }) => {
+    const url = `${server.httpBase}/slow`
     await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
