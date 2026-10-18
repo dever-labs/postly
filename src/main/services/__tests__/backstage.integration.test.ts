@@ -1,11 +1,10 @@
 /**
- * Integration tests for backstage.ts using Mockly as a real HTTP backend.
+ * Integration tests for backstage.ts using a real HTTP stub backend.
  *
  * Unlike backstage.test.ts (which mocks axios), these tests exercise the
- * real HTTP path: the service makes actual network requests to Mockly.
+ * real HTTP path: the service makes actual network requests to the stub server.
  * Only the database layer is mocked.
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -26,7 +25,7 @@ vi.mock('../../database', () => ({
 //
 // We can't spin up real Chromium here, so BrowserWindow itself is faked.
 // But executeJavaScript is wired to perform a *real* fetch against the
-// Mockly server below, so the HTTP contract (endpoint shape, response
+// stub server below, so the HTTP contract (endpoint shape, response
 // parsing) is still exercised end-to-end — only the windowing/navigation
 // chrome is stubbed out.
 const { createdWindows } = vi.hoisted(() => {
@@ -74,9 +73,9 @@ vi.mock('electron', () => {
     loadURL(url: string) {
       this.webContents.url = url
       // Real navigation, like real Electron: hit the URL over HTTP against
-      // Mockly so a wrong/typo'd start URL fails the test instead of only
-      // being checked as a string.
-      void fetch(url).catch(() => { /* network errors are surfaced via waitForCalls timing out */ })
+      // the stub server so a wrong/typo'd start URL fails the test instead of
+      // only being checked as a string.
+      void fetch(url).catch(() => { /* network errors are surfaced via request polling timing out */ })
     }
     on(event: string, cb: () => void) {
       if (event === 'closed') this.closedListeners.push(cb)
@@ -96,7 +95,7 @@ vi.mock('electron', () => {
 
 import { queryOne, run } from '../../database'
 import { syncCatalog, authenticateWithBackstageGuest, authenticateWithBackstage } from '../backstage'
-import { MocklyServer } from './helpers/mockly'
+import { startStubServer, type HttpStubServer } from './helpers/http-stub'
 
 // ─── Minimal OpenAPI spec for testing ────────────────────────────────────────
 
@@ -123,10 +122,10 @@ const MINIMAL_OAS3 = JSON.stringify({
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
 
-let server: MocklyServer
+let server: HttpStubServer
 
 beforeAll(async () => {
-  server = await MocklyServer.create()
+  server = await startStubServer()
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -163,7 +162,7 @@ const EMPTY_CATALOG_MOCKS = [
 ]
 
 async function setupEmptyCatalog() {
-  for (const mock of EMPTY_CATALOG_MOCKS) await server.addMock(mock)
+  for (const mock of EMPTY_CATALOG_MOCKS) await server.stub(mock)
 }
 
 // ─── syncCatalog — empty catalog ─────────────────────────────────────────────
@@ -191,7 +190,7 @@ describe('syncCatalog — standalone API entity', () => {
   }
 
   beforeEach(async () => {
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -200,7 +199,7 @@ describe('syncCatalog — standalone API entity', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -284,7 +283,7 @@ describe('syncCatalog — API with spec URL annotation', () => {
       spec: { type: 'openapi' }, // no inline definition
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -293,12 +292,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.addMock({
+    await server.stub({
       id: 'api-spec',
       request: { method: 'GET', path: specPath },
       response: {
@@ -328,7 +327,7 @@ describe('syncCatalog — API with spec URL annotation', () => {
       spec: { type: 'openapi' },
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -337,12 +336,12 @@ describe('syncCatalog — API with spec URL annotation', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.addMock({
+    await server.stub({
       id: 'missing-spec',
       request: { method: 'GET', path: '/no-such-spec' },
       response: { status: 404, body: 'Not Found' },
@@ -365,7 +364,7 @@ describe('syncCatalog — API with no definition', () => {
       spec: { type: 'openapi' }, // no definition, no annotation
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -374,7 +373,7 @@ describe('syncCatalog — API with no definition', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -401,7 +400,7 @@ describe('syncCatalog — component owning API via providesApis', () => {
       relations: [],
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -410,7 +409,7 @@ describe('syncCatalog — component owning API via providesApis', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: {
@@ -444,7 +443,7 @@ describe('syncCatalog — component owning API via relations', () => {
       relations: [{ type: 'providesApi', targetRef: 'api:default/pet-store' }],
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -453,7 +452,7 @@ describe('syncCatalog — component owning API via relations', () => {
         body: JSON.stringify([API_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: {
@@ -482,7 +481,7 @@ describe('syncCatalog — GraphQL API type', () => {
       spec: { type: 'graphql', definition: 'type Query { hello: String }' },
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -491,7 +490,7 @@ describe('syncCatalog — GraphQL API type', () => {
         body: JSON.stringify([GRAPHQL_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -524,7 +523,7 @@ describe('syncCatalog — gRPC API type', () => {
       spec: { type: 'grpc', definition: 'syntax = "proto3"; service Greeter {}' },
     }
 
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
       response: {
@@ -533,7 +532,7 @@ describe('syncCatalog — gRPC API type', () => {
         body: JSON.stringify([GRPC_ENTITY]),
       },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=Component' } },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
@@ -562,7 +561,7 @@ describe('syncCatalog — gRPC API type', () => {
 
 describe('syncCatalog — auth token', () => {
   it('forwards the Bearer token as Authorization header', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'catalog-apis',
       request: {
         method: 'GET',
@@ -572,7 +571,7 @@ describe('syncCatalog — auth token', () => {
       },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
-    await server.addMock({
+    await server.stub({
       id: 'catalog-components',
       request: {
         method: 'GET',
@@ -583,7 +582,7 @@ describe('syncCatalog — auth token', () => {
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
 
-    // If the token isn't forwarded, Mockly won't match the header and will 404
+    // If the token isn't forwarded, the stub won't match the header and will 404
     const result = await syncCatalog(settings({ token: 'my-secret-token' }))
     expect(result).toBeDefined()
   })
@@ -598,7 +597,7 @@ describe('authenticateWithBackstageGuest', () => {
   }
 
   it('returns token and user profile on success', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -616,7 +615,7 @@ describe('authenticateWithBackstageGuest', () => {
   })
 
   it('strips trailing slash from baseUrl', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -632,7 +631,7 @@ describe('authenticateWithBackstageGuest', () => {
   })
 
   it('defaults user name to Guest when displayName is absent', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -647,7 +646,7 @@ describe('authenticateWithBackstageGuest', () => {
   })
 
   it('throws when response has no token', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: {
@@ -663,7 +662,7 @@ describe('authenticateWithBackstageGuest', () => {
   })
 
   it('throws when server returns non-2xx', async () => {
-    await server.addMock({
+    await server.stub({
       id: 'guest-refresh',
       request: { method: 'POST', path: '/api/auth/guest/refresh' },
       response: { status: 401, body: 'Unauthorized' },
@@ -679,7 +678,7 @@ describe('authenticateWithBackstageGuest', () => {
 // interactive OAuth providers. Each opens a BrowserWindow pointed at
 // "/api/auth/<provider>/start" and, once navigation settles away from the
 // auth pages, fetches "/api/auth/<provider>/refresh" from inside the page.
-// The fetch is real (against Mockly); only the BrowserWindow chrome is faked.
+// The fetch is real (against the stub server); only the BrowserWindow chrome is faked.
 
 describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstage — %s', (provider) => {
   const OAUTH_RESPONSE = {
@@ -689,9 +688,9 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 
   it('opens a window at the provider start URL', async () => {
     // Mock the real Backstage "/start" route so navigation isn't just
-    // asserted as a string — Mockly must actually receive the request,
+    // asserted as a string — the stub server must actually receive the request,
     // catching a wrong/typo'd URL that a string-only assertion would miss.
-    await server.addMock({
+    const startRoute = await server.stub({
       id: `${provider}-start`,
       request: { method: 'GET', path: `/api/auth/${provider}/start`, query: { env: 'production' } },
       response: { status: 200, headers: { 'Content-Type': 'text/html' }, body: '<html>signing in…</html>' },
@@ -700,7 +699,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
     const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
     expect(win.webContents.url).toBe(`${server.httpBase}/api/auth/${provider}/start?env=production`)
-    await server.waitForCalls(`${provider}-start`, 1, '2s')
+    await server.waitForRequests(startRoute, 1, { timeoutMs: 2_000 })
 
     // Finish the flow so the test doesn't leave a dangling promise.
     win.webContents.executeJavaScriptImpl = async () => null
@@ -710,7 +709,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('resolves with the token and profile once the in-page refresh succeeds', async () => {
-    await server.addMock({
+    await server.stub({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(OAUTH_RESPONSE) },
@@ -739,7 +738,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('defaults user name to the provider id when profile has no displayName', async () => {
-    await server.addMock({
+    await server.stub({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: {
@@ -763,7 +762,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
   })
 
   it('keeps waiting (does not resolve or reject) while executeJavaScript returns no token', async () => {
-    await server.addMock({
+    await server.stub({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
       response: { status: 401, body: 'not logged in yet' },

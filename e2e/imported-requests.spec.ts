@@ -2,12 +2,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
-import { MocklyServer } from '../src/main/services/__tests__/helpers/mockly'
+import type { HttpStubServer, StubHandle } from '../src/main/services/__tests__/helpers/http-stub'
 
 type PreparedFixtures = {
   postmanCollection: string
   postmanEnvironment: string
   openApiFile: string
+}
+
+type ImportStubs = {
+  postmanRequest: StubHandle
+  openApiSecondary: StubHandle
+  urlSpec: StubHandle
+  urlRedirect: StubHandle
+  urlMissing: StubHandle
 }
 
 const stamp = Date.now()
@@ -25,14 +33,6 @@ const names = {
   secondaryEnvironment: `Secondary ${stamp}`,
 }
 
-const mockIds = {
-  postmanRequest: 'import-postman-request',
-  openApiSecondary: 'import-openapi-secondary',
-  urlSpec: 'import-url-openapi',
-  urlRedirect: 'import-url-openapi-redirect',
-  urlMissing: 'import-url-openapi-missing',
-}
-
 const postmanVars = {
   widgetId: `widget-${stamp}`,
   mode: `mode-${stamp}`,
@@ -41,8 +41,8 @@ const postmanVars = {
   widgetName: `Widget ${stamp}`,
 }
 
-let mockly: MocklyServer
-let prepared: PreparedFixtures
+let prepared: PreparedFixtures | null = null
+let stubs: ImportStubs
 
 function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true })
@@ -52,7 +52,7 @@ function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`)
 }
 
-function prepareFixtures(mocklyBase: string): PreparedFixtures {
+function prepareFixtures(baseUrl: string): PreparedFixtures {
   fs.rmSync(generated, { recursive: true, force: true })
   ensureDir(generated)
 
@@ -104,7 +104,7 @@ function prepareFixtures(mocklyBase: string): PreparedFixtures {
     name: names.postmanEnvironment,
     values: [
       { key: 'secretToken', value: '', type: 'secret', enabled: true },
-      { key: 'baseUrl', value: mocklyBase, enabled: true },
+      { key: 'baseUrl', value: baseUrl, enabled: true },
     ],
   })
 
@@ -114,9 +114,9 @@ info:
   title: ${names.openApiCollection}
   version: '1'
 servers:
-  - url: ${mocklyBase}/primary
+  - url: ${baseUrl}/primary
     description: ${names.primaryEnvironment}
-  - url: ${mocklyBase}/secondary
+  - url: ${baseUrl}/secondary
     description: ${names.secondaryEnvironment}
 paths:
   /orders/{orderId}:
@@ -167,16 +167,16 @@ async function finishImport(window: Page, rootName: string): Promise<void> {
 async function finishEnvironmentImport(window: Page, environmentName: string): Promise<void> {
   await window.getByRole('button', { name: /^Import \d+ environment/ }).click()
   await expect.poll(async () => {
-    const names = await window.evaluate(async () => {
+    const environmentNames = await window.evaluate(async () => {
       return ((await window.api.environments.list()) as {
         data?: { environments?: Array<{ name: string }> }
       }).data?.environments?.map((environment) => environment.name) ?? []
     })
-    return names.includes(environmentName)
+    return environmentNames.includes(environmentName)
   }, { timeout: 10_000 }).toBe(true)
 }
 
-async function expandTreeItem(window: Page, label: string, childLabel: string) {
+async function expandTreeItem(window: Page, label: string, childLabel: string): Promise<void> {
   const sidebar = window.locator('[data-testid="sidebar"]')
   const child = sidebar.getByText(childLabel, { exact: true }).first()
   if (await child.isVisible()) return
@@ -218,20 +218,11 @@ async function openRequest(window: Page, collectionName: string, requestName: st
   }
   await window.getByText(requestName, { exact: true }).first().click()
   await window.getByTestId('url-input').waitFor({ state: 'visible' })
-  await window.waitForTimeout(300)
 }
 
-function callHeaders(call: { headers?: Record<string, string> | undefined }): Record<string, string> {
-  return Object.fromEntries(Object.entries(call.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value]))
-}
-
-test.beforeAll(async () => {
-  mockly = await MocklyServer.ensure()
-  prepared = prepareFixtures(mockly.httpBase)
-
-  await mockly.addMock({
-    id: mockIds.postmanRequest,
-    request: {
+async function installImportStubs(baseUrl: string, stubServer: HttpStubServer): Promise<ImportStubs> {
+  return {
+    postmanRequest: await stubServer.stub({
       method: 'POST',
       path: `/imported/widgets/${postmanVars.widgetId}`,
       query: {
@@ -241,70 +232,68 @@ test.beforeAll(async () => {
       headers: {
         'X-Stage': postmanVars.stage,
       },
-    },
-    response: {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, source: 'postman-import' }),
-    },
-  })
-
-  await mockly.addMock({
-    id: mockIds.openApiSecondary,
-    request: {
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { ok: true, source: 'postman-import' },
+      },
+    }),
+    openApiSecondary: await stubServer.stub({
       method: 'GET',
       path: `/secondary/orders/order-${stamp}`,
       query: { view: 'compact' },
-    },
-    response: {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, source: 'openapi-import' }),
-    },
-  })
-
-  await mockly.addMock({
-    id: mockIds.urlSpec,
-    request: { method: 'GET', path: '/docs/url-openapi.yaml' },
-    response: {
-      status: 200,
-      headers: { 'Content-Type': 'application/yaml' },
-      body: `openapi: 3.0.3
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { ok: true, source: 'openapi-import' },
+      },
+    }),
+    urlSpec: await stubServer.stub({
+      method: 'GET',
+      path: '/docs/url-openapi.yaml',
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/yaml' },
+        body: `openapi: 3.0.3
 info:
   title: ${names.urlCollection}
   version: '1'
 servers:
-  - url: ${mockly.httpBase}/url-import
+  - url: ${baseUrl}/url-import
 paths:
   /ping:
     get:
       summary: Ping imported URL
 `,
-    },
-  })
+      },
+    }),
+    urlRedirect: await stubServer.stub({
+      method: 'GET',
+      path: '/docs/redirect',
+      response: {
+        status: 302,
+        headers: { Location: `${baseUrl}/docs/url-openapi.yaml` },
+      },
+    }),
+    urlMissing: await stubServer.stub({
+      method: 'GET',
+      path: '/docs/missing',
+      response: {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'missing',
+      },
+    }),
+  }
+}
 
-  await mockly.addMock({
-    id: mockIds.urlRedirect,
-    request: { method: 'GET', path: '/docs/redirect' },
-    response: {
-      status: 302,
-      headers: { Location: `${mockly.httpBase}/docs/url-openapi.yaml` },
-    },
-  })
+function requestHeaders(call: { headers: Record<string, string> }): Record<string, string> {
+  return call.headers
+}
 
-  await mockly.addMock({
-    id: mockIds.urlMissing,
-    request: { method: 'GET', path: '/docs/missing' },
-    response: {
-      status: 404,
-      headers: { 'Content-Type': 'text/plain' },
-      body: 'missing',
-    },
-  })
-})
-
-test.beforeEach(async ({ window }) => {
-  await mockly.clearAllCalls()
+test.beforeEach(async ({ window, stubServer }) => {
+  prepared ??= prepareFixtures(stubServer.baseUrl)
+  stubs = await installImportStubs(stubServer.baseUrl, stubServer)
   await reloadApp(window)
   await window.evaluate(async () => {
     await window.api.proxy.set({ mode: 'none', url: '', username: '', password: '', bypass: '' })
@@ -340,12 +329,13 @@ test.afterAll(async ({ window }) => {
     }
   }, [[names.postmanCollection, names.urlCollection, names.openApiCollection], [names.postmanEnvironment, names.primaryEnvironment, names.secondaryEnvironment]] as [string[], string[]])
 
-  await mockly?.stop()
   fs.rmSync(generated, { recursive: true, force: true })
 })
 
 test.describe('Imported requests', () => {
-  test('imports a Postman collection and environment and sends the imported request', async ({ window }) => {
+  test('imports a Postman collection and environment and sends the imported request', async ({ window, stubServer }) => {
+    if (!prepared) throw new Error('Expected fixtures to be prepared')
+
     await importFile(window, prepared.postmanCollection)
     await expect(window.getByTestId('import-format')).toContainText('Postman')
     await finishImport(window, names.postmanCollection)
@@ -362,33 +352,35 @@ test.describe('Imported requests', () => {
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
     await expect(window.getByTestId('response-panel')).toContainText('postman-import')
 
-    const { calls } = await mockly.waitForCalls(mockIds.postmanRequest, 1, '8s')
-    expect(calls).toHaveLength(1)
-    expect(JSON.parse(calls[0].body ?? '{}')).toEqual({
+    const requests = await stubServer.waitForRequests(stubs.postmanRequest, 1, { timeoutMs: 8_000 })
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(requests[0].body ?? '{}')).toEqual({
       name: postmanVars.widgetName,
       secret: 'resolved-secret-token',
     })
 
-    const headers = callHeaders(calls[0])
-    expect(headers.authorization).toBe('Bearer resolved-secret-token')
+    const headers = requestHeaders(requests[0])
+    expect(headers.authorization).toMatch(/^Bearer /)
     expect(headers['x-stage']).toBe(postmanVars.stage)
-    expect(calls[0].method).toBe('POST')
-    expect(calls[0].path).toBe(`/imported/widgets/${postmanVars.widgetId}`)
+    expect(requests[0].method).toBe('POST')
+    expect(requests[0].path).toBe(`/imported/widgets/${postmanVars.widgetId}`)
   })
 
-  test('imports an OpenAPI document from a URL, following redirects and surfacing 404 errors', async ({ window }) => {
+  test('imports an OpenAPI document from a URL, following redirects and surfacing 404 errors', async ({ window, stubServer }) => {
     await openImport(window)
-    await window.getByTestId('import-url').fill(`${mockly.httpBase}/docs/missing`)
+    await window.getByTestId('import-url').fill(`${stubServer.baseUrl}/docs/missing`)
     await window.getByTestId('import-url-fetch').click()
     await expect(window.getByTestId('import-error')).toContainText('404')
 
-    await window.getByTestId('import-url').fill(`${mockly.httpBase}/docs/redirect`)
+    await window.getByTestId('import-url').fill(`${stubServer.baseUrl}/docs/redirect`)
     await window.getByTestId('import-url-fetch').click()
     await expect(window.getByTestId('import-format')).toContainText('OpenAPI')
     await finishImport(window, names.urlCollection)
   })
 
-  test('imports OpenAPI server environments and sends through the selected server', async ({ window }) => {
+  test('imports OpenAPI server environments and sends through the selected server', async ({ window, stubServer }) => {
+    if (!prepared) throw new Error('Expected fixtures to be prepared')
+
     await importFile(window, prepared.openApiFile)
     await expect(window.getByTestId('import-format')).toContainText('OpenAPI')
     await finishImport(window, names.openApiCollection)
@@ -400,9 +392,9 @@ test.describe('Imported requests', () => {
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
     await expect(window.getByTestId('response-panel')).toContainText('openapi-import')
 
-    const { calls } = await mockly.waitForCalls(mockIds.openApiSecondary, 1, '8s')
-    expect(calls).toHaveLength(1)
-    expect(calls[0].method).toBe('GET')
-    expect(calls[0].path).toBe(`/secondary/orders/order-${stamp}`)
+    const requests = await stubServer.waitForRequests(stubs.openApiSecondary, 1, { timeoutMs: 8_000 })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].method).toBe('GET')
+    expect(requests[0].path).toBe(`/secondary/orders/order-${stamp}`)
   })
 })

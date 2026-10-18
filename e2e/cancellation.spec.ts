@@ -1,173 +1,144 @@
-/**
- * Request send & cancellation E2E tests
- *
- * Uses Mockly to serve controlled HTTP responses:
- *  - A fast endpoint returns immediately with JSON.
- *  - A slow endpoint delays 10s, letting us click Cancel before it completes.
- *
- * Requires a built app (`npm run build` before `npm run test:e2e`).
- * The Mockly binary is resolved automatically via @dever-labs/mockly-driver.
- */
 import { test, expect } from './fixtures'
-import { MocklyServer } from '../src/main/services/__tests__/helpers/mockly'
+import type { Page } from '@playwright/test'
+import type { StubHandle } from '../src/main/services/__tests__/helpers/http-stub'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+let requestId = ''
+let collectionId = ''
+let fastEndpoint: StubHandle
+let slowEndpoint: StubHandle
+const runId = Date.now()
+const collectionName = `E2E Send & Cancel ${runId}`
+const requestName = `Stubbed Request ${runId}`
 
-/** Poll Mockly's HTTP server until it actually accepts connections. */
-async function waitForMocklyHttp(server: MocklyServer, timeoutMs = 8_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${server.httpBase}/fast`, { signal: AbortSignal.timeout(500) })
-      if (r.status !== 0) return   // any HTTP response means the server is up
-    } catch { /* not ready yet */ }
-    await new Promise<void>((r) => setTimeout(r, 100))
+async function openRequestEditor(window: Page, options: { clearDraft?: boolean } = {}): Promise<void> {
+  if (options.clearDraft) {
+    await window.evaluate(async (id: string) => {
+      await window.api.drafts.request.delete({ requestId: id })
+    }, requestId)
   }
-  throw new Error(`Mockly HTTP server did not become ready within ${timeoutMs}ms`)
+
+  await window.locator(`text=${collectionName}`).first().click()
+  await window.locator(`text=${requestName}`).first().click()
+
+  const urlInput = window.locator('[data-testid="url-input"]')
+  await urlInput.waitFor({ state: 'visible' })
 }
 
-// ─── Fixtures ─────────────────────────────────────────────────────────────────
-
-let mockly: MocklyServer
-const MOCK_FAST_ID = 'get-fast'
-const MOCK_SLOW_ID = 'get-slow'
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
+async function setRequestUrl(
+  window: Page,
+  url: string,
+): Promise<void> {
+  await window.evaluate(async ({ id, nextUrl }: { id: string; nextUrl: string }) => {
+    await window.api.drafts.request.upsert({ requestId: id, url: nextUrl })
+  }, { id: requestId, nextUrl: url })
+  await openRequestEditor(window)
+  await expect(window.locator('[data-testid="url-input"]')).toHaveValue(url)
+}
 
 test.describe('Send & cancel request', () => {
   test.beforeAll(async ({ window }) => {
-    mockly = await MocklyServer.ensure()
-
-    await mockly.addMock({
-      id: MOCK_FAST_ID,
-      request: { method: 'GET', path: '/fast' },
-      response: {
-        status: 200,
-        body: JSON.stringify({ message: 'hello from mockly' }),
-        headers: { 'Content-Type': 'application/json' },
-      },
-    })
-
-    await mockly.addMock({
-      id: MOCK_SLOW_ID,
-      request: { method: 'GET', path: '/slow' },
-      response: {
-        status: 200,
-        body: JSON.stringify({ message: 'this should be cancelled' }),
-        headers: { 'Content-Type': 'application/json' },
-        delay: '10s',
-      },
-    })
-
-    // Wait for Mockly HTTP server to be fully ready (management API readiness
-    // does not guarantee HTTP server is accepting connections yet)
-    await waitForMocklyHttp(mockly)
-
-    // Seed a collection + request so the editor is ready
-    const colId = await window.evaluate(async () => {
-      const res = await window.api.collections.create({ name: 'E2E Send & Cancel' })
+    collectionId = await window.evaluate(async (name: string) => {
+      const res = await window.api.collections.create({ name })
       return (res as { data: { id: string } }).data.id
-    })
-    const grpId = await window.evaluate(async (colId: string) => {
-      const res = await window.api.folders.create({ parentId: colId, name: 'Default' })
+    }, collectionName)
+    const grpId = await window.evaluate(async (collectionId: string) => {
+      const res = await window.api.folders.create({ parentId: collectionId, name: 'Default' })
       return (res as { data: { id: string } }).data.id
-    }, colId)
-    await window.evaluate(async (grpId: string) => {
-      await window.api.requests.create({ folderId: grpId, name: 'Mockly Request', method: 'GET' })
-    }, grpId)
+    }, collectionId)
+    requestId = await window.evaluate(async ({ folderId, name }: { folderId: string; name: string }) => {
+      const res = await window.api.requests.create({ folderId, name, method: 'GET' })
+      return (res as { data: { id: string } }).data.id
+    }, { folderId: grpId, name: requestName })
 
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
   })
 
-  test.afterAll(async () => {
-    await mockly?.stop()
+  test.afterAll(async ({ window }) => {
+    if (collectionId) {
+      await window.evaluate(async (id: string) => {
+        await window.api.folders.delete({ id })
+      }, collectionId)
+    }
   })
 
-  test.beforeEach(async ({ window }) => {
-    await mockly.clearAllCalls()
+  test.beforeEach(async ({ window, stubServer }) => {
+    fastEndpoint = await stubServer.stub({
+      method: 'GET',
+      path: '/fast',
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { message: 'hello from the stub server' },
+      },
+    })
 
-    // Open the request in the editor
-    await window.locator('text=E2E Send & Cancel').first().click()
-    await window.locator('text=Mockly Request').first().click()
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.waitFor({ state: 'visible' })
-    // Allow async draft loading (setActiveRequest) to settle before each test
-    // fills the URL, so the draft doesn't overwrite the test's value.
-    await window.waitForTimeout(400)
+    slowEndpoint = await stubServer.stub({
+      method: 'GET',
+      path: '/slow',
+      response: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: { message: 'this should be cancelled' },
+        delayMs: 10_000,
+      },
+    })
+
+    await openRequestEditor(window, { clearDraft: true })
   })
 
-  test('successful request shows response with status 200', async ({ window }) => {
-    const url = `${mockly.httpBase}/fast`
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.fill(url)
-    await expect(urlInput).toHaveValue(url)
-    await window.waitForTimeout(200)   // wait for 100ms debounce to flush URL to store
+  test('successful request shows response with status 200', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/fast`
+    await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
-    // Loading spinner should appear briefly then resolve
     await expect(window.locator('[data-testid="response-panel"]')).toBeVisible({ timeout: 10_000 })
     await expect(window.locator('[data-testid="response-status"]')).toContainText('200')
 
-    // Mockly should have received exactly one call
-    const calls = await mockly.waitForCalls(MOCK_FAST_ID, 1)
-    expect(calls.calls).toHaveLength(1)
+    const requests = await stubServer.waitForRequests(fastEndpoint, 1)
+    expect(requests).toHaveLength(1)
   })
 
-  test('response body contains the JSON returned by mockly', async ({ window }) => {
-    const url = `${mockly.httpBase}/fast`
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.fill(url)
-    await expect(urlInput).toHaveValue(url)
-    await window.waitForTimeout(200)   // flush debounce
+  test('response body contains the JSON returned by the stub server', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/fast`
+    await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
     await expect(window.locator('[data-testid="response-panel"]')).toBeVisible({ timeout: 10_000 })
-    // The pretty or raw tab should contain the response body
-    await expect(window.locator('[data-testid="response-panel"]')).toContainText('hello from mockly')
+    await expect(window.locator('[data-testid="response-panel"]')).toContainText('hello from the stub server')
   })
 
-  test('send button is replaced by Cancel while a slow request is in flight', async ({ window }) => {
-    const url = `${mockly.httpBase}/slow`
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.fill(url)
-    await expect(urlInput).toHaveValue(url)
-    await window.waitForTimeout(200)   // flush debounce
+  test('send button is replaced by Cancel while a slow request is in flight', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/slow`
+    await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
-    // Cancel button must appear while the 10s delay is running
     await expect(window.locator('[data-testid="cancel-button"]')).toBeVisible({ timeout: 8_000 })
     await expect(window.locator('[data-testid="send-button"]')).not.toBeVisible()
-
-    // Loading spinner shown in response panel
     await expect(window.locator('[data-testid="response-loading"]')).toBeVisible()
 
-    // Clean up: cancel so the slow request doesn't block afterAll
     await window.locator('[data-testid="cancel-button"]').click()
     await expect(window.locator('[data-testid="send-button"]')).toBeVisible({ timeout: 10_000 })
+
+    const requests = await stubServer.waitForRequests(slowEndpoint, 1)
+    expect(requests).toHaveLength(1)
   })
 
-  test('clicking Cancel aborts the request and restores Send button', async ({ window }) => {
-    const url = `${mockly.httpBase}/slow`
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.fill(url)
-    await expect(urlInput).toHaveValue(url)
-    await window.waitForTimeout(200)   // flush debounce
+  test('clicking Cancel aborts the request and restores Send button', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/slow`
+    await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
     await expect(window.locator('[data-testid="cancel-button"]')).toBeVisible({ timeout: 8_000 })
     await window.locator('[data-testid="cancel-button"]').click()
 
-    // Send button returns
     await expect(window.locator('[data-testid="send-button"]')).toBeVisible({ timeout: 10_000 })
-
-    // Response panel shows an error/cancelled state (not the empty placeholder)
     await expect(window.locator('[data-testid="response-empty"]')).not.toBeVisible()
     await expect(window.locator('[data-testid="response-panel"]')).toBeVisible()
   })
 
-  test('pressing Enter in URL bar sends the request', async ({ window }) => {
-    const url = `${mockly.httpBase}/fast`
+  test('pressing Enter in URL bar sends the request', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/fast`
     const urlInput = window.locator('[data-testid="url-input"]')
     await urlInput.fill(url)
     await expect(urlInput).toHaveValue(url)
@@ -177,22 +148,14 @@ test.describe('Send & cancel request', () => {
     await expect(window.locator('[data-testid="response-status"]')).toContainText('200')
   })
 
-  test('second send is blocked while a request is in flight', async ({ window }) => {
-    const url = `${mockly.httpBase}/slow`
-    const urlInput = window.locator('[data-testid="url-input"]')
-    await urlInput.fill(url)
-    await expect(urlInput).toHaveValue(url)
-    await window.waitForTimeout(200)   // flush debounce
+  test('second send is blocked while a request is in flight', async ({ window, stubServer }) => {
+    const url = `${stubServer.baseUrl}/slow`
+    await setRequestUrl(window, url)
     await window.locator('[data-testid="send-button"]').click()
 
     await expect(window.locator('[data-testid="cancel-button"]')).toBeVisible({ timeout: 8_000 })
+    await expect(window.locator('[data-testid="send-button"]')).not.toBeVisible()
 
-    // The Send button is gone — there's nothing to double-click
-    // Verify only one call was made so far despite showing Cancel
-    const calls = await mockly.getCalls(MOCK_SLOW_ID)
-    expect(calls.count).toBe(1)
-
-    // Cancel and wait for idle
     await window.locator('[data-testid="cancel-button"]').click()
     await expect(window.locator('[data-testid="send-button"]')).toBeVisible({ timeout: 10_000 })
   })
