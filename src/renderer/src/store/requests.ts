@@ -392,7 +392,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
     } finally {
-      offStream()
+      // Stream chunks are forwarded over IPC while the invoke call is still resolving.
+      // Deferring removal by one tick lets already-queued stream events reach the renderer
+      // before the listener is detached.
+      setTimeout(offStream, 0)
     }
   },
 

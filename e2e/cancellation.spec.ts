@@ -85,7 +85,6 @@ test.describe('Send & cancel request', () => {
   })
 
   test.beforeEach(async ({ window }) => {
-    test.skip(!mocklyAvailable, `Mockly binary not found at bin/${binName}`)
     await mockly.clearAllCalls()
 
     // Open the request in the editor

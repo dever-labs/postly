@@ -14,26 +14,13 @@
  *    no query-param template syntax.
  *
  * Requires a built app (`npm run build` before `npm run test:e2e`).
- * The Mockly binary is downloaded automatically by `npm run test:e2e`
- * via `node scripts/download-mockly.mjs`.  If the binary is missing when
- * tests run directly with `playwright test`, all tests in this file are
- * skipped with a descriptive message.
+ * Mockly is resolved on demand by the shared test helper, and CI installs the
+ * binary explicitly before the Playwright job runs.
  */
 import { test, expect } from './fixtures'
 import http from 'http'
-import { existsSync } from 'fs'
-import { resolve } from 'path'
 import type { AddressInfo } from 'net'
 import { MocklyServer } from '../src/main/services/__tests__/helpers/mockly'
-
-// ─── Binary guard ─────────────────────────────────────────────────────────────
-// Skip the entire suite with a clear message when the Mockly binary is absent.
-// In normal usage `npm run test:e2e` downloads it automatically via
-// `node scripts/download-mockly.mjs` before Playwright runs.
-
-const binName = process.platform === 'win32' ? 'mockly.exe' : 'mockly'
-const mocklyBinPath = resolve(__dirname, '..', 'bin', binName)
-const mocklyAvailable = existsSync(mocklyBinPath)
 
 // ─── Auth server ─────────────────────────────────────────────────────────────
 
@@ -100,16 +87,9 @@ const MOCK_TOKEN_ID = 'oauth2-token'
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test.describe('OAuth session persistence', () => {
-  test.beforeEach(() => {
-    test.skip(
-      !mocklyAvailable,
-      `Mockly binary not found at bin/${binName} — run: node scripts/download-mockly.mjs`,
-    )
-  })
-
   test.beforeAll(async () => {
     // Start Mockly for the token endpoint.
-    mockly = await MocklyServer.create()
+    mockly = await MocklyServer.ensure()
     await mockly.addMock({
       id: MOCK_TOKEN_ID,
       request: { method: 'POST', path: '/oauth2/token' },
@@ -130,8 +110,8 @@ test.describe('OAuth session persistence', () => {
   })
 
   test.afterAll(async () => {
-    authServer.stop()
-    await mockly.stop()
+    authServer?.stop()
+    await mockly?.stop()
   })
 
   // Reset Mockly call counters and clear test partitions before each test so

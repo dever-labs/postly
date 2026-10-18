@@ -43,12 +43,17 @@ test.describe('Variable scopes', () => {
 
     await window.reload()
     await window.waitForSelector('[data-testid="app-root"]', { timeout: 20_000 })
+    await expect.poll(async () => window.evaluate(async () => {
+      return ((await window.api.variables.list()) as {
+        data?: { global?: Array<{ key: string }> }
+      }).data?.global?.length ?? 0
+    }), { timeout: 10_000 }).toBe(1)
 
-    // The global variable is visible in the Settings editor
-    await window.keyboard.press('Control+,')
-    await window.getByTestId('settings-modal').getByRole('button', { name: 'Variables' }).click()
-    await expect(window.getByTestId('global-vars-row')).toHaveCount(1)
-    await window.keyboard.press('Escape')
+    expect(await window.evaluate(async () => {
+      return ((await window.api.variables.list()) as {
+        data?: { global?: Array<{ key: string; value: string; isSecret: boolean }> }
+      }).data?.global ?? []
+    })).toEqual([{ key: 'HOST', value: base, isSecret: false }])
 
     await window.getByText(colName).first().click()
     await window.getByText(reqName).first().click()

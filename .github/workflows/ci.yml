@@ -66,6 +66,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Install Mockly binary
+        run: node -e "import('@dever-labs/mockly-driver').then(({ install }) => install())"
+
       - run: npm run build
 
       - name: Run E2E tests
