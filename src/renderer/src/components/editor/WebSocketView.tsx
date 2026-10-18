@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Send, Plug, PlugZap, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { clearBoundedMessages, appendBoundedMessages, type BoundedMessageLog } from '@/lib/boundedMessageLog'
 import type { KeyValuePair } from '@/types'
 import { HeadersTab } from './tabs/HeadersTab'
 
@@ -20,7 +21,7 @@ interface WebSocketViewProps {
 export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewProps) {
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
-  const [messages, setMessages] = useState<WsMessage[]>([])
+  const [messageLog, setMessageLog] = useState<BoundedMessageLog<WsMessage>>(() => clearBoundedMessages<WsMessage>())
   const [sendText, setSendText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const connectionId = useRef(`ws-${Date.now()}`)
@@ -42,10 +43,9 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
         setConnecting(false)
         setError(null)
       } else if (event.type === 'message') {
-        setMessages((prev) => [
-          ...prev,
+        setMessageLog((prev) => appendBoundedMessages(prev, [
           { id: crypto.randomUUID(), direction: 'in', data: event.data ?? '', timestamp: event.timestamp ?? Date.now() },
-        ])
+        ]))
       } else if (event.type === 'close') {
         setConnected(false)
         setConnecting(false)
@@ -61,7 +61,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [messages])
+  }, [messageLog])
 
   const connect = async () => {
     if (!url.trim()) return
@@ -89,12 +89,13 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
     if (!sendText.trim() || !connected) return
     const msg = sendText
     setSendText('')
-    setMessages((prev) => [
-      ...prev,
+    setMessageLog((prev) => appendBoundedMessages(prev, [
       { id: crypto.randomUUID(), direction: 'out', data: msg, timestamp: Date.now() },
-    ])
+    ]))
     await window.api.ws.send({ connectionId: connectionId.current, message: msg })
   }
+
+  const messages = messageLog.items
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -107,7 +108,7 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
         {error && <span className="flex-1 truncate text-xs text-rose-400 light:text-rose-800">{error}</span>}
         <div className="ml-auto flex items-center gap-1">
           <button
-            onClick={() => setMessages([])}
+            onClick={() => setMessageLog(clearBoundedMessages<WsMessage>())}
             className="rounded-sm p-1 text-th-text-faint hover:text-th-text-subtle focus:outline-hidden"
             title="Clear messages"
           >
@@ -134,6 +135,11 @@ export function WebSocketView({ url, headers, onHeadersChange }: WebSocketViewPr
 
       {/* Message log */}
       <div ref={logRef} className="flex-1 overflow-y-auto p-2 font-mono text-xs">
+        {messageLog.dropped > 0 && (
+          <div data-testid="ws-messages-dropped" className="mb-2 rounded-sm border border-amber-500/20 bg-amber-900/10 px-2 py-1 text-amber-400 light:text-amber-800">
+            {messageLog.dropped.toLocaleString()} older messages dropped.
+          </div>
+        )}
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-th-text-faint">
             No messages yet

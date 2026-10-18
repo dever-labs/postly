@@ -28,16 +28,21 @@ function statusClass(status: number): string {
 }
 
 export function HistoryPanel() {
-  const { entries, search, setSearch, load, open, remove, clear } = useHistoryStore()
+  const entries = useHistoryStore((state) => state.entries)
+  const search = useHistoryStore((state) => state.search)
+  const setSearch = useHistoryStore((state) => state.setSearch)
+  const load = useHistoryStore((state) => state.load)
+  const open = useHistoryStore((state) => state.open)
+  const remove = useHistoryStore((state) => state.remove)
+  const clear = useHistoryStore((state) => state.clear)
   const clearSelectedItem = useUIStore((s) => s.clearSelectedItem)
   const openHistoryEntry = useRequestsStore((s) => s.openHistoryEntry)
   const activeRequestId = useRequestsStore((s) => s.activeRequestId)
-  const response = useRequestsStore((s) => s.response)
 
   useEffect(() => {
     const t = setTimeout(() => { void load() }, search ? 150 : 0)
     return () => clearTimeout(t)
-  }, [search, load, response])
+  }, [search, load])
 
   const handleOpen = async (entry: HistoryEntrySummary) => {
     const detail = await open(entry.id)

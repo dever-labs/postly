@@ -63,11 +63,17 @@ function pcGet(config: Record<string, string>, key: string): string {
 }
 
 export function RequestEditor() {
-  const { editingRequest, isLoading, updateField, sendRequest, cancelRequest, saveRequest, discardDraft } = useRequestsStore()
+  const editingRequest = useRequestsStore((state) => state.editingRequest)
+  const isLoading = useRequestsStore((state) => state.isLoading)
+  const updateField = useRequestsStore((state) => state.updateField)
+  const sendRequest = useRequestsStore((state) => state.sendRequest)
+  const cancelRequest = useRequestsStore((state) => state.cancelRequest)
+  const saveRequest = useRequestsStore((state) => state.saveRequest)
+  const discardDraft = useRequestsStore((state) => state.discardDraft)
   const folders = useCollectionsStore((s) => s.folders)
   const inheritedNetwork = useInheritedNetwork(editingRequest?.folderId)
   const integrations = useIntegrationsStore((s) => s.integrations)
-  const { selectItem } = useUIStore()
+  const selectItem = useUIStore((state) => state.selectItem)
   const openGitAction = useUIStore((s) => s.openGitAction)
   const { go } = useNavigationStore.getState()
   const requestIds = useCollectionsStore((s) => s.requests)
