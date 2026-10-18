@@ -64,7 +64,7 @@ export function GitLabSettings() {
       addToast(`Failed to disconnect: ${error}`, 'error')
     } else {
       addToast('Disconnected from GitLab', 'success')
-      setSettings((prev) => ({ ...prev, token: '', connectedUser: undefined }))
+      setSettings((prev) => ({ ...prev, token: '', hasToken: false, connectedUser: undefined }))
       loadSettings()
     }
   }

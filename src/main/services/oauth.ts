@@ -1,5 +1,5 @@
 import { BrowserWindow, session } from 'electron'
-import { SECURE_WEB_PREFERENCES } from '../security'
+import { SECURE_WEB_PREFERENCES, denySessionPermissions, lockDownAuthWindow } from '../security'
 import crypto from 'crypto'
 import https from 'https'
 import axios from 'axios'
@@ -198,6 +198,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
     ? `persist:oauth-${config.id}`
     : `persist:oauth-ssl-disabled-${config.id}`
   const s = session.fromPartition(partitionName)
+  denySessionPermissions(s)
   if (!sslVerification) {
     s.setCertificateVerifyProc((_req, callback) => callback(0))
   }
@@ -208,6 +209,7 @@ export async function authorizeAuthCode(config: OAuthConfig, sslVerification = t
     autoHideMenuBar: true,
     webPreferences: { ...SECURE_WEB_PREFERENCES, partition: partitionName }
   })
+  lockDownAuthWindow(win, [redirectUri])
   // Register listener BEFORE loadURL so the redirect is caught even if
   // Keycloak completes it instantly (e.g. an existing session).
   const redirectPromise = waitForRedirect(redirectUri, state, win)

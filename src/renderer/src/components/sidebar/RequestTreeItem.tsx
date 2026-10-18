@@ -9,6 +9,8 @@ import { AiActionButton } from '@/components/ai/AiActionButton'
 import { MenuItem, RowMenu } from '@/components/ui/RowMenu'
 import { useTreeItem } from '@/components/ui/Tree'
 import { cn } from '@/lib/utils'
+import { useCollectionsStore } from '@/store/collections'
+import { getRootCollection } from '@/lib/folder-tree'
 
 const METHOD_COLORS: Record<string, 'green' | 'yellow' | 'blue' | 'red' | 'orange' | 'purple' | 'grey'> = {
   GET: 'green',
@@ -43,6 +45,9 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, l
   const [renaming, setRenaming] = useState(false)
   const [nameValue, setNameValue] = useState(request.name)
   const selectItem = useUIStore((s) => s.selectItem)
+  const openGitAction = useUIStore((s) => s.openGitAction)
+  const folders = useCollectionsStore((s) => s.folders)
+  const syncRequest = useCollectionsStore((s) => s.syncRequest)
   const treeItem = useTreeItem({ itemKey: `req:${request.id}`, level, selected: isActive })
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId })
@@ -50,7 +55,18 @@ export function RequestTreeItem({ request, isActive, onClick, onDelete, dndId, l
 
   const handleRename = async () => {
     if (nameValue.trim()) {
-      await window.api.requests.update({ id: request.id, name: nameValue.trim() })
+      const nextName = nameValue.trim()
+      await window.api.requests.update({ id: request.id, name: nextName })
+      syncRequest({ ...request, name: nextName })
+      const collection = getRootCollection(request.folderId, folders)
+      if (collection && ['git', 'github', 'gitlab'].includes(collection.source)) {
+        openGitAction({
+          type: 'push',
+          collectionId: collection.id,
+          title: `Renamed endpoint to '${nextName}'`,
+          subtitle: collection.name,
+        })
+      }
     }
     setRenaming(false)
   }

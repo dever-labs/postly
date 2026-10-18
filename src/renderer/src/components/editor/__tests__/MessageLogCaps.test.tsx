@@ -77,6 +77,7 @@ describe('message log caps', () => {
   it('drops older MQTT messages, shows an indicator, and clears the log', async () => {
     render(
       <MqttView
+        brokerUrl="mqtt://localhost:1883"
         clientId=""
         username=""
         password=""

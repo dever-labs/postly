@@ -13,9 +13,25 @@ export interface MqttConnectOptions {
 interface MqttConnection {
   client: MqttClient
   sender: WebContents
+  detachSenderDestroyed: () => void
 }
 
 const connections = new Map<string, MqttConnection>()
+
+function canSendTo(sender: WebContents): boolean {
+  return !sender.isDestroyed()
+}
+
+function safeSend(sender: WebContents, payload: Record<string, unknown>): void {
+  if (canSendTo(sender)) sender.send('postly:mqtt:event', payload)
+}
+
+function detachSenderDestroyed(sender: WebContents, handler: () => void): () => void {
+  sender.once('destroyed', handler)
+  return () => {
+    sender.off('destroyed', handler)
+  }
+}
 
 export async function connectMqtt(
   connectionId: string,
@@ -26,8 +42,10 @@ export async function connectMqtt(
 ): Promise<void> {
   const { default: mqtt } = await import('mqtt')
   return new Promise((resolve, reject) => {
+    let settled = false
     const existing = connections.get(connectionId)
     if (existing) {
+      existing.detachSenderDestroyed()
       existing.client.end(true)
       connections.delete(connectionId)
     }
@@ -42,14 +60,41 @@ export async function connectMqtt(
       ...tls,
     })
 
+    const removeConnection = () => {
+      if (connections.get(connectionId)?.client === client) connections.delete(connectionId)
+    }
+    const onSenderDestroyed = () => {
+      const mapped = connections.get(connectionId)
+      if (mapped && mapped.client !== client) return
+      removeConnection()
+      client.removeAllListeners()
+      client.on('error', () => {})
+      client.end(true)
+      if (!settled) {
+        settled = true
+        reject(new Error('Renderer was destroyed before the connection opened'))
+      }
+    }
+    const detachDestroyed = detachSenderDestroyed(sender, onSenderDestroyed)
+
     client.on('connect', () => {
-      connections.set(connectionId, { client, sender })
-      sender.send('postly:mqtt:event', { connectionId, type: 'connect' })
+      if (!canSendTo(sender)) {
+        detachDestroyed()
+        client.removeAllListeners()
+        client.on('error', () => {})
+        client.end(true)
+        settled = true
+        reject(new Error('Renderer was destroyed before the connection opened'))
+        return
+      }
+      connections.set(connectionId, { client, sender, detachSenderDestroyed: detachDestroyed })
+      safeSend(sender, { connectionId, type: 'connect' })
+      settled = true
       resolve()
     })
 
     client.on('message', (topic: string, payload: Buffer) => {
-      sender.send('postly:mqtt:event', {
+      safeSend(sender, {
         connectionId,
         type: 'message',
         topic,
@@ -59,18 +104,21 @@ export async function connectMqtt(
     })
 
     client.on('disconnect', () => {
-      sender.send('postly:mqtt:event', { connectionId, type: 'disconnect' })
+      safeSend(sender, { connectionId, type: 'disconnect' })
     })
 
     client.on('close', () => {
-      connections.delete(connectionId)
-      sender.send('postly:mqtt:event', { connectionId, type: 'close' })
+      removeConnection()
+      safeSend(sender, { connectionId, type: 'close' })
     })
 
     client.on('error', (err: Error) => {
-      connections.delete(connectionId)
-      sender.send('postly:mqtt:event', { connectionId, type: 'error', message: err.message })
-      reject(err)
+      removeConnection()
+      safeSend(sender, { connectionId, type: 'error', message: err.message })
+      if (!settled) {
+        settled = true
+        reject(err)
+      }
     })
   })
 }
@@ -102,6 +150,7 @@ export function publishMqtt(
 export function disconnectMqtt(connectionId: string): void {
   const conn = connections.get(connectionId)
   if (conn) {
+    conn.detachSenderDestroyed()
     conn.client.end()
     connections.delete(connectionId)
   }

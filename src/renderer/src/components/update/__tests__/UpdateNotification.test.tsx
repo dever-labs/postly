@@ -38,8 +38,10 @@ describe('UpdateNotification layout', () => {
     }
   })
 
-  it('is as tall as the window controls', () => {
-    expect(mount('win32').className).toContain('h-8')
+  it('uses the shared drag-strip spacing', () => {
+    const banner = mount('win32')
+    expect(banner.className).toContain('pt-8')
+    expect(banner.className).toContain('pb-4')
   })
 })
 

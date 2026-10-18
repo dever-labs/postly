@@ -114,7 +114,28 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSidebarWidth: (w: number) => set({ sidebarWidth: isNaN(w) ? 280 : w }),
   setEditorHeight: (h: number) => set({ editorHeight: isNaN(h) ? 300 : h }),
 
-  openGitAction: (action: GitPendingAction) => set({ pendingGitAction: action }),
+  openGitAction: (action: GitPendingAction) => set((state) => {
+    const current = state.pendingGitAction
+    if (
+      current?.type === 'push' &&
+      action.type === 'push' &&
+      current.collectionId === action.collectionId &&
+      (current.onCancel || action.onCancel)
+    ) {
+      const currentCancel = current.onCancel
+      const nextCancel = action.onCancel
+      return {
+        pendingGitAction: {
+          ...current,
+          onCancel: async () => {
+            await currentCancel?.()
+            await nextCancel?.()
+          },
+        },
+      }
+    }
+    return { pendingGitAction: action }
+  }),
   closeGitAction: () => set({ pendingGitAction: null }),
 
   openDeleteCollection: (collectionId: string) => set({ deletingCollectionId: collectionId }),

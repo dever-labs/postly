@@ -29,7 +29,34 @@ type FolderLineageRow = {
   integration_id: string | null
 }
 
-let currentAbortController: AbortController | null = null
+type ExecuteHttpRequest = HttpRequest & { requestId?: string }
+
+const activeAbortControllers = new Map<string, {
+  controller: AbortController
+  senderId: number | null
+  requestId: string | null
+}>()
+let anonymousAbortRequestId = 0
+
+function registerAbortController(senderId: number | null, requestId: string | undefined, controller: AbortController): string {
+  const controllerRequestId = requestId ?? `__anonymous__:${++anonymousAbortRequestId}`
+  const key = `${senderId ?? 'unknown'}:${controllerRequestId}`
+  activeAbortControllers.set(key, { controller, senderId, requestId: requestId ?? null })
+  return key
+}
+
+function clearAbortController(key: string): void {
+  activeAbortControllers.delete(key)
+}
+
+function abortMatchingRequests(senderId?: number | null, requestId?: string): void {
+  for (const [key, entry] of activeAbortControllers) {
+    if (senderId !== undefined && entry.senderId !== senderId) continue
+    if (requestId !== undefined && entry.requestId !== requestId) continue
+    entry.controller.abort()
+    activeAbortControllers.delete(key)
+  }
+}
 
 function protocolOf(req: HttpRequest): string {
   return (req as HttpRequest & { protocol?: string }).protocol ?? 'http'
@@ -113,14 +140,15 @@ function extractFromResponse(
 }
 
 export function registerHttpHandlers(): void {
-  ipcMain.handle('postly:http:cancel', () => {
-    currentAbortController?.abort()
-    currentAbortController = null
+  ipcMain.handle('postly:http:cancel', (event, args?: { requestId?: string }) => {
+    const senderId = 'sender' in event && event.sender ? event.sender.id : undefined
+    abortMatchingRequests(senderId, args?.requestId)
   })
 
-  ipcMain.handle('postly:http:execute', async (event: IpcMainInvokeEvent, req: HttpRequest) => {
+  ipcMain.handle('postly:http:execute', async (event: IpcMainInvokeEvent, req: ExecuteHttpRequest) => {
     const logs: LogEntry[] = []
     const log = (level: LogLevel, message: string, detail?: string) => logs.push({ level, message, detail })
+    let abortControllerKey: string | null = null
 
     try {
       const activeEnv = queryOne<{ id: string; name: string }>(
@@ -291,14 +319,13 @@ export function registerHttpHandlers(): void {
       if (!cookieJar.enabled) log('info', 'Cookie jar: disabled')
 
       const controller = new AbortController()
-      currentAbortController = controller
+      abortControllerKey = registerAbortController(event.sender.id, req.requestId, controller)
       const { raw, finalUrl, ...response } = await executeRequest(interpolatedReq, {
         sslVerification, followRedirects, maxRedirects, timeout, cookieJar, tlsFor: tlsSelectionFor,
         signal: controller.signal,
         onStream: (message) => { if (!event.sender.isDestroyed()) event.sender.send('postly:http:stream', message) },
         onLog: (entry) => log(entry.level, entry.message, entry.detail)
       })
-      currentAbortController = null
       try {
         recordHistory(
           { ...req, protocol: protocolOf(req) },
@@ -312,9 +339,10 @@ export function registerHttpHandlers(): void {
       const bodyId = raw ? storeResponseBody({ raw, headers: response.headers, url: finalUrl ?? req.url }) : undefined
       return { data: { ...response, bodyId, logs, extracted } }
     } catch (err) {
-      currentAbortController = null
       log('error', `Unexpected error: ${String(err)}`)
       return { error: String(err), logs }
+    } finally {
+      if (abortControllerKey) clearAbortController(abortControllerKey)
     }
   })
 }

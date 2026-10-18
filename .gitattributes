@@ -1,0 +1,17 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.p12 binary
+*.pfx binary
+*.db binary
+*.asar binary
+*.zip binary
+*.dmg binary
+*.AppImage binary
+*.exe binary

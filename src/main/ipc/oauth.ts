@@ -30,6 +30,19 @@ function toMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+function toTokenInfo(token: Awaited<ReturnType<typeof getValidToken>>): Record<string, unknown> | null {
+  if (!token) return null
+  return {
+    id: token.id,
+    oauthConfigId: token.oauthConfigId,
+    tokenType: token.tokenType,
+    expiresAt: token.expiresAt,
+    scope: token.scope,
+    createdAt: token.createdAt,
+    hasRefreshToken: Boolean(token.refreshToken),
+  }
+}
+
 export function registerOAuthHandlers(): void {
   ipcMain.handle('postly:oauth:configs:list', async () => {
     try {
@@ -71,12 +84,12 @@ export function registerOAuthHandlers(): void {
       const token = config.grantType === 'authorization_code'
         ? await authorizeAuthCode(config, sslVerification)
         : await clientCredentials(config, sslVerification)
-      return { data: token }
+      return { data: toTokenInfo(token) }
     } catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:token:get', async (_, args: { configId: string }) => {
-    try { return { data: await getValidToken(args.configId, getGeneralSettings().sslVerification) } }
+    try { return { data: toTokenInfo(await getValidToken(args.configId, getGeneralSettings().sslVerification)) } }
     catch (err) { return { error: toMessage(err) } }
   })
 
@@ -88,12 +101,12 @@ export function registerOAuthHandlers(): void {
   // ── Inline config handlers (config stored directly on entity, no oauth_configs row) ──
 
   ipcMain.handle('postly:oauth:inline:authorize', async (_, config: OAuthConfig) => {
-    try { return { data: await authorizeInline(config, getGeneralSettings().sslVerification) } }
+    try { return { data: toTokenInfo(await authorizeInline(config, getGeneralSettings().sslVerification)) } }
     catch (err) { return { error: toMessage(err) } }
   })
 
   ipcMain.handle('postly:oauth:inline:token:get', async (_, config: OAuthConfig) => {
-    try { return { data: await getValidTokenForConfig(config, getGeneralSettings().sslVerification) } }
+    try { return { data: toTokenInfo(await getValidTokenForConfig(config, getGeneralSettings().sslVerification)) } }
     catch (err) { return { error: toMessage(err) } }
   })
 

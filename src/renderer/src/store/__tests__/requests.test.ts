@@ -213,9 +213,23 @@ describe('useRequestsStore — sendRequest', () => {
 })
 
 describe('useRequestsStore — cancelRequest', () => {
-  it('calls window.api.http.cancel', () => {
+  it('passes the in-flight request id to window.api.http.cancel', async () => {
+    let resolveExecute!: (v: unknown) => void
+    mockHttpExecute.mockReturnValue(new Promise((resolve) => { resolveExecute = resolve }))
+    useRequestsStore.setState({ editingRequest: makeRequest({ id: 'req-in-flight' }) })
+
+    const sendPromise = useRequestsStore.getState().sendRequest()
+    useRequestsStore.setState({ editingRequest: makeRequest({ id: 'req-other' }) })
     useRequestsStore.getState().cancelRequest()
-    expect(mockHttpCancel).toHaveBeenCalledOnce()
+
+    expect(mockHttpCancel).toHaveBeenCalledWith({ requestId: 'req-in-flight' })
+    resolveExecute({ data: makeResponse() })
+    await sendPromise
+  })
+
+  it('falls back to a plain cancel when no request is selected', () => {
+    useRequestsStore.getState().cancelRequest()
+    expect(mockHttpCancel).toHaveBeenCalledWith(undefined)
   })
 })
 

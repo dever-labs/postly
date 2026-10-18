@@ -1,0 +1,14 @@
+# CI / release automation
+/.github/workflows/ @czprz
+/.github/RELEASE_TEMPLATE.md @czprz
+/.release-please-manifest.json @czprz
+/release-please-config.json @czprz
+
+# Packaging and release configuration
+/build/ @czprz
+/resources/entitlements.mac.plist @czprz
+/package.json @czprz
+
+# Security-sensitive application code and policy
+/src/main/ @czprz
+/SECURITY.md @czprz

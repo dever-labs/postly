@@ -38,13 +38,20 @@ vi.mock('../../database', () => ({
 // assert that the correct persistent partition is used on each auth attempt.
 
 const mockSetCertVerifyProc = vi.hoisted(() => vi.fn())
+const mockSetPermissionRequestHandler = vi.hoisted(() => vi.fn())
+const mockSetPermissionCheckHandler = vi.hoisted(() => vi.fn())
 const partitionHistory: string[] = []
 
 const mockFlushStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockFromPartition = vi.hoisted(() =>
   vi.fn().mockImplementation((name: string) => {
     partitionHistory.push(name)
-    return { setCertificateVerifyProc: mockSetCertVerifyProc, cookies: { flushStore: mockFlushStore } }
+    return {
+      setCertificateVerifyProc: mockSetCertVerifyProc,
+      setPermissionRequestHandler: mockSetPermissionRequestHandler,
+      setPermissionCheckHandler: mockSetPermissionCheckHandler,
+      cookies: { flushStore: mockFlushStore },
+    }
   }),
 )
 
@@ -78,6 +85,11 @@ vi.mock('electron', () => {
         }, 30)
       }),
       webContents: {
+        session: {
+          setPermissionRequestHandler: vi.fn(),
+          setPermissionCheckHandler: vi.fn(),
+        },
+        setWindowOpenHandler: vi.fn(),
         on: vi.fn().mockImplementation(
           (
             event: string,

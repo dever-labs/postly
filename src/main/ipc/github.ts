@@ -88,11 +88,14 @@ export function registerGitHubHandlers(): void {
 
   ipcMain.handle('postly:github:oauth', async (_, args: { baseUrl: string; clientId: string; clientSecret: string }) => {
     try {
-      const result = await startGitHubOAuth(args)
       const existing = queryOne<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['github'])
       const current = existing ? JSON.parse(existing.value) : {}
+      const result = await startGitHubOAuth({
+        ...args,
+        clientSecret: args.clientSecret || current.clientSecret || '',
+      })
       run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
-        ['github', JSON.stringify({ ...current, ...args, token: result.token, connectedUser: result.user }), Date.now()])
+        ['github', JSON.stringify({ ...current, ...args, clientSecret: args.clientSecret || current.clientSecret || '', token: result.token, connectedUser: result.user }), Date.now()])
       return { data: { user: result.user } }
     } catch (err) { return { error: String(err) } }
   })

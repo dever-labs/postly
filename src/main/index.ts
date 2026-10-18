@@ -2,14 +2,15 @@ import { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog } from 'electron
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { platform } from 'process'
-import { initDatabase, preloadSqlJs, flushPersist, quarantineUnreadableDatabase, installPersistFlushHandlers } from './database'
+import { initDatabase, preloadSqlJs, flushPersist, quarantineUnreadableDatabase } from './database'
 import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
 import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
 
-if (process.env['POSTLY_USER_DATA_DIR']) {
-  app.setPath('userData', process.env['POSTLY_USER_DATA_DIR'])
+const userDataOverride = process.env['POSTLY_USER_DATA_DIR']
+if (userDataOverride) {
+  app.setPath('userData', userDataOverride)
 }
 
 function createWindow(): BrowserWindow {
@@ -130,7 +131,6 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', flushPersist)
-installPersistFlushHandlers()
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

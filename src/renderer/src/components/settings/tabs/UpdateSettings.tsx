@@ -11,10 +11,17 @@ export function UpdateSettings() {
   const [settings, setSettings] = useState(DEFAULTS)
   const [updateStatus, setUpdateStatus] = useState<string>('')
   const [enterpriseUrl, setEnterpriseUrl] = useState<string | null>(null)
+  const [draftFeedUrl, setDraftFeedUrl] = useState('')
+  const [feedError, setFeedError] = useState<string | null>(null)
+  const [savingFeed, setSavingFeed] = useState(false)
 
   useEffect(() => {
     window.api.settings.get({ key: 'general' }).then(({ data }: { data: GeneralSettings }) => {
-      if (data) setSettings({ autoUpdate: data.autoUpdate ?? true, updateFeedUrl: data.updateFeedUrl })
+      if (data) {
+        const next = { autoUpdate: data.autoUpdate ?? true, updateFeedUrl: data.updateFeedUrl }
+        setSettings(next)
+        setDraftFeedUrl(next.updateFeedUrl ?? '')
+      }
     })
     window.api.updater.getEnterpriseConfig().then(({ data }) => {
       setEnterpriseUrl(data?.updateUrl ?? null)
@@ -32,13 +39,32 @@ export function UpdateSettings() {
     return () => { off() }
   }, [])
 
-  const update = (key: 'autoUpdate' | 'updateFeedUrl', value: boolean | string | undefined) => {
+  const update = (key: 'autoUpdate', value: boolean) => {
     const next = { ...settings, [key]: value }
     setSettings(next)
     window.api.settings.get({ key: 'general' }).then(({ data }: { data: GeneralSettings }) => {
       window.api.settings.set({ key: 'general', value: { ...data, ...next } })
-      window.api.updater.setFeed({ url: (next.updateFeedUrl ?? '') })
     })
+  }
+
+  const applyFeedUrl = async (rawValue = draftFeedUrl) => {
+    const nextUrl = rawValue.trim() || undefined
+    setSavingFeed(true)
+    const { error } = await window.api.updater.setFeed({ url: nextUrl ?? '' })
+    if (error) {
+      setFeedError(String(error))
+      setSavingFeed(false)
+      return
+    }
+
+    const { data } = await window.api.settings.get({ key: 'general' }) as { data: GeneralSettings }
+    const next = { autoUpdate: settings.autoUpdate ?? true, updateFeedUrl: nextUrl }
+    await window.api.settings.set({ key: 'general', value: { ...data, ...next } })
+    setSettings(next)
+    setDraftFeedUrl(nextUrl ?? '')
+    setFeedError(null)
+    setUpdateStatus(nextUrl ? 'Internal update server saved.' : 'Using the default GitHub Releases channel.')
+    setSavingFeed(false)
   }
 
   const handleCheckNow = () => {
@@ -112,9 +138,35 @@ export function UpdateSettings() {
               type="url"
               className="w-full max-w-sm"
               placeholder="https://updates.internal.corp/postly/"
-              value={settings.updateFeedUrl ?? ''}
-              onChange={(e) => update('updateFeedUrl', e.target.value || undefined)}
+              value={draftFeedUrl}
+              onChange={(e) => {
+                setDraftFeedUrl(e.target.value)
+                setFeedError(null)
+              }}
             />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={() => { void applyFeedUrl() }}
+                disabled={savingFeed || draftFeedUrl === (settings.updateFeedUrl ?? '')}
+                className="rounded-sm border border-th-border bg-th-surface-raised px-3 py-1.5 text-xs text-th-text-secondary hover:text-th-text-primary hover:border-th-border-active transition-colors disabled:opacity-50"
+              >
+                {savingFeed ? 'Saving…' : 'Apply'}
+              </button>
+              <button
+                onClick={() => {
+                  setDraftFeedUrl('')
+                  setFeedError(null)
+                  void applyFeedUrl('')
+                }}
+                disabled={savingFeed}
+                className="rounded-sm border border-th-border px-3 py-1.5 text-xs text-th-text-muted hover:text-th-text-secondary transition-colors disabled:opacity-50"
+              >
+                Use GitHub Releases
+              </button>
+            </div>
+            {feedError && (
+              <p className="mt-1.5 text-xs text-rose-400 light:text-rose-800">{feedError}</p>
+            )}
             <p className="mt-1.5 text-xs text-th-text-muted">
               Leave blank to use the default GitHub Releases channel.
             </p>

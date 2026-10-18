@@ -1,13 +1,17 @@
 import { ipcMain } from 'electron'
 import { checkForUpdates, downloadUpdate, installUpdate, applyFeedUrl, getEnterpriseConfig } from '../services/updater'
 
+function toMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export function registerUpdaterHandlers(): void {
   ipcMain.handle('postly:updater:check', () => {
     try {
       checkForUpdates()
       return { data: true }
     } catch (err) {
-      return { error: String(err) }
+      return { error: toMessage(err) }
     }
   })
 
@@ -16,7 +20,7 @@ export function registerUpdaterHandlers(): void {
       downloadUpdate()
       return { data: true }
     } catch (err) {
-      return { error: String(err) }
+      return { error: toMessage(err) }
     }
   })
 
@@ -25,7 +29,7 @@ export function registerUpdaterHandlers(): void {
       installUpdate()
       return { data: true }
     } catch (err) {
-      return { error: String(err) }
+      return { error: toMessage(err) }
     }
   })
 
@@ -38,7 +42,7 @@ export function registerUpdaterHandlers(): void {
       }
       return { data: true }
     } catch (err) {
-      return { error: String(err) }
+      return { error: toMessage(err) }
     }
   })
 
@@ -46,7 +50,7 @@ export function registerUpdaterHandlers(): void {
     try {
       return { data: getEnterpriseConfig() }
     } catch (err) {
-      return { error: String(err) }
+      return { error: toMessage(err) }
     }
   })
 }

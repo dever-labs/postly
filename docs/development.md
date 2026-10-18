@@ -4,8 +4,8 @@
 
 | Tool | Version |
 |---|---|
-| Node.js | 20+ |
-| npm | 9+ |
+| Node.js | 22+ |
+| npm | 10+ |
 | Git | any recent |
 
 > **Windows only:** If building native modules, you may need the Visual Studio Build Tools. Run `npm install --global windows-build-tools` if you hit compilation errors.
@@ -56,9 +56,9 @@ postly/
 
 | Layer | Technology |
 |---|---|
-| Shell | Electron 29 |
+| Shell | Electron 42 |
 | Renderer build | Vite + electron-vite |
-| UI | React 18 + TypeScript |
+| UI | React 19 + TypeScript |
 | Styling | Tailwind CSS |
 | State | Zustand |
 | Database | sql.js (SQLite in WASM) |

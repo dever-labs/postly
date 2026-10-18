@@ -24,6 +24,7 @@ type StreamMessage =
 let pendingResume: { lastEventId: string; previous: StreamState } | null = null
 let streamGenerationCounter = 0
 let activeStreamGeneration: number | null = null
+let activeHttpRequestId: string | null = null
 
 const endStream = (stream: StreamState | null): StreamState | null => (stream ? { ...stream, active: false } : null)
 
@@ -320,6 +321,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const requestId = editingRequest.id
     const streamGeneration = ++streamGenerationCounter
     activeStreamGeneration = streamGeneration
+    activeHttpRequestId = requestId
     pendingResume = null
     set({ isLoading: true, response: null, stream: null })
 
@@ -339,6 +341,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     }
 
     const httpRequest: HttpRequest = {
+      requestId,
       method: editingRequest.protocol === 'graphql' ? 'POST' : editingRequest.method,
       url: editingRequest.url,
       headers: kvpToRecord(editingRequest.headers),
@@ -402,6 +405,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
     } finally {
       void useHistoryStore.getState().load()
+      if (activeHttpRequestId === requestId) activeHttpRequestId = null
       setTimeout(() => {
         if (activeStreamGeneration === streamGeneration) activeStreamGeneration = null
         offStream()
@@ -417,9 +421,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     pendingResume = { lastEventId: last, previous: stream }
     void get().sendRequest()
   },
-
   cancelRequest: () => {
-    void window.api.http.cancel()
+    void window.api.http.cancel(activeHttpRequestId ? { requestId: activeHttpRequestId } : undefined)
   },
 
   saveRequest: async () => {
