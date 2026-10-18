@@ -215,6 +215,7 @@ test.describe('Git commit overlay CRUD', () => {
     }).not.toBe('')
     await expect(window.getByText(collectionName, { exact: true }).first()).toBeVisible()
     await window.getByRole('button', { name: `Add request to ${collectionName}` }).click()
+    await commitOverlay(window, 'test: add git-backed endpoint')
     await window.getByText('New Request', { exact: true }).last().click()
     await expect(window.getByPlaceholder('Request name')).toBeVisible()
     await expect(window.getByPlaceholder('Request name')).toHaveValue('New Request')
