@@ -11,18 +11,18 @@ type PreparedFixtures = {
 }
 
 const stamp = Date.now()
-const generated = path.join(__dirname, '.generated-import-mockly')
+const generated = path.join(__dirname, '.generated-imported-requests')
 
 const names = {
-  postmanCollection: `Mockly Postman ${stamp}`,
+  postmanCollection: `Imported Postman ${stamp}`,
   postmanRequest: `Create imported widget ${stamp}`,
-  postmanEnvironment: `Mockly Environment ${stamp}`,
-  urlCollection: `Mockly URL Import ${stamp}`,
-  openApiCollection: `Mockly OpenAPI ${stamp}`,
+  postmanEnvironment: `Imported Environment ${stamp}`,
+  urlCollection: `URL Import ${stamp}`,
+  openApiCollection: `Imported OpenAPI ${stamp}`,
   openApiFolder: 'orders',
   openApiRequest: `Get order ${stamp}`,
-  primaryEnvironment: `Primary Mockly ${stamp}`,
-  secondaryEnvironment: `Secondary Mockly ${stamp}`,
+  primaryEnvironment: `Primary ${stamp}`,
+  secondaryEnvironment: `Secondary ${stamp}`,
 }
 
 const mockIds = {
@@ -344,8 +344,8 @@ test.afterAll(async ({ window }) => {
   fs.rmSync(generated, { recursive: true, force: true })
 })
 
-test.describe('Mockly-backed imports', () => {
-  test('imports a Postman collection and environment, then sends the imported request through Mockly', async ({ window }) => {
+test.describe('Imported requests', () => {
+  test('imports a Postman collection and environment and sends the imported request', async ({ window }) => {
     await importFile(window, prepared.postmanCollection)
     await expect(window.getByTestId('import-format')).toContainText('Postman')
     await finishImport(window, names.postmanCollection)
@@ -376,7 +376,7 @@ test.describe('Mockly-backed imports', () => {
     expect(calls[0].path).toBe(`/imported/widgets/${postmanVars.widgetId}`)
   })
 
-  test('imports an OpenAPI document from a Mockly URL, following redirects and surfacing 404 errors', async ({ window }) => {
+  test('imports an OpenAPI document from a URL, following redirects and surfacing 404 errors', async ({ window }) => {
     await openImport(window)
     await window.getByTestId('import-url').fill(`${mockly.httpBase}/docs/missing`)
     await window.getByTestId('import-url-fetch').click()
@@ -388,7 +388,7 @@ test.describe('Mockly-backed imports', () => {
     await finishImport(window, names.urlCollection)
   })
 
-  test('imports OpenAPI server environments pointing at Mockly and sends through the selected server', async ({ window }) => {
+  test('imports OpenAPI server environments and sends through the selected server', async ({ window }) => {
     await importFile(window, prepared.openApiFile)
     await expect(window.getByTestId('import-format')).toContainText('OpenAPI')
     await finishImport(window, names.openApiCollection)
