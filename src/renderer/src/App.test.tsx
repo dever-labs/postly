@@ -4,8 +4,23 @@ import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
+const mockLoadCollections = vi.fn(async () => undefined)
+const mockLoadEnvironments = vi.fn(async () => undefined)
+const mockLoadIntegrations = vi.fn(async () => undefined)
 const mockLoadVariables = vi.fn(async () => undefined)
-const mockWaitForReady = vi.fn(async () => undefined)
+const mockWaitForReady = vi.fn()
+
+vi.mock('./store/collections', () => ({
+  useCollectionsStore: (selector: (state: { load: typeof mockLoadCollections }) => unknown) => selector({ load: mockLoadCollections }),
+}))
+
+vi.mock('./store/environments', () => ({
+  useEnvironmentsStore: (selector: (state: { load: typeof mockLoadEnvironments }) => unknown) => selector({ load: mockLoadEnvironments }),
+}))
+
+vi.mock('./store/integrations', () => ({
+  useIntegrationsStore: (selector: (state: { load: typeof mockLoadIntegrations }) => unknown) => selector({ load: mockLoadIntegrations }),
+}))
 
 vi.mock('./store/variables', () => ({
   useVariablesStore: (selector: (state: { load: typeof mockLoadVariables }) => unknown) => selector({ load: mockLoadVariables }),
@@ -27,6 +42,9 @@ vi.mock('./components/shortcuts/ShortcutCheatSheet', () => ({ ShortcutCheatSheet
 
 describe('App', () => {
   beforeEach(() => {
+    mockLoadCollections.mockClear()
+    mockLoadEnvironments.mockClear()
+    mockLoadIntegrations.mockClear()
     mockLoadVariables.mockClear()
     mockWaitForReady.mockClear()
     Object.defineProperty(window, 'api', {
@@ -38,10 +56,25 @@ describe('App', () => {
     })
   })
 
-  it('loads variables once the app is ready', async () => {
+  it('waits for readiness before loading app data', async () => {
+    let resolveReady: () => void = () => undefined
+    mockWaitForReady.mockReturnValue(new Promise<void>((resolve) => { resolveReady = resolve }))
+
     render(<App />)
 
     await waitFor(() => expect(mockWaitForReady).toHaveBeenCalledOnce())
-    await waitFor(() => expect(mockLoadVariables).toHaveBeenCalledOnce())
+    expect(mockLoadCollections).not.toHaveBeenCalled()
+    expect(mockLoadEnvironments).not.toHaveBeenCalled()
+    expect(mockLoadIntegrations).not.toHaveBeenCalled()
+    expect(mockLoadVariables).not.toHaveBeenCalled()
+
+    resolveReady()
+
+    await waitFor(() => {
+      expect(mockLoadCollections).toHaveBeenCalledOnce()
+      expect(mockLoadEnvironments).toHaveBeenCalledOnce()
+      expect(mockLoadIntegrations).toHaveBeenCalledOnce()
+      expect(mockLoadVariables).toHaveBeenCalledOnce()
+    })
   })
 })

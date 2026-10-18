@@ -1,5 +1,5 @@
 import { Globe, History, Layers, Settings, Link, Download, Upload } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { WorkingSet } from '@/components/sidebar/WorkingSet'
@@ -10,7 +10,6 @@ import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Badge } from '@/components/ui/Badge'
 import { Tree } from '@/components/ui/Tree'
 import { useCollectionsStore } from '@/store/collections'
-import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -118,21 +117,14 @@ async function handleDragEnd(event: DragEndEvent) {
 }
 
 export function CollectionsSidebar() {
-  const { folders, requests, searchQuery, load } = useCollectionsStore()
-  const { integrations, load: loadIntegrations } = useIntegrationsStore()
-  const { load: loadEnvironments } = useEnvironmentsStore()
+  const { folders, requests, searchQuery } = useCollectionsStore()
+  const { integrations } = useIntegrationsStore()
   const selectItem = useUIStore((state) => state.selectItem)
   const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
-
-  useEffect(() => {
-    void load()
-    void loadIntegrations()
-    void loadEnvironments()
-  }, [load, loadIntegrations, loadEnvironments])
 
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">

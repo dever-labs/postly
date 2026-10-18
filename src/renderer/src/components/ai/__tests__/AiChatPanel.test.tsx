@@ -23,7 +23,7 @@ describe('AiChatPanel', () => {
     const chat = vi.fn(async ({ requestId }: { requestId: string }) => {
       emitChunk?.({
         requestId,
-        text: 'Generated endpoints\n```endpoints\n[{"name":"New MQTT endpoint","protocol":"http","method":"GET","url":"https://example.test","description":"","params":[],"headers":[],"bodyType":"none","bodyContent":""}]\n```',
+        text: 'Generated endpoints\n```endpoints\n[{"name":"New MQTT endpoint","protocol":"http","method":"GET","url":"https://example.test","description":"","params":[],"headers":[],"bodyType":"none","bodyContent":""},{"name":"Second MQTT endpoint","protocol":"http","method":"GET","url":"https://example.test/second","description":"","params":[],"headers":[],"bodyType":"none","bodyContent":""}]\n```',
         done: false,
       })
       emitChunk?.({ requestId, text: '', done: true })
@@ -108,7 +108,9 @@ describe('AiChatPanel', () => {
     await userEvent.type(screen.getByPlaceholderText('Describe the endpoints you need…'), 'Create one endpoint{enter}')
 
     await screen.findByText('Generated endpoints')
-    await userEvent.click(screen.getByText('Add'))
+    const [firstAddButton] = screen.getAllByText('Add')
+    expect(firstAddButton).toBeDefined()
+    await userEvent.click(firstAddButton as HTMLElement)
 
     await waitFor(() => expect(useUIStore.getState().pendingGitAction).toMatchObject({
       type: 'push',
@@ -116,5 +118,59 @@ describe('AiChatPanel', () => {
       title: "Created endpoint 'New MQTT endpoint'",
       subtitle: 'Git Collection',
     }))
+  })
+
+  it('reverts every AI-created request when the git overlay is cancelled', async () => {
+    const deleteRequest = vi.fn(async () => undefined)
+    const firstRequest = {
+      id: 'req-1',
+      folderId: 'col-1',
+      name: 'New Request',
+      method: 'GET',
+      url: '',
+      headers: [],
+      params: [],
+      bodyType: 'none',
+      bodyContent: '',
+      protocol: 'http',
+      protocolConfig: {},
+      authType: 'none',
+      authConfig: {},
+      sslVerification: 'inherit',
+      isDirty: false,
+      sortOrder: 0,
+    } as Request
+    const secondRequest = { ...firstRequest, id: 'req-2', sortOrder: 1 } as Request
+    const createLocalRequest = vi.fn()
+      .mockImplementationOnce(async () => {
+        useCollectionsStore.setState({ requests: [firstRequest] })
+        return firstRequest.id
+      })
+      .mockImplementationOnce(async () => {
+        useCollectionsStore.setState({ requests: [firstRequest, secondRequest] })
+        return secondRequest.id
+      })
+    useCollectionsStore.setState({ createLocalRequest, deleteRequest })
+
+    render(
+      <AiChatPanel
+        context={{ type: 'collection', name: 'Git Collection', collectionId: 'col-1', collectionName: 'Git Collection', existingRequests: [] }}
+      />,
+    )
+
+    await userEvent.type(screen.getByPlaceholderText('Describe the endpoints you need…'), 'Create one endpoint{enter}')
+    await screen.findByText('Generated endpoints')
+    const addButtons = screen.getAllByText('Add')
+    expect(addButtons).toHaveLength(2)
+
+    await userEvent.click(addButtons[0] as HTMLElement)
+    await userEvent.click(addButtons[1] as HTMLElement)
+
+    await waitFor(() => expect(useUIStore.getState().pendingGitAction).not.toBeNull())
+    await useUIStore.getState().pendingGitAction?.onCancel?.()
+
+    expect(deleteRequest).toHaveBeenCalledTimes(2)
+    expect(deleteRequest).toHaveBeenNthCalledWith(1, 'req-1')
+    expect(deleteRequest).toHaveBeenNthCalledWith(2, 'req-2')
   })
 })

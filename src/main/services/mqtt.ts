@@ -60,16 +60,13 @@ export async function connectMqtt(
       ...tls,
     })
 
-    const forget = () => {
-      if (connections.get(connectionId)?.client === client) {
-        connections.get(connectionId)?.detachSenderDestroyed()
-        connections.delete(connectionId)
-      }
+    const removeConnection = () => {
+      if (connections.get(connectionId)?.client === client) connections.delete(connectionId)
     }
     const onSenderDestroyed = () => {
       const mapped = connections.get(connectionId)
       if (mapped && mapped.client !== client) return
-      forget()
+      removeConnection()
       client.removeAllListeners()
       client.on('error', () => {})
       client.end(true)
@@ -111,12 +108,12 @@ export async function connectMqtt(
     })
 
     client.on('close', () => {
-      forget()
+      removeConnection()
       safeSend(sender, { connectionId, type: 'close' })
     })
 
     client.on('error', (err: Error) => {
-      forget()
+      removeConnection()
       safeSend(sender, { connectionId, type: 'error', message: err.message })
       if (!settled) {
         settled = true

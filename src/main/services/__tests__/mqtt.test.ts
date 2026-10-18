@@ -163,4 +163,12 @@ describe('mqtt service', () => {
     expect(isMqttConnected('c1')).toBe(false)
     expect(sender.send).toHaveBeenCalledTimes(1)
   })
+
+  it('still tears down a reconnecting client after close when the renderer is destroyed', async () => {
+    const { p, client } = await startConnect('c1')
+    client.emit('close')
+    sender.destroy()
+    await expect(p).rejects.toThrow('Renderer was destroyed before the connection opened')
+    expect(client.end).toHaveBeenCalledWith(true)
+  })
 })

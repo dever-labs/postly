@@ -10,16 +10,27 @@ import { DeleteCollectionOverlay } from './components/collections/DeleteCollecti
 import { Toaster } from './components/ui/Toast'
 import { TooltipProvider } from './components/ui/Tooltip'
 import { UpdateNotification } from './components/update/UpdateNotification'
+import { useCollectionsStore } from './store/collections'
+import { useEnvironmentsStore } from './store/environments'
+import { useIntegrationsStore } from './store/integrations'
 import { useVariablesStore } from './store/variables'
 
 export default function App(): React.ReactElement {
+  const loadCollections = useCollectionsStore((s) => s.load)
+  const loadEnvironments = useEnvironmentsStore((s) => s.load)
+  const loadIntegrations = useIntegrationsStore((s) => s.load)
   const loadVariables = useVariablesStore((s) => s.load)
 
   useEffect(() => {
     window.api.waitForReady().then(() => {
-      loadVariables()
+      void Promise.all([
+        loadCollections(),
+        loadEnvironments(),
+        loadIntegrations(),
+        loadVariables(),
+      ])
     })
-  }, [loadVariables])
+  }, [loadCollections, loadEnvironments, loadIntegrations, loadVariables])
 
   return (
     <TooltipProvider delayDuration={400}>

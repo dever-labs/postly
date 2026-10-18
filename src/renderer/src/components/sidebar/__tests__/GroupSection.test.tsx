@@ -71,4 +71,46 @@ describe('GroupSection', () => {
       subtitle: 'Git Collection',
     }))
   })
+
+  it('keeps all created git-backed requests attached to one cancel action', async () => {
+    const deleteRequest = vi.fn(async () => undefined)
+    const addRequestToFolder = vi.fn()
+      .mockResolvedValueOnce('req-1')
+      .mockResolvedValueOnce('req-2')
+    useCollectionsStore.setState({ addRequestToFolder, deleteRequest })
+
+    const folder = {
+      id: 'col-1',
+      name: 'Git Collection',
+      parentId: undefined,
+      sortOrder: 0,
+      source: 'github',
+      integrationId: undefined,
+      collapsed: false,
+      hidden: false,
+      authType: 'none',
+      authConfig: {},
+      sslVerification: 'inherit',
+    } as Folder
+
+    render(
+      <GroupSection
+        source="github"
+        integration={null}
+        folders={[folder]}
+        requests={[]}
+        searchQuery=""
+      />,
+    )
+
+    await userEvent.click(screen.getByText('Add request to Git Collection'))
+    await userEvent.click(screen.getByText('Add request to Git Collection'))
+
+    await waitFor(() => expect(useUIStore.getState().pendingGitAction).not.toBeNull())
+    await useUIStore.getState().pendingGitAction?.onCancel?.()
+
+    expect(deleteRequest).toHaveBeenCalledTimes(2)
+    expect(deleteRequest).toHaveBeenNthCalledWith(1, 'req-1')
+    expect(deleteRequest).toHaveBeenNthCalledWith(2, 'req-2')
+  })
 })
