@@ -109,7 +109,7 @@ describe('buildExport', () => {
 
     const file = buildExport()
     expect(file.$schema).toBe('postly/v1')
-    expect(file.exportedAt).toBeTruthy()
+    expect(file.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
   it('serializes a recursive collection tree with requests in a sub-folder', () => {
@@ -289,6 +289,55 @@ describe('importData', () => {
     expect(mockTransaction).toHaveBeenCalledTimes(1)
     mockTransaction.mockImplementationOnce(() => { throw new Error('boom') })
     expect(() => importData(makeFile())).toThrow('boom')
+  })
+
+  it('deduplicates imported environment names case-insensitively across existing names and occupied numeric suffixes', () => {
+    mockQueryAll.mockReturnValueOnce([{ name: 'prod' }, { name: 'PROD (2)' }])
+
+    importData(makeFile({
+      collections: [],
+      environments: [
+        { name: 'Prod', variables: [{ key: 'token', value: 'a', isSecret: true }] },
+        { name: 'prod', variables: [{ key: 'region', value: 'eu-west-1', isSecret: false }] },
+      ],
+    }))
+
+    const statements = mockTransaction.mock.calls[0]?.[0] ?? []
+    const environmentInserts = statements
+      .filter((statement) => statement.sql.includes('INSERT INTO environments'))
+      .map((statement) => statement.params)
+    const envVarInserts = statements
+      .filter((statement) => statement.sql.includes('INSERT INTO env_vars'))
+      .map((statement) => statement.params)
+
+    expect(environmentInserts).toEqual([
+      expect.arrayContaining(['Prod (3)', expect.any(Number), expect.any(Number)]),
+      expect.arrayContaining(['prod (4)', expect.any(Number), expect.any(Number)]),
+    ])
+    expect(envVarInserts).toEqual([
+      expect.arrayContaining(['token', 'a', 1]),
+      expect.arrayContaining(['region', 'eu-west-1', 0]),
+    ])
+  })
+
+  it('rejects imports that exceed the environment cap before opening a transaction', () => {
+    expect(() => importData(makeFile({
+      collections: [],
+      environments: Array.from({ length: 5001 }, (_, index) => ({ name: `Env ${index + 1}`, variables: [] })),
+    }))).toThrow('The import has more than 5000 environments.')
+    expect(mockTransaction).not.toHaveBeenCalled()
+  })
+
+  it('accepts imports exactly at the 5000-environment cap', () => {
+    expect(() => importData(makeFile({
+      collections: [],
+      environments: Array.from({ length: 5000 }, (_, index) => ({ name: `Env ${index + 1}`, variables: [] })),
+    }))).not.toThrow()
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+    const environmentInsertCount = (mockTransaction.mock.calls[0]?.[0] ?? [])
+      .filter((statement) => statement.sql.includes('INSERT INTO environments'))
+      .length
+    expect(environmentInsertCount).toBe(5000)
   })
 
   it('handles multiple collections', () => {
@@ -933,8 +982,10 @@ describe('registerExportImportHandlers', () => {
     expect(result).toEqual({ data: { count: 0 } })
     expect(mockTransaction).toHaveBeenCalledTimes(1)
     const statements = mockTransaction.mock.calls[0]?.[0] ?? []
-    expect(statements.some((statement) => statement.sql.includes('INSERT INTO environments'))).toBe(true)
-    expect(statements.some((statement) => statement.sql.includes('INSERT INTO env_vars'))).toBe(true)
+    const environmentInsert = statements.find((statement) => statement.sql.includes('INSERT INTO environments'))
+    const envVarInsert = statements.find((statement) => statement.sql.includes('INSERT INTO env_vars'))
+    expect(environmentInsert?.params).toEqual(expect.arrayContaining(['Renderer Env', expect.any(Number), expect.any(Number)]))
+    expect(envVarInsert?.params).toEqual(expect.arrayContaining(['base_url', 'https://renderer.example.test', 0]))
   })
 
   it('parses inline text and folder payloads through the preview handlers', async () => {

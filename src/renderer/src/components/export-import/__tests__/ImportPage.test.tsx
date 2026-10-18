@@ -178,9 +178,9 @@ describe('ImportPage', () => {
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('Bruno collection · 2 collections found')
     expect(screen.getByTestId('import-warnings').textContent).toContain('1 thing could not be fully mapped')
-    expect(screen.getByText('Skipped auth helper')).toBeDefined()
-    expect(screen.getByText('2 folders · 5 requests · 2 environments')).toBeDefined()
-    expect(screen.getByText('1 folder · 3 requests')).toBeDefined()
+    expect(screen.getByText('Skipped auth helper').textContent).toBe('Skipped auth helper')
+    expect(screen.getByText('2 folders · 5 requests · 2 environments').textContent).toBe('2 folders · 5 requests · 2 environments')
+    expect(screen.getByText('1 folder · 3 requests').textContent).toBe('1 folder · 3 requests')
 
     const sourceSelects = screen.getAllByRole('combobox')
     expect((sourceSelects[0] as HTMLSelectElement).value).toBe('local')
@@ -314,11 +314,11 @@ describe('ImportPage', () => {
     await user.upload(fileInput(container), new File(['{"_postman_variable_scope":"environment"}'], 'stage.postman_environment.json', { type: 'application/json' }))
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('Postman environment · 1 environment found')
-    expect(screen.getByText('Environments')).toBeDefined()
-    expect(screen.getByText('Stage')).toBeDefined()
-    expect(screen.getByText('2 variables')).toBeDefined()
-    expect(screen.getByText('skipped 1 disabled variable.')).toBeDefined()
-    expect(screen.getByText(/1 secret variable was imported without a value/)).toBeDefined()
+    expect(screen.getByText('Environments').textContent).toBe('Environments')
+    expect(screen.getByText('Stage').textContent).toBe('Stage')
+    expect(screen.getByText('2 variables').textContent).toBe('2 variables')
+    expect(screen.getByText('skipped 1 disabled variable.').textContent).toBe('skipped 1 disabled variable.')
+    expect(screen.getByText(/1 secret variable was imported without a value/).textContent).toMatch(/1 secret variable was imported without a value/)
 
     await user.click(screen.getByRole('button', { name: /Import 1 environment/i }))
 
@@ -361,8 +361,8 @@ describe('ImportPage', () => {
     await user.upload(fileInput(container), new File(['{"collections":[]}'], 'broken.postly.json', { type: 'application/json' }))
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('Postly export · 1 environment found')
-    expect(screen.getByText('Broken Preview')).toBeDefined()
-    expect(screen.getByText('0 variables')).toBeDefined()
+    expect(screen.getByText('Broken Preview').textContent).toBe('Broken Preview')
+    expect(screen.getByText('0 variables').textContent).toBe('0 variables')
   })
 
   it('shows a parse error when a selected file cannot be converted', async () => {
@@ -400,8 +400,8 @@ describe('ImportPage', () => {
     await user.upload(fileInput(container), new File(['openapi: 3.0.0'], 'one.yaml', { type: 'application/yaml' }))
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('OpenAPI / Swagger · 1 collection found')
-    expect(screen.getByText('Generated from spec')).toBeDefined()
-    expect(screen.getByText('1 folder · 1 request · 1 environment')).toBeDefined()
+    expect(screen.getByText('Generated from spec').textContent).toBe('Generated from spec')
+    expect(screen.getByText('1 folder · 1 request · 1 environment').textContent).toBe('1 folder · 1 request · 1 environment')
     expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('local')
   })
 
@@ -505,11 +505,57 @@ describe('ImportPage', () => {
 
     expect((await screen.findByTestId('import-format')).textContent).toContain('OpenAPI / Swagger · 0 collections found')
     expect(screen.getByTestId('import-warnings').textContent).toContain('2 things could not be fully mapped')
-    expect(screen.getByText('Missing auth scheme')).toBeDefined()
-    expect(screen.getByText('Skipped unsupported callback')).toBeDefined()
-    expect(screen.getByText('Change file')).toBeDefined()
+    expect(screen.getByText('Missing auth scheme').textContent).toBe('Missing auth scheme')
+    expect(screen.getByText('Skipped unsupported callback').textContent).toBe('Skipped unsupported callback')
+    expect(screen.getByText('Change file').textContent).toBe('Change file')
     expect(screen.queryByTestId('import-url')).toBeNull()
     expect(screen.queryByTestId('import-folder')).toBeNull()
+  })
+
+  it('renders mixed collection and environment previews, hides env-specific warnings from the general list, and shows the combined success toast', async () => {
+    const user = userEvent.setup()
+    mockImportCollections.mockResolvedValue({ data: { count: 1 } })
+    mockParse.mockResolvedValue({
+      data: {
+        format: 'bruno-environment',
+        warnings: [
+          'Shared: skipped 1 disabled variable.',
+          'Copied inherited values.',
+        ],
+        collections: [
+          { collection: { name: 'Imported API', source: 'local', description: 'From export' }, folders: 2, requests: 3, environments: 0 },
+        ],
+        environments: [
+          {
+            name: 'Shared',
+            variables: [{ key: 'baseUrl', value: 'https://api.example.test', isSecret: false }],
+          },
+        ],
+      },
+    })
+
+    const { container } = render(<ImportPage />)
+
+    await user.upload(fileInput(container), new File(['{"info":{"type":"bruno-environment"}}'], 'env.json', { type: 'application/json' }))
+
+    expect((await screen.findByTestId('import-format')).textContent).toContain('Bruno environment · 1 collection and 1 environment found')
+    expect(screen.getByRole('button', { name: 'Import 1 collection and 1 environment' })).toBeTruthy()
+    expect(screen.getByTestId('import-warnings').textContent).toContain('Copied inherited values.')
+    expect(screen.getByTestId('import-warnings').textContent).not.toContain('skipped 1 disabled variable')
+    expect(screen.getByText('Shared').textContent).toBe('Shared')
+    expect(screen.getByText('skipped 1 disabled variable.').textContent).toBe('skipped 1 disabled variable.')
+
+    await user.click(screen.getByRole('button', { name: 'Import 1 collection and 1 environment' }))
+
+    expect(mockImportCollections).toHaveBeenCalledWith({
+      collections: [{ name: 'Imported API', source: 'local', description: 'From export' }],
+      environments: [{ name: 'Shared', variables: [{ key: 'baseUrl', value: 'https://api.example.test', isSecret: false }] }],
+    })
+    await waitFor(() => expect(mockLoadCollections).toHaveBeenCalledTimes(1))
+    expect(mockLoadVariables).toHaveBeenCalledTimes(1)
+    expect(mockLoadEnvironments).toHaveBeenCalledTimes(1)
+    expect(mockAddToast).toHaveBeenCalledWith('Imported 1 collection and 1 environment', 'success')
+    expect(mockClearSelectedItem).toHaveBeenCalledTimes(1)
   })
 
   it('shows an import failure toast without reloading stores', async () => {

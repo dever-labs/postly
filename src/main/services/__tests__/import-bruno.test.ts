@@ -691,6 +691,139 @@ describe('Bruno JSON export', () => {
     ])
   })
 
+  it('resolves duplicate-name parent references to the sibling instead of self', () => {
+    const result = convertBrunoEnvironmentExport({
+      info: { type: 'bruno-environment' },
+      environments: [
+        { name: 'Dup', extends: ['Dup'], variables: [{ name: 'child', value: '2', enabled: true }] },
+        { name: 'Dup', variables: [{ name: 'host', value: 'https://base.example.test', enabled: true }] },
+      ],
+    })
+
+    expect(result.environments).toEqual([
+      {
+        name: 'Dup',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'child', value: '2', isSecret: false },
+        ],
+      },
+      {
+        name: 'Dup',
+        variables: [{ key: 'host', value: 'https://base.example.test', isSecret: false }],
+      },
+    ])
+    expect(result.warnings).toEqual(['1 environment extends another; the inherited variables were copied in.'])
+  })
+
+  it('keeps standalone environment export inheritance, child precedence, warnings, disabled rows, and blank secrets exact', () => {
+    const result = convertBrunoEnvironmentExport({
+      info: { type: 'bruno-environment' },
+      environments: [
+        {
+          name: 'Base',
+          variables: [
+            { name: 'host', value: 'https://base.example.test', enabled: true },
+            { name: 'token', value: 'base', enabled: true },
+            { name: 'disabledBase', value: 'skip', enabled: false },
+          ],
+        },
+        {
+          name: 'Left',
+          extends: ['Base'],
+          variables: [
+            { name: 'leftOnly', value: '1', enabled: true },
+            { name: 'token', value: 'left', enabled: true },
+          ],
+        },
+        {
+          name: 'Right',
+          extends: ['Base'],
+          variables: [
+            { name: 'rightOnly', value: '2', enabled: true },
+            { name: 'token', value: 'right', enabled: true },
+            { name: 'secretToken', value: 'shh', enabled: true, secret: true },
+          ],
+        },
+        {
+          name: 'Diamond',
+          extends: ['Left', 'Right', 'Missing'],
+          variables: [
+            { name: 'token', value: 'child', enabled: true },
+          ],
+        },
+        {
+          name: 'Cycle A',
+          extends: ['Cycle B'],
+          variables: [{ name: 'a', value: '1', enabled: true }],
+        },
+        {
+          name: 'Cycle B',
+          extends: ['Cycle A'],
+          variables: [{ name: 'b', value: '2', enabled: true }],
+        },
+      ],
+    })
+
+    expect(result.environments).toEqual([
+      {
+        name: 'Base',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'token', value: 'base', isSecret: false },
+        ],
+      },
+      {
+        name: 'Left',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'leftOnly', value: '1', isSecret: false },
+          { key: 'token', value: 'left', isSecret: false },
+        ],
+      },
+      {
+        name: 'Right',
+        variables: [
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'rightOnly', value: '2', isSecret: false },
+          { key: 'token', value: 'right', isSecret: false },
+          { key: 'secretToken', value: '', isSecret: true },
+        ],
+      },
+      {
+        name: 'Diamond',
+        variables: [
+          { key: 'leftOnly', value: '1', isSecret: false },
+          { key: 'host', value: 'https://base.example.test', isSecret: false },
+          { key: 'rightOnly', value: '2', isSecret: false },
+          { key: 'secretToken', value: '', isSecret: true },
+          { key: 'token', value: 'child', isSecret: false },
+        ],
+      },
+      {
+        name: 'Cycle A',
+        variables: [
+          { key: 'b', value: '2', isSecret: false },
+          { key: 'a', value: '1', isSecret: false },
+        ],
+      },
+      {
+        name: 'Cycle B',
+        variables: [
+          { key: 'a', value: '1', isSecret: false },
+          { key: 'b', value: '2', isSecret: false },
+        ],
+      },
+    ])
+    expect(result.warnings).toEqual([
+      '"Diamond": Bruno environment parent "Missing" was not found; its variables were skipped.',
+      '"Cycle A": Bruno environment inheritance has a cycle; cyclic parents were skipped.',
+      '5 environments extend another; the inherited variables were copied in.',
+      'Bruno environments skipped 1 disabled variable.',
+      'Bruno environments imported 1 secret variable with blank values; re-enter them in Postly.',
+    ])
+  })
+
   it('resolves exported environment inheritance by index so duplicate names do not overwrite each other', () => {
     const entry = convertBrunoExport({
       name: 'Exported',

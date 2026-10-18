@@ -53,16 +53,18 @@ describe('convertPostmanV3Files', () => {
     }])
 
     const create = entry.collection.requests.find((request) => request.name === 'Create user')
-    expect(create).toBeTruthy()
-    expect(create?.url).toBe('{{baseUrl}}/users/{{id}}')
-    expect(rows(create?.params ? JSON.stringify(create.params) : '[]').map((row) => [row.key, row.value, row.enabled])).toEqual([
+    expect(create).toMatchObject({
+      name: 'Create user',
+      url: '{{baseUrl}}/users/{{id}}',
+      auth: { type: 'apikey', config: { key: 'X-Api-Key', value: 'abc123', in: 'query' } },
+      ssl: 'disabled',
+      network: { followRedirects: false, maxRedirects: 2 },
+      bodyType: 'raw-json',
+    })
+    expect(rows(JSON.stringify(create?.params ?? [])).map((row) => [row.key, row.value, row.enabled])).toEqual([
       ['draft', '1', true],
       ['verbose', '0', false],
     ])
-    expect(create?.auth).toEqual({ type: 'apikey', config: { key: 'X-Api-Key', value: 'abc123', in: 'query' } })
-    expect(create?.ssl).toBe('disabled')
-    expect(create?.network).toEqual({ followRedirects: false, maxRedirects: 2 })
-    expect(create?.bodyType).toBe('raw-json')
     expect(parseRules(create?.protocolConfig.extractRules as string)).toHaveLength(1)
 
     const users = entry.collection.folders[0]
@@ -436,6 +438,31 @@ describe('additional Postman v3 edge cases', () => {
         ],
       },
     ])
+  })
+
+  it('imports workspace environment files even when they omit $kind', () => {
+    const [entry] = convertPostmanV3Files([
+      {
+        path: 'picked/postman/environments/qa.yaml',
+        text: 'name: QA\nvalues:\n  - key: baseUrl\n    value: https://qa.test\n  - key: token\n    value: hidden\n    type: secret\n',
+      },
+      { path: 'picked/root.request.yaml', text: '$kind: http-request\nname: Root\nurl: https://root.test\nmethod: GET\n' },
+    ])
+
+    expect(entry.collection.name).toBe('Imported Postman v3 collection')
+    expect(entry.collection.requests).toEqual([
+      expect.objectContaining({ name: 'Root', url: 'https://root.test', method: 'GET' }),
+    ])
+    expect(entry.collection.environments).toEqual([
+      {
+        name: 'QA',
+        variables: [
+          { key: 'baseUrl', value: 'https://qa.test', isSecret: false },
+          { key: 'token', value: '', isSecret: true },
+        ],
+      },
+    ])
+    expect(entry.warnings).toEqual([])
   })
 
   it('falls back to the first matching auth entry and tolerates invalid request settings', () => {
