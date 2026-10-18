@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const openExternal = vi.fn()
 vi.mock('electron', () => ({ shell: { openExternal: (...a: unknown[]) => openExternal(...a) } }))
 
-import { isSafeExternalUrl, isAppNavigation, openExternalSafe, lockDownWindow, SECURE_WEB_PREFERENCES } from '../security'
+import { isSafeExternalUrl, isAppNavigation, openExternalSafe, lockDownWindow, SECURE_WEB_PREFERENCES, isAllowedAuthNavigation, denySessionPermissions, lockDownAuthWindow } from '../security'
 
 beforeEach(() => {
   openExternal.mockReset()
@@ -80,6 +80,84 @@ describe('lockDownWindow', () => {
     const allowed = { preventDefault: vi.fn() }
     navHandler(allowed, 'http://localhost:5173/')
     expect(allowed.preventDefault).not.toHaveBeenCalled()
+  })
+})
+
+describe('isAllowedAuthNavigation', () => {
+  it('allows ordinary http(s) OAuth pages', () => {
+    expect(isAllowedAuthNavigation('https://idp.example.com/login')).toBe(true)
+    expect(isAllowedAuthNavigation('http://127.0.0.1:3000/callback')).toBe(true)
+  })
+
+  it('allows configured callback URLs with custom schemes', () => {
+    expect(isAllowedAuthNavigation('postly://oauth/callback?code=1', ['postly://oauth/callback'])).toBe(true)
+  })
+
+  it('blocks unsupported schemes and malformed URLs', () => {
+    expect(isAllowedAuthNavigation('javascript:alert(1)')).toBe(false)
+    expect(isAllowedAuthNavigation('not a url')).toBe(false)
+  })
+})
+
+describe('denySessionPermissions', () => {
+  it('denies permission checks and requests by default', () => {
+    let requestHandler!: (_wc: unknown, _permission: string, callback: (allowed: boolean) => void) => void
+    let checkHandler!: () => boolean
+    const session = {
+      setPermissionRequestHandler: (handler: typeof requestHandler) => { requestHandler = handler },
+      setPermissionCheckHandler: (handler: typeof checkHandler) => { checkHandler = handler },
+    }
+
+    denySessionPermissions(session as never)
+
+    expect(checkHandler()).toBe(false)
+    const callback = vi.fn()
+    requestHandler(null, 'notifications', callback)
+    expect(callback).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('lockDownAuthWindow', () => {
+  function setup() {
+    let openHandler!: (d: { url: string }) => { action: string }
+    let navHandler!: (e: { preventDefault: () => void }, url: string) => void
+    let permissionRequestHandler!: (_wc: unknown, _permission: string, callback: (allowed: boolean) => void) => void
+    let permissionCheckHandler!: () => boolean
+    const win = {
+      webContents: {
+        session: {
+          setPermissionRequestHandler: (handler: typeof permissionRequestHandler) => { permissionRequestHandler = handler },
+          setPermissionCheckHandler: (handler: typeof permissionCheckHandler) => { permissionCheckHandler = handler },
+        },
+        setWindowOpenHandler: (h: typeof openHandler) => { openHandler = h },
+        on: (ev: string, h: typeof navHandler) => { if (ev === 'will-navigate') navHandler = h },
+      },
+    }
+    lockDownAuthWindow(win as never, ['postly://oauth/callback'])
+    return { openHandler, navHandler, permissionRequestHandler, permissionCheckHandler }
+  }
+
+  it('denies popups, blocks unsupported navigations, and denies permissions', () => {
+    const { openHandler, navHandler, permissionCheckHandler, permissionRequestHandler } = setup()
+
+    expect(openHandler({ url: 'https://idp.example.com/popup' })).toEqual({ action: 'deny' })
+
+    const callback = vi.fn()
+    permissionRequestHandler(null, 'notifications', callback)
+    expect(callback).toHaveBeenCalledWith(false)
+    expect(permissionCheckHandler()).toBe(false)
+
+    const allowed = { preventDefault: vi.fn() }
+    navHandler(allowed, 'https://idp.example.com/login')
+    expect(allowed.preventDefault).not.toHaveBeenCalled()
+
+    const customCallback = { preventDefault: vi.fn() }
+    navHandler(customCallback, 'postly://oauth/callback?code=1')
+    expect(customCallback.preventDefault).not.toHaveBeenCalled()
+
+    const blocked = { preventDefault: vi.fn() }
+    navHandler(blocked, 'javascript:alert(1)')
+    expect(blocked.preventDefault).toHaveBeenCalled()
   })
 })
 

@@ -67,7 +67,7 @@ describe('registerUpdaterHandlers', () => {
     it('returns { error } when checkForUpdates throws', async () => {
       mockCheck.mockImplementationOnce(() => { throw new Error('check failed') })
       const result = await state.handlers['postly:updater:check'](null)
-      expect(result).toEqual({ error: 'Error: check failed' })
+      expect(result).toEqual({ error: 'check failed' })
     })
   })
 
@@ -81,7 +81,7 @@ describe('registerUpdaterHandlers', () => {
     it('returns { error } when downloadUpdate throws', async () => {
       mockDownload.mockImplementationOnce(() => { throw new Error('download failed') })
       const result = await state.handlers['postly:updater:download'](null)
-      expect(result).toEqual({ error: 'Error: download failed' })
+      expect(result).toEqual({ error: 'download failed' })
     })
   })
 
@@ -95,7 +95,7 @@ describe('registerUpdaterHandlers', () => {
     it('returns { error } when installUpdate throws', async () => {
       mockInstall.mockImplementationOnce(() => { throw new Error('install failed') })
       const result = await state.handlers['postly:updater:install'](null)
-      expect(result).toEqual({ error: 'Error: install failed' })
+      expect(result).toEqual({ error: 'install failed' })
     })
   })
 
@@ -120,7 +120,7 @@ describe('registerUpdaterHandlers', () => {
     it('returns { error } when applyFeedUrl throws', async () => {
       mockApplyFeed.mockImplementationOnce(() => { throw new Error('bad url') })
       const result = await state.handlers['postly:updater:set-feed'](null, { url: 'bad' })
-      expect(result).toEqual({ error: 'Error: bad url' })
+      expect(result).toEqual({ error: 'bad url' })
     })
   })
 

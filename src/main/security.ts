@@ -1,10 +1,14 @@
-import { shell, type BrowserWindow, type WebPreferences } from 'electron'
+import { shell, type BrowserWindow, type Session, type WebPreferences } from 'electron'
 
 /** Baseline web preferences for every BrowserWindow we create. */
 export const SECURE_WEB_PREFERENCES: WebPreferences = {
   nodeIntegration: false,
   contextIsolation: true,
   sandbox: true,
+}
+
+export function isLoopbackHost(hostname: string): boolean {
+  return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname.toLowerCase())
 }
 
 /** Only http(s) URLs may be handed to the OS; file:, custom protocols, etc. are refused. */
@@ -44,5 +48,44 @@ export function lockDownWindow(win: BrowserWindow, appUrl: string): void {
     if (isAppNavigation(url, appUrl)) return
     event.preventDefault()
     openExternalSafe(url)
+  })
+}
+
+function matchesCallbackUrl(target: URL, callbackUrl: string): boolean {
+  try {
+    const callback = new URL(callbackUrl)
+    return target.protocol === callback.protocol
+      && target.hostname === callback.hostname
+      && target.port === callback.port
+      && target.pathname === callback.pathname
+  } catch {
+    return false
+  }
+}
+
+export function isAllowedAuthNavigation(target: string, callbackUrls: string[] = []): boolean {
+  try {
+    const url = new URL(target)
+    if (callbackUrls.some((callbackUrl) => matchesCallbackUrl(url, callbackUrl))) return true
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+export function denySessionPermissions(session: Session): void {
+  session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+  session.setPermissionCheckHandler(() => false)
+}
+
+/** Auth windows may navigate within the OAuth flow, but never open popups or request extra permissions. */
+export function lockDownAuthWindow(win: BrowserWindow, callbackUrls: string[] = []): void {
+  const session = (win.webContents as Electron.WebContents & { session?: Session }).session
+  if (session) denySessionPermissions(session)
+  win.webContents.setWindowOpenHandler?.(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedAuthNavigation(url, callbackUrls)) return
+    event.preventDefault()
+    console.warn(`[security] Blocked auth-window navigation to unsupported URL: ${url}`)
   })
 }

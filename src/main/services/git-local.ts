@@ -82,6 +82,8 @@ export function getRepoPath(integrationId: string): string {
 
 /** Build a GIT_SSH_COMMAND that:
  *  - accepts new host keys on first connection (TOFU / StrictHostKeyChecking=accept-new)
+ *    This avoids an interactive first-connection prompt, but it still trusts the
+ *    first seen key for each host. That trade-off is intentional for local desktop UX.
  *  - explicitly loads the user's default SSH identity files so the command works
  *    even when Electron is launched outside a shell that has an SSH agent running
  *    (common on macOS when launched from the Dock, or on Windows)

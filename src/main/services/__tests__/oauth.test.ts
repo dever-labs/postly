@@ -14,9 +14,13 @@ vi.mock('../../database', () => ({
 
 // Expose session mock references so SSL tests can assert on them.
 const mockSetCertVerifyProc = vi.hoisted(() => vi.fn())
+const mockSetPermissionRequestHandler = vi.hoisted(() => vi.fn())
+const mockSetPermissionCheckHandler = vi.hoisted(() => vi.fn())
 const mockFlushStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockFromPartition = vi.hoisted(() => vi.fn().mockReturnValue({
   setCertificateVerifyProc: mockSetCertVerifyProc,
+  setPermissionRequestHandler: mockSetPermissionRequestHandler,
+  setPermissionCheckHandler: mockSetPermissionCheckHandler,
   cookies: { flushStore: mockFlushStore },
 }))
 
@@ -56,6 +60,11 @@ vi.mock('electron', () => {
         }, 50)
       }),
       webContents: {
+        session: {
+          setPermissionRequestHandler: vi.fn(),
+          setPermissionCheckHandler: vi.fn(),
+        },
+        setWindowOpenHandler: vi.fn(),
         on: vi.fn().mockImplementation(
           (event: string, handler: (evt: { preventDefault: () => void }, url: string) => void) => {
             ;(wcListeners[event] ??= []).push(handler)

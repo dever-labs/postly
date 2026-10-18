@@ -54,7 +54,7 @@ export function GitHubSettings() {
       addToast(`Failed to disconnect: ${error}`, 'error')
     } else {
       addToast('Disconnected from GitHub', 'success')
-      setSettings((prev) => ({ ...prev, token: '', connectedUser: undefined }))
+      setSettings((prev) => ({ ...prev, token: '', hasToken: false, connectedUser: undefined }))
       loadSettings()
     }
   }
@@ -125,11 +125,20 @@ export function GitHubSettings() {
           <label htmlFor="github-client-secret" className="mb-1.5 block text-xs font-medium text-th-text-muted">Client Secret</label>
           <Input id="github-client-secret"
             type="password"
-            placeholder="Client secret"
+            placeholder={settings.hasClientSecret ? 'Saved in main process — enter a new secret to replace it' : 'Client secret'}
             value={settings.clientSecret}
             onChange={(e) => setSettings({ ...settings, clientSecret: e.target.value })}
             disabled={isConnected}
           />
+          {settings.hasClientSecret && !settings.clientSecret && !isConnected && (
+            <button
+              type="button"
+              onClick={() => setSettings({ ...settings, hasClientSecret: false })}
+              className="mt-1 text-xs text-th-text-muted hover:text-th-text-secondary"
+            >
+              Clear saved client secret
+            </button>
+          )}
         </div>
 
         {!isConnected ? (

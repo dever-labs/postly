@@ -1,5 +1,5 @@
-import { BrowserWindow } from 'electron'
-import { SECURE_WEB_PREFERENCES, openExternalSafe } from '../security'
+import { BrowserWindow, session } from 'electron'
+import { SECURE_WEB_PREFERENCES, denySessionPermissions, lockDownAuthWindow, openExternalSafe } from '../security'
 import http from 'http'
 import crypto from 'crypto'
 import axios from 'axios'
@@ -164,7 +164,10 @@ export async function startGitHubOAuth(args: {
   const state = crypto.randomBytes(16).toString('hex')
   const redirectUri = `http://localhost:${port}/callback`
   const authorizeUrl = `${args.baseUrl}/login/oauth/authorize?client_id=${encodeURIComponent(args.clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo,read:org&state=${state}`
-  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitHub', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition: `scm-oauth-${crypto.randomBytes(8).toString('hex')}` } })
+  const partition = `scm-oauth-${crypto.randomBytes(8).toString('hex')}`
+  denySessionPermissions(session.fromPartition(partition))
+  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitHub', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition } })
+  lockDownAuthWindow(win, [redirectUri])
   win.loadURL(authorizeUrl)
   let code: string
   try {
@@ -189,7 +192,10 @@ export async function startGitLabOAuth(args: {
   const codeVerifier = crypto.randomBytes(64).toString('base64url')
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
   const authorizeUrl = `${args.baseUrl}/oauth/authorize?client_id=${encodeURIComponent(args.clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=api&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`
-  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitLab', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition: `scm-oauth-${crypto.randomBytes(8).toString('hex')}` } })
+  const partition = `scm-oauth-${crypto.randomBytes(8).toString('hex')}`
+  denySessionPermissions(session.fromPartition(partition))
+  const win = new BrowserWindow({ width: 900, height: 700, title: 'Connect to GitLab', autoHideMenuBar: true, webPreferences: { ...SECURE_WEB_PREFERENCES, partition } })
+  lockDownAuthWindow(win, [redirectUri])
   win.loadURL(authorizeUrl)
   let code: string
   try {
@@ -203,5 +209,4 @@ export async function startGitLabOAuth(args: {
   const u = (await axios.get(`${args.baseUrl}/api/v4/user`, { headers: { Authorization: `Bearer ${token}` } })).data
   return { token, user: { username: u.username, name: u.name, avatarUrl: u.avatar_url } }
 }
-
 

@@ -19,15 +19,15 @@ vi.mock('../../database', () => ({
 // authenticateWithBackstage() drives the github/gitlab/google OAuth flow by
 // opening a real Electron BrowserWindow, navigating it to Backstage's
 // "/api/auth/<provider>/start" endpoint, and — once the window finishes
-// navigating away from the auth pages — running executeJavaScript() inside
-// the page to fetch "/api/auth/<provider>/refresh" (a same-origin request
-// carrying the session cookie set during the interactive login).
+// navigating away from the auth pages — calling session.fetch() from the
+// main process to fetch "/api/auth/<provider>/refresh" with the auth
+// window's cookies.
 //
 // We can't spin up real Chromium here, so BrowserWindow itself is faked.
-// But executeJavaScript is wired to perform a *real* fetch against the
-// stub server below, so the HTTP contract (endpoint shape, response
-// parsing) is still exercised end-to-end — only the windowing/navigation
-// chrome is stubbed out.
+// session.fetch() is wired to perform a *real* fetch against the stub
+// server below, so the HTTP contract (endpoint shape, response parsing) is
+// still exercised end-to-end — only the windowing/navigation chrome is
+// stubbed out.
 const { createdWindows } = vi.hoisted(() => {
   return { createdWindows: [] as FakeBrowserWindow[] }
 })
@@ -41,7 +41,6 @@ function lastWindow(): FakeBrowserWindow {
 interface FakeBrowserWindow {
   webContents: {
     url: string
-    executeJavaScriptImpl: (() => Promise<unknown>) | null
     emit: (event: 'did-finish-load') => void
   }
   close: () => void
@@ -51,8 +50,13 @@ interface FakeBrowserWindow {
 vi.mock('electron', () => {
   class FakeWebContents {
     url = ''
-    executeJavaScriptImpl: (() => Promise<unknown>) | null = null
     private listeners: Record<string, Array<() => void>> = {}
+    session = {
+      fetch: (url: string, init?: RequestInit) => fetch(url, init),
+      setPermissionRequestHandler: (_handler: unknown) => undefined,
+      setPermissionCheckHandler: (_handler: unknown) => undefined,
+    }
+    setWindowOpenHandler(_handler: unknown) { return { action: 'deny' as const } }
     on(event: string, cb: () => void) { (this.listeners[event] ??= []).push(cb); return this }
     off(event: string, cb: () => void) {
       this.listeners[event] = (this.listeners[event] ?? []).filter((l) => l !== cb)
@@ -60,9 +64,6 @@ vi.mock('electron', () => {
     }
     emit(event: string) { for (const cb of [...(this.listeners[event] ?? [])]) cb() }
     getURL() { return this.url }
-    async executeJavaScript(): Promise<unknown> {
-      return this.executeJavaScriptImpl ? this.executeJavaScriptImpl() : null
-    }
   }
 
   class BrowserWindow {
@@ -707,7 +708,6 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
     await server.waitForCalls(`${provider}-start`, 1, '2s')
 
     // Finish the flow so the test doesn't leave a dangling promise.
-    win.webContents.executeJavaScriptImpl = async () => null
     win.webContents.emit('did-finish-load')
     win.close()
     await expect(promise).rejects.toThrow()
@@ -725,10 +725,6 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 
     // Still on the provider's own login/auth pages — must not attempt extraction yet.
     win.webContents.url = `${server.httpBase}/api/auth/${provider}/start?env=production`
-    win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
-      return resp.ok ? await resp.json() : null
-    }
     win.webContents.emit('did-finish-load')
 
     // Real navigation away from the auth pages back to the Backstage app.
@@ -755,10 +751,6 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 
     const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
-    win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
-      return resp.ok ? await resp.json() : null
-    }
     win.webContents.url = `${server.httpBase}/`
     win.webContents.emit('did-finish-load')
 
@@ -766,7 +758,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
     expect(result.user.name).toBe(provider)
   })
 
-  it('keeps waiting (does not resolve or reject) while executeJavaScript returns no token', async () => {
+  it('keeps waiting (does not resolve or reject) while refresh returns no token', async () => {
     await server.addMock({
       id: `${provider}-refresh`,
       request: { method: 'GET', path: `/api/auth/${provider}/refresh` },
@@ -775,10 +767,6 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 
     const promise = authenticateWithBackstage(server.httpBase, provider)
     const win = lastWindow()
-    win.webContents.executeJavaScriptImpl = async () => {
-      const resp = await fetch(`${server.httpBase}/api/auth/${provider}/refresh`)
-      return resp.ok ? await resp.json() : null
-    }
     win.webContents.url = `${server.httpBase}/`
     win.webContents.emit('did-finish-load')
 

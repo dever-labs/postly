@@ -62,7 +62,7 @@ export function BackstageSettings() {
     if (error) {
       addToast(`Disconnect failed: ${error}`, 'error')
     } else {
-      setSettings((s) => ({ ...s, token: '', connectedUser: undefined }))
+      setSettings((s) => ({ ...s, token: '', hasToken: false, connectedUser: undefined }))
       addToast('Disconnected from Backstage', 'success')
       loadSettings()
     }
@@ -110,7 +110,7 @@ export function BackstageSettings() {
           <select id="backstage-authentication"
             className="w-full rounded-sm border border-th-border bg-th-bg-secondary px-2 py-1.5 text-sm text-th-text-primary focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             value={settings.authProvider ?? 'token'}
-            onChange={(e) => setSettings({ ...settings, authProvider: e.target.value as BackstageSettings['authProvider'], connectedUser: undefined, token: '' })}
+            onChange={(e) => setSettings({ ...settings, authProvider: e.target.value as BackstageSettings['authProvider'], connectedUser: undefined, token: '', hasToken: false })}
           >
             {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -123,10 +123,19 @@ export function BackstageSettings() {
             <label htmlFor="backstage-token" className="mb-1.5 block text-xs font-medium text-th-text-muted">Token</label>
             <Input id="backstage-token"
               type="password"
-              placeholder="Token..."
+              placeholder={settings.hasToken ? 'Saved in main process — enter a new token to replace it' : 'Token...'}
               value={settings.token}
               onChange={(e) => setSettings({ ...settings, token: e.target.value })}
             />
+            {settings.hasToken && !settings.token && (
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, hasToken: false })}
+                className="mt-1 text-xs text-th-text-muted hover:text-th-text-secondary"
+              >
+                Clear saved token
+              </button>
+            )}
           </div>
         )}
 

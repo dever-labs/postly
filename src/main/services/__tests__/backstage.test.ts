@@ -94,6 +94,65 @@ describe('syncCatalog — SSL verification', () => {
     expect(result.synced).toBe(0)
     expect(result.errors).toHaveLength(0)
   })
+
+  it('keeps the Authorization header on same-origin api-spec fetches', async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        data: [{
+          metadata: {
+            name: 'catalog-api',
+            annotations: { 'backstage.io/api-spec': '/specs/catalog.yaml' },
+          },
+          spec: { type: 'openapi' },
+        }],
+      })
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { openapi: '3.0.0', info: { title: 'Catalog', version: '1.0.0' }, paths: {} } })
+
+    await syncCatalog({ baseUrl: 'https://backstage.example.com', token: 'my-token', autoSync: false })
+
+    expect(mockGet.mock.calls[2][0]).toBe('https://backstage.example.com/specs/catalog.yaml')
+    expect((mockGet.mock.calls[2][1] as { headers: Record<string, string> }).headers['Authorization']).toBeTruthy()
+  })
+
+  it('drops the Authorization header on cross-origin api-spec fetches', async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        data: [{
+          metadata: {
+            name: 'catalog-api',
+            annotations: { 'backstage.io/api-spec': 'https://specs.example.com/catalog.yaml' },
+          },
+          spec: { type: 'openapi' },
+        }],
+      })
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { openapi: '3.0.0', info: { title: 'Catalog', version: '1.0.0' }, paths: {} } })
+
+    await syncCatalog({ baseUrl: 'https://backstage.example.com', token: 'my-token', autoSync: false })
+
+    expect(mockGet.mock.calls[2][0]).toBe('https://specs.example.com/catalog.yaml')
+    expect((mockGet.mock.calls[2][1] as { headers: Record<string, string> }).headers).toEqual({})
+  })
+
+  it('rejects non-http api-spec URLs', async () => {
+    mockGet
+      .mockResolvedValueOnce({
+        data: [{
+          metadata: {
+            name: 'catalog-api',
+            annotations: { 'backstage.io/api-spec': 'file:///etc/passwd' },
+          },
+          spec: { type: 'openapi' },
+        }],
+      })
+      .mockResolvedValueOnce({ data: [] })
+
+    const result = await syncCatalog({ baseUrl: 'https://backstage.example.com', token: 'my-token', autoSync: false })
+
+    expect(result.errors[0]).toContain('failed to fetch spec')
+    expect(result.errors[0]).toContain('http:// or https://')
+  })
 })
 
 // ── authenticateWithBackstageGuest — SSL verification ───────────────────────
