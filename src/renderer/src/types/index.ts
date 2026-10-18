@@ -144,6 +144,7 @@ export interface Token {
 }
 
 export interface HttpRequest {
+  requestId?: string
   method: HttpMethod
   url: string
   headers: Record<string, string>

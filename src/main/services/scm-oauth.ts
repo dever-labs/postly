@@ -18,20 +18,40 @@ async function getFreePort(): Promise<number> {
 
 async function waitForCallback(port: number, win: BrowserWindow): Promise<{ code: string; state: string }> {
   return new Promise((resolve, reject) => {
+    let settled = false
+    let timeout: NodeJS.Timeout | null = null
+    const cleanup = () => {
+      if (timeout) {
+        clearTimeout(timeout)
+        timeout = null
+      }
+      server.off('error', onError)
+      win.off('closed', onClosed)
+    }
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      server.close()
+      fn()
+    }
+    const onError = (error: Error) => finish(() => reject(error))
+    const onClosed = () => finish(() => reject(new Error('OAuth window was closed')))
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', `http://localhost:${port}`)
       const code = url.searchParams.get('code')
       const state = url.searchParams.get('state')
       res.writeHead(200, { 'Content-Type': 'text/html' })
       res.end('<html><body><h2>Authentication successful! You can close this window.</h2></body></html>')
-      server.close()
-      if (code) resolve({ code, state: state ?? '' })
-      else reject(new Error('No code in callback'))
+      finish(() => {
+        if (code) resolve({ code, state: state ?? '' })
+        else reject(new Error('No code in callback'))
+      })
     })
     server.listen(port, '127.0.0.1')
-    server.on('error', reject)
-    win.on('closed', () => { server.close(); reject(new Error('OAuth window was closed')) })
-    setTimeout(() => { server.close(); reject(new Error('OAuth timeout')) }, 5 * 60 * 1000)
+    server.on('error', onError)
+    win.on('closed', onClosed)
+    timeout = setTimeout(() => finish(() => reject(new Error('OAuth timeout'))), 5 * 60 * 1000)
   })
 }
 

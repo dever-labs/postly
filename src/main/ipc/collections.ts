@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import crypto from 'crypto'
-import { queryAll, queryOne, run } from '../database'
+import { queryAll, queryOne, run, runTransaction } from '../database'
 import * as gitLocal from '../services/git-local'
 import { deleteCollectionVariables } from '../services/variable-store'
 import { serializeNetworkSettings } from '../services/network-settings'
@@ -164,7 +164,7 @@ export function registerCollectionHandlers(): void {
   }) => {
     try {
       const now = Date.now()
-      for (const update of args.updates) {
+      const statements = args.updates.map((update) => {
         if (args.type === 'request') {
           const fields = ['sort_order = ?', 'updated_at = ?']
           const values: unknown[] = [update.sortOrder, now]
@@ -172,16 +172,18 @@ export function registerCollectionHandlers(): void {
             fields.unshift('folder_id = ?')
             values.unshift(update.newParentId)
           }
-          run(`UPDATE requests SET ${fields.join(', ')} WHERE id = ?`, [...values, update.id])
-        } else {
-          const fields = ['sort_order = ?', 'updated_at = ?']
-          const values: unknown[] = [update.sortOrder, now]
-          if (update.newParentId !== undefined) {
-            fields.unshift('parent_id = ?')
-            values.unshift(update.newParentId)
-          }
-          run(`UPDATE folders SET ${fields.join(', ')} WHERE id = ?`, [...values, update.id])
+          return { sql: `UPDATE requests SET ${fields.join(', ')} WHERE id = ?`, params: [...values, update.id] }
         }
+        const fields = ['sort_order = ?', 'updated_at = ?']
+        const values: unknown[] = [update.sortOrder, now]
+        if (update.newParentId !== undefined) {
+          fields.unshift('parent_id = ?')
+          values.unshift(update.newParentId)
+        }
+        return { sql: `UPDATE folders SET ${fields.join(', ')} WHERE id = ?`, params: [...values, update.id] }
+      })
+      if (statements.length > 0) {
+        runTransaction(statements)
       }
       return { data: true }
     } catch (err) {

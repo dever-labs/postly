@@ -8,6 +8,11 @@ import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterp
 import { getGeneralSettings } from './ipc/settings-utils'
 import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
 
+const userDataOverride = process.env['POSTLY_USER_DATA_DIR']
+if (userDataOverride) {
+  app.setPath('userData', userDataOverride)
+}
+
 function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
   const iconFile = platform === 'win32' ? 'icon.ico' : 'icon.png'
