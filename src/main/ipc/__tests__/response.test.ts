@@ -13,7 +13,7 @@ vi.mock('electron', () => ({
 }))
 
 import { registerResponseHandlers } from '../response'
-import { storeResponseBody, clearResponseBodies } from '../../services/response-store'
+import { storeResponseBody, getResponseBody, clearResponseBodies, configureResponseStoreForTests } from '../../services/response-store'
 
 const call = (channel: string, data: unknown) => state.handlers[channel]({ sender: {} }, data)
 const BYTES = Buffer.from([0, 255, 128, 10, 13, 200, 1])
@@ -23,6 +23,7 @@ beforeEach(() => {
   state.handlers = {}
   showSaveDialog.mockReset()
   clearResponseBodies()
+  configureResponseStoreForTests()
   registerResponseHandlers()
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postly-save-'))
 })
@@ -60,9 +61,41 @@ describe('postly:response:save', () => {
   })
 
   it('only keeps the latest few bodies', async () => {
+    configureResponseStoreForTests({ maxTotalBytes: BYTES.length * 4 })
     const first = storeResponseBody({ raw: BYTES, url: 'https://x.test/a', headers: {} })
     for (let i = 0; i < 4; i++) storeResponseBody({ raw: BYTES, url: 'https://x.test/a', headers: {} })
     expect(String((await call('postly:response:save', { bodyId: first })).error)).toMatch(/no longer available/)
+  })
+
+  it('evicts older bodies when a byte budget is exceeded', async () => {
+    configureResponseStoreForTests({ maxTotalBytes: 10 })
+    const first = storeResponseBody({ raw: Buffer.from('12345'), url: 'https://x.test/a', headers: {} })
+    const second = storeResponseBody({ raw: Buffer.from('67890'), url: 'https://x.test/b', headers: {} })
+    storeResponseBody({ raw: Buffer.from('abcde'), url: 'https://x.test/c', headers: {} })
+
+    expect(String((await call('postly:response:save', { bodyId: first })).error)).toMatch(/no longer available/)
+    showSaveDialog.mockResolvedValue({ canceled: true })
+    expect(await call('postly:response:save', { bodyId: second })).toEqual({ data: null })
+  })
+
+  it('refreshes recency when a stored body is read', async () => {
+    configureResponseStoreForTests({ maxTotalBytes: 10 })
+    const first = storeResponseBody({ raw: Buffer.from('12345'), url: 'https://x.test/a', headers: {} })
+    const second = storeResponseBody({ raw: Buffer.from('67890'), url: 'https://x.test/b', headers: {} })
+
+    expect(getResponseBody(first)).toBeDefined()
+    storeResponseBody({ raw: Buffer.from('abcde'), url: 'https://x.test/c', headers: {} })
+
+    showSaveDialog.mockResolvedValue({ canceled: true })
+    expect(await call('postly:response:save', { bodyId: first })).toEqual({ data: null })
+    expect(String((await call('postly:response:save', { bodyId: second })).error)).toMatch(/no longer available/)
+  })
+
+  it('does not retain a body larger than the memory budget', async () => {
+    configureResponseStoreForTests({ maxTotalBytes: 4 })
+    const id = storeResponseBody({ raw: Buffer.from('12345'), url: 'https://x.test/a', headers: {} })
+    expect(id).toBeUndefined()
+    expect(String((await call('postly:response:save', { bodyId: id as string | undefined })).error)).toMatch(/no longer available/)
   })
 })
 

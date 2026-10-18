@@ -12,13 +12,14 @@ const mockOnStream = vi.fn((cb: (m: unknown) => void) => {
 const mockDraftsGet = vi.fn()
 const mockDraftsUpsert = vi.fn()
 const mockDraftsDelete = vi.fn()
+const mockRequestsGet = vi.fn()
 const mockRequestsUpdate = vi.fn()
 
 vi.stubGlobal('window', {
   api: {
     http: { execute: mockHttpExecute, cancel: mockHttpCancel, onStream: mockOnStream },
     drafts: { request: { get: mockDraftsGet, upsert: mockDraftsUpsert, delete: mockDraftsDelete } },
-    requests: { update: mockRequestsUpdate },
+    requests: { get: mockRequestsGet, update: mockRequestsUpdate },
   },
 })
 
@@ -68,6 +69,7 @@ beforeEach(() => {
   mockDraftsGet.mockResolvedValue({ data: null })
   mockDraftsUpsert.mockResolvedValue({})
   mockDraftsDelete.mockResolvedValue({})
+  mockRequestsGet.mockResolvedValue({ data: null })
   mockRequestsUpdate.mockResolvedValue({ error: null })
   useRequestsStore.setState({
     activeRequestId: null,
@@ -91,6 +93,64 @@ describe('useRequestsStore — sendRequest', () => {
     resolveExecute({ data: makeResponse() })
     await sendPromise
     expect(useRequestsStore.getState().isLoading).toBe(false)
+  })
+
+  describe('useRequestsStore — draft cleanup', () => {
+    it('does not re-save a stale draft after saveRequest clears it', async () => {
+      const request = makeRequest({ isDirty: true, url: 'https://example.com/dirty' })
+      mockRequestsGet.mockResolvedValue({ data: null })
+      useRequestsStore.setState({
+        activeRequestId: request.id,
+        editingRequest: request,
+        savedRequest: makeRequest(),
+      })
+
+      useRequestsStore.getState().updateField('url', 'https://example.com/dirty-2')
+      await useRequestsStore.getState().saveRequest()
+      useRequestsStore.getState().setActiveRequest(makeRequest({ id: 'req-2' }))
+
+      expect(mockDraftsDelete).toHaveBeenCalledWith({ requestId: request.id })
+      expect(mockDraftsUpsert).not.toHaveBeenCalled()
+    })
+
+    it('does not re-save a stale draft after discardDraft clears it', async () => {
+      const request = makeRequest({ isDirty: true, url: 'https://example.com/dirty' })
+      mockRequestsGet.mockResolvedValue({
+        data: {
+          id: request.id,
+          folder_id: request.folderId,
+          name: request.name,
+          protocol: request.protocol,
+          method: request.method,
+          url: 'https://example.com/saved',
+          params: '[]',
+          headers: '[]',
+          body_type: request.bodyType,
+          body_content: request.bodyContent,
+          auth_type: request.authType,
+          auth_config: '{}',
+          protocol_config: '{}',
+          ssl_verification: request.sslVerification,
+          network_settings: null,
+          description: null,
+          scm_path: null,
+          scm_sha: null,
+          sort_order: request.sortOrder,
+        },
+      })
+      useRequestsStore.setState({
+        activeRequestId: request.id,
+        editingRequest: request,
+        savedRequest: makeRequest({ url: 'https://example.com/saved' }),
+      })
+
+      useRequestsStore.getState().updateField('url', 'https://example.com/dirty-2')
+      await useRequestsStore.getState().discardDraft()
+      useRequestsStore.getState().setActiveRequest(makeRequest({ id: 'req-2' }))
+
+      expect(mockDraftsDelete).toHaveBeenCalledWith({ requestId: request.id })
+      expect(mockDraftsUpsert).not.toHaveBeenCalled()
+    })
   })
 
   it('clears isLoading and sets response on success', async () => {

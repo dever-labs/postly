@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Plug, PlugZap, Plus, Send, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { appendBoundedMessages, clearBoundedMessages, type BoundedMessageLog } from '@/lib/boundedMessageLog'
 
 interface MqttSubscription {
   topic: string
@@ -37,7 +38,7 @@ export function MqttView({
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [messages, setMessages] = useState<MqttMessage[]>([])
+  const [messageLog, setMessageLog] = useState<BoundedMessageLog<MqttMessage>>(() => clearBoundedMessages<MqttMessage>())
   const [subTopic, setSubTopic] = useState('')
   const [subQos, setSubQos] = useState<0 | 1 | 2>(0)
   const [pubTopic, setPubTopic] = useState('')
@@ -68,13 +69,13 @@ export function MqttView({
       else if (event.type === 'close' || event.type === 'disconnect') { setConnected(false); setConnecting(false) }
       else if (event.type === 'error') { setConnected(false); setConnecting(false); setError(event.message ?? null) }
       else if (event.type === 'message') {
-        setMessages((prev) => [...prev, {
+        setMessageLog((prev) => appendBoundedMessages(prev, [{
           id: crypto.randomUUID(),
           topic: event.topic ?? '',
           payload: event.payload ?? '',
           timestamp: event.timestamp ?? Date.now(),
           direction: 'in',
-        }])
+        }]))
       }
     })
     return () => { unsub() }
@@ -82,7 +83,7 @@ export function MqttView({
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [messages])
+  }, [messageLog])
 
   const connect = async (brokerUrl: string) => {
     if (!brokerUrl) return
@@ -129,13 +130,15 @@ export function MqttView({
 
   const publish = async () => {
     if (!pubTopic.trim()) return
-    setMessages((prev) => [...prev, {
+    setMessageLog((prev) => appendBoundedMessages(prev, [{
       id: crypto.randomUUID(), topic: pubTopic, payload: pubPayload, timestamp: Date.now(), direction: 'out',
-    }])
+    }]))
     await window.api.mqtt.publish({
       connectionId: connectionId.current, topic: pubTopic, payload: pubPayload, qos: pubQos, retain: pubRetain,
     })
   }
+
+  const messages = messageLog.items
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -289,11 +292,21 @@ export function MqttView({
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-th-border px-3 py-1.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-th-text-subtle">Messages</span>
-            <button onClick={() => setMessages([])} className="text-th-text-faint hover:text-th-text-subtle focus:outline-hidden">
+            <button
+              onClick={() => setMessageLog(clearBoundedMessages<MqttMessage>())}
+              title="Clear messages"
+              aria-label="Clear messages"
+              className="text-th-text-faint hover:text-th-text-subtle focus:outline-hidden"
+            >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
           <div ref={logRef} className="flex-1 overflow-y-auto p-2 font-mono text-xs">
+            {messageLog.dropped > 0 && (
+              <div data-testid="mqtt-messages-dropped" className="mb-2 rounded-sm border border-amber-500/20 bg-amber-900/10 px-2 py-1 text-amber-400 light:text-amber-800">
+                {messageLog.dropped.toLocaleString()} older messages dropped.
+              </div>
+            )}
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center text-th-text-faint">No messages</div>
             ) : (

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -14,13 +14,17 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { initDatabase, run, queryOne, schedulePersist, flushPersist, quarantineUnreadableDatabase } from '../index'
+import { initDatabase, run, queryOne, schedulePersist, flushPersist, quarantineUnreadableDatabase, PERSIST_DEBOUNCE_MS, runTransaction } from '../index'
 
 const dirs: string[] = []
 beforeEach(() => {
   state.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'postly-db-'))
   state.available = false
   dirs.push(state.dir)
+})
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 afterAll(() => dirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })))
 
@@ -36,6 +40,40 @@ describe('database lifecycle', () => {
     expect(fs.statSync(file).mtimeMs).toBeGreaterThanOrEqual(before)
     await initDatabase()
     expect(queryOne<{ value: string }>(`SELECT value FROM settings WHERE key = 'k'`)?.value).toBe('v')
+  })
+
+  it('coalesces bursts of writes into one persisted export', async () => {
+    vi.useFakeTimers()
+    await initDatabase()
+    const writeSpy = vi.spyOn(fs, 'writeFileSync')
+    const renameSpy = vi.spyOn(fs, 'renameSync')
+
+    run(`INSERT INTO settings (key, value) VALUES ('a', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+    run(`INSERT INTO settings (key, value) VALUES ('b', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+    run(`INSERT INTO settings (key, value) VALUES ('c', '3') ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+
+    expect(writeSpy).not.toHaveBeenCalled()
+    expect(renameSpy).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(PERSIST_DEBOUNCE_MS)
+
+    expect(writeSpy).toHaveBeenCalledOnce()
+    expect(renameSpy).toHaveBeenCalledOnce()
+  })
+
+  it('schedules one persist after a committed transaction', async () => {
+    vi.useFakeTimers()
+    await initDatabase()
+    const writeSpy = vi.spyOn(fs, 'writeFileSync')
+
+    runTransaction([
+      { sql: `INSERT INTO settings (key, value) VALUES ('a', '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value` },
+      { sql: `INSERT INTO settings (key, value) VALUES ('b', '2') ON CONFLICT(key) DO UPDATE SET value = excluded.value` },
+    ])
+
+    expect(writeSpy).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(PERSIST_DEBOUNCE_MS)
+    expect(writeSpy).toHaveBeenCalledOnce()
   })
 
   it('flushPersist is a no-op when nothing is pending', async () => {

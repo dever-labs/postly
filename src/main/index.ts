@@ -8,6 +8,10 @@ import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterp
 import { getGeneralSettings } from './ipc/settings-utils'
 import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
 
+if (process.env['POSTLY_USER_DATA_DIR']) {
+  app.setPath('userData', process.env['POSTLY_USER_DATA_DIR'])
+}
+
 function createWindow(): BrowserWindow {
   // Use ICO on Windows for proper multi-resolution title bar / taskbar icon
   const iconFile = platform === 'win32' ? 'icon.ico' : 'icon.png'
@@ -126,6 +130,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', flushPersist)
+process.on('exit', flushPersist)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

@@ -426,6 +426,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
     // Cancel any pending draft save and clear undo history
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    pendingDraftRequest = null
     clearUndo()
 
     // Clear dirty flag before serializing so the DB is written with is_dirty = 0
@@ -456,6 +457,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (!editingRequest || isScratchId(editingRequest.id)) return
 
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    pendingDraftRequest = null
     clearUndo()
     await window.api.drafts.request.delete({ requestId: editingRequest.id })
 
