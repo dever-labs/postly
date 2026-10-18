@@ -134,8 +134,13 @@ describe('real-world environment import fixtures', () => {
     ]))
     expect(collection.environments).toEqual([
       {
+        name: 'Base environment',
+        variables: [{ key: 'base_url', value: '{{scheme}}://{{host}}{{base_path}}', isSecret: false }],
+      },
+      {
         name: 'OpenAPI env',
         variables: [
+          { key: 'base_url', value: '{{scheme}}://{{host}}{{base_path}}', isSecret: false },
           { key: 'scheme', value: 'http', isSecret: false },
           { key: 'base_path', value: '/v2', isSecret: false },
           { key: 'host', value: 'petstore.swagger.io', isSecret: false },
@@ -156,6 +161,13 @@ describe('real-world environment import fixtures', () => {
       { key: 'folderOverride', value: 'fromInnerFolder', isSecret: false },
     ]))
     expect(collection.environments).toEqual([
+      {
+        name: 'Base Environment',
+        variables: [
+          { key: 'cascadeVar', value: 'fromBase', isSecret: false },
+          { key: 'subOnlyVar', value: 'subOnly_base', isSecret: false },
+        ],
+      },
       {
         name: 'SubEnvA',
         variables: [

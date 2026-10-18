@@ -303,11 +303,21 @@ describe('OpenAPI edge cases', () => {
     return { warnings: p.warnings, requests }
   }
 
-  it('warns when an operation or path declares its own servers', async () => {
-    const a = await run({ '/a': { get: { servers: [{ url: 'https://o.test' }], responses: {} } } })
-    const b = await run({ '/a': { servers: [{ url: 'https://o.test' }], get: { responses: {} } } })
-    expect(a.warnings.join()).toMatch(/own servers/)
-    expect(b.warnings.join()).toMatch(/own servers/)
+  it('applies operation > path > root server precedence to request URLs', async () => {
+    const { requests, warnings } = await run({
+      '/from-path': {
+        servers: [{ url: 'https://path.test/api' }],
+        get: { responses: {} },
+        post: { servers: [{ url: 'https://op.test/api' }], responses: {} },
+      },
+      '/from-root': { get: { responses: {} } },
+    })
+    expect(requests.map((request) => [request.name, request.url])).toEqual([
+      ['GET /from-path', 'https://path.test/api/from-path'],
+      ['POST /from-path', 'https://op.test/api/from-path'],
+      ['GET /from-root', '{{baseUrl}}/from-root'],
+    ])
+    expect(warnings.join()).not.toMatch(/own servers/)
   })
 
   it('warns about references to other files instead of silently dropping them', async () => {
@@ -353,6 +363,25 @@ describe('OpenAPI edge cases', () => {
     expect(requests).toHaveLength(1)
     expect(warnings.join()).toMatch(/"query" operation/)
     expect(warnings.join()).toMatch(/"additionalOperations" operations/)
+  })
+
+  it('defaults missing or empty root servers to "/" and resolves them like other relative servers', async () => {
+    const local = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Default Server', version: '1' },
+      paths: { '/pets': { get: { responses: {} } } },
+    }))
+    expect(local.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: '/', isSecret: false })
+    expect(walk(local.collections[0].collection)[0].url).toBe('{{baseUrl}}/pets')
+    expect(local.warnings.join()).toMatch(/The server URL "\/" is relative/)
+
+    const fetched = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Default Server', version: '1' },
+      servers: [],
+      paths: { '/pets': { get: { responses: {} } } },
+    }), { sourceUrl: 'https://spec.test/openapi.json' })
+    expect(fetched.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://spec.test', isSecret: false })
   })
 })
 
@@ -537,8 +566,9 @@ describe('OpenAPI helper coverage', () => {
     expect(converted.collection.requests).toEqual([])
     expect(converted.collection.folders).toEqual([])
     expect(converted.warnings).toEqual(expect.arrayContaining([
-      'No server URL found; set {{baseUrl}} in the collection variables.',
+      'The server URL "/" is relative; set {{baseUrl}} to the full address (for example https://host/).',
       'The document has no operations.',
     ]))
+    expect(converted.collection.variables).toContainEqual({ key: 'baseUrl', value: '/', isSecret: false })
   })
 })

@@ -169,6 +169,12 @@ interface EnvironmentVariable {
   isSecret: boolean
 }
 
+function mergeEnvironmentRows(base: EnvironmentVariable[], override: EnvironmentVariable[]): EnvironmentVariable[] {
+  const merged = new Map(base.map((row) => [row.key, row]))
+  for (const row of override) merged.set(row.key, row)
+  return [...merged.values()]
+}
+
 function isPrivateEnvironment(raw: Obj | undefined): boolean {
   if (!raw) return false
   const meta = isObj(raw.meta) ? raw.meta : {}
@@ -213,6 +219,16 @@ function warnPlainTextEnvironmentVariables(raw: Obj | undefined, rows: Environme
   if (rows.some((row) => row.isSecret) || hasTypedKvPairs) {
     warnings.push(`${label}: secret and typed environment variables were imported as plain text collection variables.`)
   }
+}
+
+function warnBaseCollectionVariables(raw: Obj | undefined, rows: EnvironmentVariable[], label: string, warnings: string[]): void {
+  if (rows.length === 0) return
+  const secretCount = rows.filter((row) => row.isSecret).length
+  const hasTypedKvPairs = Array.isArray(raw?.kvPairData) && list(raw.kvPairData).some((row) => str(row.name) && row.enabled !== false && row.type === 'json')
+  if (secretCount > 0) {
+    warnings.push(`${label}: ${secretCount} secret environment variable${secretCount === 1 ? ' was' : 's were'} added to the collection variables without ${secretCount === 1 ? 'its value' : 'their values'}. Use the imported environment for the real ${secretCount === 1 ? 'value' : 'values'}.`)
+  }
+  if (hasTypedKvPairs) warnings.push(`${label}: typed environment variables were imported as plain text collection variables.`)
 }
 
 function convertStandaloneEnvironment(raw: Obj, dataKey: 'data' | 'environment', budget: ImportBudget): { environment: ExportEnvironment; warnings: string[] } {
@@ -327,7 +343,7 @@ const NON_HTTP: Record<string, string> = {
 
 function convertTree(name: string, description: string, roots: Node[], baseEnv: Obj | undefined, subEnvironments: Obj[], extraWarnings: string[], hasCookies: boolean, tests: number, hasSpec: boolean, budget: ImportBudget): { collection: ExportCollection; warnings: string[] } {
   const warnings = [...extraWarnings]
-  const variables = new Map<string, string>()
+  const variables = new Map<string, EnvironmentVariable>()
   const pathVariables = new Map<string, string>()
   const environments: ExportEnvironment[] = []
   const scripted: string[] = []
@@ -345,31 +361,39 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
     warnUnconverted(label, before)
     return converted
   }
-  const addVariables = (pairs: Array<[string, string]>, source?: string) => {
-    for (const [key, value] of pairs) {
-      const next = t(value)
-      const existing = variables.get(key)
+  const addVariables = (rows: EnvironmentVariable[], source?: string, blankSecrets = false) => {
+    for (const row of rows) {
+      const next = blankSecrets && row.isSecret ? '' : t(row.value)
+      const incoming = { key: row.key, value: next, isSecret: blankSecrets ? row.isSecret : false }
+      const existing = variables.get(row.key)
       if (existing !== undefined && source) {
-        if (existing !== next && !warnedCollisions.has(key)) {
-          warnings.push(`${source}: environment variable "${key}" overrides a broader environment value; the folder value was kept.`)
-          warnedCollisions.add(key)
+        if (existing.value !== next && !warnedCollisions.has(row.key)) {
+          warnings.push(`${source}: environment variable "${row.key}" overrides a broader environment value; the folder value was kept.`)
+          warnedCollisions.add(row.key)
         }
-        variables.set(key, next)
-      } else if (existing === undefined) variables.set(key, next)
+        variables.set(row.key, incoming)
+      } else if (existing === undefined) variables.set(row.key, incoming)
     }
   }
-  const addEnvironmentVariables = (rows: EnvironmentVariable[], source?: string, label?: string) => {
+  const addEnvironmentVariables = (rows: EnvironmentVariable[], source?: string, label?: string, blankSecrets = false) => {
     const before = unconverted.size
-    addVariables(rows.map((row) => [row.key, row.value]), source)
+    addVariables(rows, source, blankSecrets)
     if (label) warnUnconverted(label, before)
   }
 
-  const baseEnvironmentRows = environmentRows(baseEnv, 'data', budget)
-  addEnvironmentVariables(baseEnvironmentRows, undefined, 'The base environment')
-  warnPlainTextEnvironmentVariables(baseEnv, baseEnvironmentRows, 'The base environment', warnings)
+  const baseEnvironmentLabel = str(baseEnv?.name) || 'Base Environment'
+  const baseEnvironmentRows = convertEnvironmentValueRows(environmentRows(baseEnv, 'data', budget), `Environment "${baseEnvironmentLabel}"`)
+  if (baseEnv) {
+    environments.push({
+      name: baseEnvironmentLabel,
+      variables: baseEnvironmentRows,
+    })
+  }
+  addEnvironmentVariables(baseEnvironmentRows, undefined, 'The base environment', true)
+  warnBaseCollectionVariables(baseEnv, baseEnvironmentRows, 'The base environment', warnings)
   for (const raw of [...subEnvironments].sort((a, b) => sortKeyOf(a) - sortKeyOf(b))) {
     const label = `Environment "${str(raw.name) || 'Imported'}"`
-    const rows = convertEnvironmentValueRows(environmentRows(raw, 'data', budget), label)
+    const rows = mergeEnvironmentRows(baseEnvironmentRows, convertEnvironmentValueRows(environmentRows(raw, 'data', budget), label))
     environments.push({
       name: str(raw.name) || 'Imported',
       variables: rows,
@@ -459,7 +483,9 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
   }
   if (hasCookies) warnings.push('The cookie jar was not imported.')
   if (tests > 0) warnings.push(`${tests} unit test${tests === 1 ? ' was' : 's were'} not imported.`)
-  for (const [key, value] of pathVariables) if (!variables.has(key)) variables.set(key, value)
+  for (const [key, value] of pathVariables) {
+    if (!variables.has(key)) variables.set(key, { key, value, isSecret: false })
+  }
 
   return {
     collection: {
@@ -468,7 +494,7 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
       source: 'local',
       auth: { ...NO_AUTH },
       ssl: 'inherit',
-      variables: [...variables].map(([key, value]) => ({ key, value, isSecret: false })),
+      variables: [...variables.values()],
       ...(environments.length > 0 ? { environments } : {}),
       requests,
       folders,

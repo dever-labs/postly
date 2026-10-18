@@ -92,7 +92,28 @@ function normalizeBaseUrl(value: string, sourceUrl?: string): string {
   if (url && !url.includes('{{') && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && sourceUrl) {
     try { url = new URL(url, sourceUrl).href } catch { /* kept as written */ }
   }
+  if (url === '/') return '/'
   return url.replace(/\/+$/, '')
+}
+
+function relativeServerWarning(value: string): string {
+  return `The server URL "${value}" is relative; set {{baseUrl}} to the full address (for example https://host${value.startsWith('/') ? '' : '/'}${value}).`
+}
+
+function rootServers(doc: Obj, isV3: boolean): Obj[] {
+  if (!isV3) return []
+  const servers = (Array.isArray(doc.servers) ? doc.servers : []).filter(isObj)
+  return servers.length > 0 ? servers : [{ url: '/' }]
+}
+
+function resolvedServer(server: Obj | undefined, sourceUrl?: string): { rawUrl: string; url: string } {
+  const rawUrl = server ? serverUrl(server) : '/'
+  return { rawUrl, url: normalizeBaseUrl(rawUrl, sourceUrl) }
+}
+
+function requestUrl(base: string, path: string): string {
+  if (!base || base === '/') return path
+  return `${base}${path.startsWith('/') ? '' : '/'}${path}`
 }
 
 function serverVariableValue(variable: unknown): string {
@@ -245,28 +266,24 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   const info = isObj(doc.info) ? doc.info : {}
   const variables = new Map<string, string>()
   const environments: ExportEnvironment[] = []
+  const v3RootServers = isV3 ? rootServers(doc, true) : []
+  const rootServer = v3RootServers[0]
 
   let baseUrl = ''
   if (isV3) {
-    const servers = (Array.isArray(doc.servers) ? doc.servers : []).filter(isObj)
-    baseUrl = servers[0] ? serverUrl(servers[0]) : ''
+    const servers = v3RootServers
+    const root = resolvedServer(servers[0], sourceUrl)
+    baseUrl = root.url
     if (servers.length > 1) environments.push(...servers.map((server, index) => openApiServerEnvironment(server, index, sourceUrl)))
+    if (root.rawUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(root.rawUrl) && !sourceUrl) warnings.push(relativeServerWarning(root.rawUrl))
   } else {
     const host = str(doc.host)
     const schemes = Array.isArray(doc.schemes) ? doc.schemes : []
-    baseUrl = swaggerBaseUrl(host, str(doc.basePath), str(schemes[0]) || 'https')
+    const rawBaseUrl = swaggerBaseUrl(host, str(doc.basePath), str(schemes[0]) || 'https')
+    baseUrl = normalizeBaseUrl(rawBaseUrl, sourceUrl)
     environments.push(...swaggerEnvironments(doc, sourceUrl))
+    if (rawBaseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(rawBaseUrl) && !sourceUrl) warnings.push(relativeServerWarning(rawBaseUrl))
   }
-  if (baseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(baseUrl)) {
-    const relative = baseUrl
-    try {
-      if (!sourceUrl) throw new Error('no source')
-      baseUrl = new URL(relative, sourceUrl).href
-    } catch {
-      warnings.push(`The server URL "${relative}" is relative; set {{baseUrl}} to the full address (for example https://host${relative.startsWith('/') ? '' : '/'}${relative}).`)
-    }
-  }
-  baseUrl = baseUrl.replace(/\/+$/, '')
   if (baseUrl) variables.set('baseUrl', baseUrl)
   else warnings.push('No server URL found; set {{baseUrl}} in the collection variables.')
 
@@ -315,8 +332,12 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
       if (!isObj(op)) continue
       count++
       const label = `${method.toUpperCase()} ${path}`
-      if ((Array.isArray(op.servers) && op.servers.length > 0) || (Array.isArray(rawItem.servers) && rawItem.servers.length > 0)) {
-        warnings.push(`${label}: defines its own servers, which are not mapped; it uses {{baseUrl}}.`)
+      const operationServers = (Array.isArray(op.servers) ? op.servers : []).filter(isObj)
+      const pathServers = (Array.isArray(rawItem.servers) ? rawItem.servers : []).filter(isObj)
+      const effectiveServer = operationServers[0] ?? pathServers[0] ?? rootServer
+      const resolvedEffectiveServer = resolvedServer(effectiveServer, sourceUrl)
+      if (effectiveServer !== rootServer && resolvedEffectiveServer.rawUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resolvedEffectiveServer.rawUrl) && !sourceUrl) {
+        warnings.push(`${label}: ${relativeServerWarning(resolvedEffectiveServer.rawUrl)}`)
       }
 
       const own = Array.isArray(op.parameters) ? op.parameters.filter(isObj) : []
@@ -335,7 +356,8 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
         return Array.isArray(source.enum) ? source.enum[0] : ''
       }
 
-      let url = `{{baseUrl}}${path}`
+      const urlUsesRootServer = !isV3 || resolvedEffectiveServer.url === baseUrl
+      let url = urlUsesRootServer ? `{{baseUrl}}${path}` : requestUrl(resolvedEffectiveServer.url, path)
       for (const p of params.filter((x) => x.in === 'path')) {
         const name = str(p.name)
         const value = paramValue(p)

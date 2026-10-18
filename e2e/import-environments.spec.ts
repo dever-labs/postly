@@ -19,9 +19,11 @@ const generated = path.join(__dirname, '.generated-import-environments')
 
 const names = {
   insomniaV5Collection: `Insomnia V5 ${stamp}`,
+  insomniaV5BaseEnv: `Insomnia V5 Base ${stamp}`,
   insomniaV5DevEnv: `Insomnia V5 Dev ${stamp}`,
   insomniaV5SecretEnv: `Insomnia V5 Secret ${stamp}`,
   insomniaV4Collection: `Insomnia V4 ${stamp}`,
+  insomniaV4BaseEnv: `Insomnia V4 Base ${stamp}`,
   insomniaV4DevEnv: `Insomnia V4 Dev ${stamp}`,
   insomniaV4ProdEnv: `Insomnia V4 Prod ${stamp}`,
   brunoBruCollection: `Bruno BRU ${stamp}`,
@@ -84,7 +86,7 @@ collection:
       id: req_v5_${stamp}
     method: GET
 environments:
-  name: Base
+  name: ${names.insomniaV5BaseEnv}
   meta:
     id: env_base_v5_${stamp}
     isPrivate: false
@@ -119,7 +121,7 @@ environments:
     __export_format: 4,
     resources: [
       { _id: 'wrk_v4_1', _type: 'workspace', parentId: null, name: names.insomniaV4Collection, description: '' },
-      { _id: 'env_base_v4_1', _type: 'environment', parentId: 'wrk_v4_1', name: 'Base', data: { host: `api-${stamp}.example.com`, base_url: 'https://{{ _.host }}' } },
+      { _id: 'env_base_v4_1', _type: 'environment', parentId: 'wrk_v4_1', name: names.insomniaV4BaseEnv, data: { host: `api-${stamp}.example.com`, base_url: 'https://{{ _.host }}' } },
       { _id: 'env_dev_v4_1', _type: 'environment', parentId: 'env_base_v4_1', name: names.insomniaV4DevEnv, metaSortKey: 20, data: { api: { url: '{{ _.base_url }}/v1' } } },
       { _id: 'env_prod_v4_1', _type: 'environment', parentId: 'env_base_v4_1', name: names.insomniaV4ProdEnv, metaSortKey: 10, isPrivate: true, data: { token: `shh-${stamp}`, nested: { enabled: true } } },
       { _id: 'req_v4_1', _type: 'request', parentId: 'wrk_v4_1', name: 'Ping', method: 'GET', url: '{{ _.base_url }}/ping' },
@@ -269,8 +271,10 @@ const collectionNames = [
 ]
 
 const environmentNames = [
+  names.insomniaV5BaseEnv,
   names.insomniaV5DevEnv,
   names.insomniaV5SecretEnv,
+  names.insomniaV4BaseEnv,
   names.insomniaV4DevEnv,
   names.insomniaV4ProdEnv,
   names.brunoBruEnv,
@@ -422,19 +426,30 @@ test.describe('Import environments', () => {
 
     await finishCollectionImport(window, names.insomniaV5Collection)
 
-    expect(await readEnvironments(window, [names.insomniaV5DevEnv, names.insomniaV5SecretEnv])).toEqual([
+    expect(await readEnvironments(window, [names.insomniaV5BaseEnv, names.insomniaV5DevEnv, names.insomniaV5SecretEnv])).toEqual([
+      {
+        name: names.insomniaV5BaseEnv,
+        isActive: false,
+        vars: [
+          { key: 'base_url', value: `https://api-${stamp}.example.com`, isSecret: false },
+          { key: 'token', value: `base-token-${stamp}`, isSecret: false },
+        ],
+      },
       {
         name: names.insomniaV5DevEnv,
         isActive: false,
         vars: [
+          { key: 'base_url', value: `https://api-${stamp}.example.com`, isSecret: false },
           { key: 'nested.url', value: '{{base_url}}/v2', isSecret: false },
           { key: 'tags', value: '["a","b"]', isSecret: false },
+          { key: 'token', value: `base-token-${stamp}`, isSecret: false },
         ],
       },
       {
         name: names.insomniaV5SecretEnv,
         isActive: false,
         vars: [
+          { key: 'base_url', value: `https://api-${stamp}.example.com`, isSecret: false },
           { key: 'region', value: 'us', isSecret: true },
           { key: 'token', value: '{{token}}', isSecret: true },
         ],
@@ -454,18 +469,30 @@ test.describe('Import environments', () => {
 
     await finishCollectionImport(window, names.insomniaV4Collection)
 
-    expect(await readEnvironments(window, [names.insomniaV4DevEnv, names.insomniaV4ProdEnv])).toEqual([
+    expect(await readEnvironments(window, [names.insomniaV4BaseEnv, names.insomniaV4DevEnv, names.insomniaV4ProdEnv])).toEqual([
+      {
+        name: names.insomniaV4BaseEnv,
+        isActive: false,
+        vars: [
+          { key: 'base_url', value: 'https://{{host}}', isSecret: false },
+          { key: 'host', value: `api-${stamp}.example.com`, isSecret: false },
+        ],
+      },
       {
         name: names.insomniaV4DevEnv,
         isActive: false,
         vars: [
           { key: 'api.url', value: '{{base_url}}/v1', isSecret: false },
+          { key: 'base_url', value: 'https://{{host}}', isSecret: false },
+          { key: 'host', value: `api-${stamp}.example.com`, isSecret: false },
         ],
       },
       {
         name: names.insomniaV4ProdEnv,
         isActive: false,
         vars: [
+          { key: 'base_url', value: 'https://{{host}}', isSecret: false },
+          { key: 'host', value: `api-${stamp}.example.com`, isSecret: false },
           { key: 'nested.enabled', value: 'true', isSecret: true },
           { key: 'token', value: `shh-${stamp}`, isSecret: true },
         ],
