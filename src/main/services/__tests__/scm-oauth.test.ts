@@ -57,6 +57,9 @@ vi.mock('electron', () => {
       on: vi.fn((event: string, handler: () => void) => {
         ;(listeners[event] ??= []).push(handler)
       }),
+      off: vi.fn((event: string, handler: () => void) => {
+        listeners[event] = (listeners[event] ?? []).filter((candidate) => candidate !== handler)
+      }),
       isDestroyed: vi.fn(() => destroyed),
       close: vi.fn(() => {
         destroyed = true
@@ -366,7 +369,7 @@ describe('startGitHubOAuth', () => {
     })
 
     const windows = vi.mocked(BrowserWindow).mock.results
-    const firstWindow = windows[0]?.value as { loadURL: ReturnType<typeof vi.fn> }
+    const firstWindow = windows[0]?.value as { loadURL: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> }
     const authorizeUrl = new URL(firstWindow.loadURL.mock.calls[0][0])
 
     expect(result).toEqual({
@@ -390,6 +393,7 @@ describe('startGitHubOAuth', () => {
       }),
       { headers: { Accept: 'application/json' } },
     )
+    expect(firstWindow.off).toHaveBeenCalledWith('closed', expect.any(Function))
     expect(mockGet).toHaveBeenCalledWith(
       'https://api.github.com/user',
       expect.objectContaining({
@@ -452,7 +456,7 @@ describe('startGitLabOAuth', () => {
     })
 
     const windows = vi.mocked(BrowserWindow).mock.results
-    const firstWindow = windows[0]?.value as { loadURL: ReturnType<typeof vi.fn> }
+    const firstWindow = windows[0]?.value as { loadURL: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> }
     const authorizeUrl = new URL(firstWindow.loadURL.mock.calls[0][0])
 
     expect(result).toEqual({
@@ -482,6 +486,7 @@ describe('startGitLabOAuth', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer gitlab-token' }),
       }),
     )
+    expect(firstWindow.off).toHaveBeenCalledWith('closed', expect.any(Function))
   })
 
   it('rejects callback requests that omit the authorization code', async () => {

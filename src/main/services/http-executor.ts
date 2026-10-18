@@ -21,6 +21,7 @@ function formatBytes(bytes: number): string {
 }
 
 export interface HttpRequest {
+  requestId?: string
   method: string
   url: string
   headers: Record<string, string>

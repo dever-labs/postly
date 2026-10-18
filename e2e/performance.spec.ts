@@ -16,8 +16,7 @@ import path from 'path'
 const ROOT = path.join(__dirname, '..')
 const MAIN = path.join(ROOT, 'out', 'main', 'index.js')
 const RENDERER_URL = `file://${path.join(ROOT, 'out', 'renderer', 'index.html').replace(/\\/g, '/')}`
-
-const LAUNCH_ENV = { ...process.env, ELECTRON_RENDERER_URL: RENDERER_URL, PLAYWRIGHT: '1' }
+const E2E_STATE_ROOT = path.join(ROOT, '.e2e-state')
 
 // ── Thresholds (ms) ───────────────────────────────────────────────────────────
 // Set conservatively so CI passes, but large regressions are caught.
@@ -37,6 +36,23 @@ function fmt(ms: number): string {
   return `${ms}ms`
 }
 
+function createUserDataDir(prefix: string): string {
+  fs.mkdirSync(E2E_STATE_ROOT, { recursive: true })
+  return fs.mkdtempSync(path.join(E2E_STATE_ROOT, `${prefix}-`))
+}
+
+function launchWithFreshUserData(prefix: string) {
+  const userDataDir = createUserDataDir(prefix)
+  return {
+    userDataDir,
+    launch: () => electron.launch({
+      args: [MAIN],
+      env: { ...process.env, ELECTRON_RENDERER_URL: RENDERER_URL, PLAYWRIGHT: '1', POSTLY_USER_DATA_DIR: userDataDir },
+    }),
+    cleanup: () => fs.rmSync(userDataDir, { recursive: true, force: true }),
+  }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 test.describe('Startup performance', () => {
@@ -47,8 +63,8 @@ test.describe('Startup performance', () => {
    */
   test('startup milestones are within thresholds', async () => {
     const t0 = Date.now()
-
-    const app = await electron.launch({ args: [MAIN], env: LAUNCH_ENV })
+    const launch = launchWithFreshUserData('perf-startup')
+    const app = await launch.launch()
 
     try {
       // ── Milestone 1: first window ───────────────────────────────────────────
@@ -75,6 +91,7 @@ test.describe('Startup performance', () => {
       expect(tSidebar,     'sidebar should be interactive within threshold').toBeLessThan(T_SIDEBAR_MS)
     } finally {
       await app.close()
+      launch.cleanup()
     }
   })
 
@@ -85,8 +102,8 @@ test.describe('Startup performance', () => {
    */
   test('window is created before data load completes', async () => {
     const t0 = Date.now()
-
-    const app = await electron.launch({ args: [MAIN], env: LAUNCH_ENV })
+    const launch = launchWithFreshUserData('perf-window-before-data')
+    const app = await launch.launch()
 
     try {
       const page = await app.firstWindow()
@@ -106,6 +123,7 @@ test.describe('Startup performance', () => {
       expect(windowBeforeData, 'window should be created before data finishes loading').toBe(true)
     } finally {
       await app.close()
+      launch.cleanup()
     }
   })
 
@@ -114,13 +132,15 @@ test.describe('Startup performance', () => {
     const samples: number[] = []
     for (let i = 0; i < 3; i++) {
       const t0 = Date.now()
-      const app = await electron.launch({ args: [MAIN], env: LAUNCH_ENV })
+      const launch = launchWithFreshUserData(`perf-median-${i}`)
+      const app = await launch.launch()
       try {
         const page = await app.firstWindow()
         await page.waitForSelector('[data-testid="sidebar"]', { timeout: T_SIDEBAR_MS * 2 })
         samples.push(Date.now() - t0)
       } finally {
         await app.close()
+        launch.cleanup()
       }
     }
     samples.sort((a, b) => a - b)
@@ -134,7 +154,8 @@ test.describe('Startup performance', () => {
    * the update check must not run during startup.
    */
   test('heavy modules stay off the startup path', async () => {
-    const app = await electron.launch({ args: [MAIN], env: LAUNCH_ENV })
+    const launch = launchWithFreshUserData('perf-heavy-modules')
+    const app = await launch.launch()
     try {
       const page = await app.firstWindow()
       await page.waitForSelector('[data-testid="sidebar"]', { timeout: T_SIDEBAR_MS })
@@ -164,6 +185,7 @@ test.describe('Startup performance', () => {
       expect(loaded, 'main-process modules that must be lazy').toEqual([])
     } finally {
       await app.close()
+      launch.cleanup()
     }
   })
 })

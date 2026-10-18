@@ -50,13 +50,14 @@ test.describe('drag area', () => {
       const editor = document.querySelector('[data-testid="app-root"] .drag-region.relative')!
       const s = sidebarStrip.getBoundingClientRect()
       const editorHeader = [...editor.querySelectorAll('.drag-region')].find((el) => el.getBoundingClientRect().top <= 1)
+      const headerStyle = editorHeader ? getComputedStyle(editorHeader) : null
       return {
         region: getComputedStyle(sidebarStrip).getPropertyValue('-webkit-app-region'),
         top: s.top,
         height: s.height,
         widthMatchesSidebar: Math.round(s.width) === Math.round(sidebar.getBoundingClientRect().width),
         tabsBelowStrip: tabs.getBoundingClientRect().top >= s.bottom,
-        editorStripHeight: editorHeader ? parseFloat(getComputedStyle(editorHeader).paddingTop) : null,
+        editorStripHeight: headerStyle ? parseFloat(headerStyle.paddingTop) + parseFloat(headerStyle.paddingBottom) : null,
         editorRegion: getComputedStyle(editor).getPropertyValue('-webkit-app-region'),
       }
     })

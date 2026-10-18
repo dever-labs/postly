@@ -317,6 +317,7 @@ export function RequestEditor() {
 
         {protocol === 'mqtt' && (
           <MqttView
+            brokerUrl={editingRequest.url}
             clientId={pcGet(pc, 'clientId')}
             username={pcGet(pc, 'username')}
             password={pcGet(pc, 'password')}

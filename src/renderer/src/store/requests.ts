@@ -338,6 +338,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     }
 
     const httpRequest: HttpRequest = {
+      requestId,
       method: editingRequest.protocol === 'graphql' ? 'POST' : editingRequest.method,
       url: editingRequest.url,
       headers: kvpToRecord(editingRequest.headers),
@@ -417,7 +418,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
   },
 
   cancelRequest: () => {
-    void window.api.http.cancel()
+    const requestId = get().editingRequest?.id
+    void window.api.http.cancel(requestId ? { requestId } : undefined)
   },
 
   saveRequest: async () => {

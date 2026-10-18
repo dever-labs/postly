@@ -16,6 +16,7 @@ interface MqttMessage {
 }
 
 interface MqttViewProps {
+  brokerUrl: string
   clientId: string
   username: string
   password: string
@@ -26,6 +27,7 @@ interface MqttViewProps {
 }
 
 export function MqttView({
+  brokerUrl,
   clientId,
   username,
   password,
@@ -84,12 +86,30 @@ export function MqttView({
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [messages])
 
-  const connect = async (brokerUrl: string) => {
-    if (!brokerUrl) return
+  const trimmedBrokerUrl = brokerUrl.trim()
+  const hasBrokerUrl = trimmedBrokerUrl.length > 0
+  const brokerUrlError = (() => {
+    if (!hasBrokerUrl) return 'Enter a broker URL to connect.'
+    try {
+      const parsed = new URL(trimmedBrokerUrl)
+      return ['mqtt:', 'mqtts:', 'ws:', 'wss:'].includes(parsed.protocol)
+        ? null
+        : 'Broker URL must start with mqtt://, mqtts://, ws://, or wss://.'
+    } catch {
+      return 'Broker URL must be a valid URL.'
+    }
+  })()
+  const canConnect = !connecting && !brokerUrlError
+
+  const connect = async () => {
+    if (brokerUrlError) {
+      setError(brokerUrlError)
+      return
+    }
     setConnecting(true); setError(null)
     const { error: err } = await window.api.mqtt.connect({
       connectionId: connectionId.current,
-      brokerUrl,
+      brokerUrl: trimmedBrokerUrl,
       clientId: clientId || undefined,
       username: username || undefined,
       password: password || undefined,
@@ -152,7 +172,11 @@ export function MqttView({
               <PlugZap className="h-3.5 w-3.5" /> Disconnect
             </button>
           ) : (
-            <button onClick={() => connect('')} disabled className="flex items-center gap-1.5 rounded-sm bg-amber-600 px-3 py-1 text-xs font-medium text-white focus:outline-hidden opacity-50 cursor-not-allowed">
+            <button
+              onClick={connect}
+              disabled={!canConnect}
+              className="flex items-center gap-1.5 rounded-sm bg-amber-600 px-3 py-1 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 focus:outline-hidden"
+            >
               <Plug className="h-3.5 w-3.5" /> Connect
             </button>
           )}
@@ -189,10 +213,13 @@ export function MqttView({
                   Clean Session
                 </label>
               </div>
+              {brokerUrlError && (
+                <p className="text-xs text-amber-400 light:text-amber-800">{brokerUrlError}</p>
+              )}
               {!connected && (
                 <button
-                  onClick={() => connect('')}
-                  disabled={connecting}
+                  onClick={connect}
+                  disabled={!canConnect}
                   className="mt-1 flex items-center justify-center gap-1.5 rounded-sm bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50 focus:outline-hidden"
                 >
                   <Plug className="h-3.5 w-3.5" /> {connecting ? 'Connecting…' : 'Connect to broker'}

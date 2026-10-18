@@ -144,13 +144,13 @@ function baseResp() {
 async function invoke(req: unknown): Promise<Result> {
   const handler = state.handlers['postly:http:execute']
   if (!handler) throw new Error('postly:http:execute handler not registered')
-  return handler({ sender: {} }, req) as Promise<Result>
+  return handler({ sender: { id: 1, isDestroyed: () => false, send: vi.fn() } }, req) as Promise<Result>
 }
 
-async function invokeCancel(): Promise<void> {
+async function invokeCancel(args?: { requestId?: string }, senderId = 1): Promise<void> {
   const cancelHandler = state.handlers['postly:http:cancel']
   if (!cancelHandler) throw new Error('postly:http:cancel handler not registered')
-  await cancelHandler(null, null as never)
+  await cancelHandler({ sender: { id: senderId } }, args as never)
 }
 
 /** Asserts the invocation succeeded and returns the data object (never null). */
@@ -790,9 +790,9 @@ describe('http IPC handler', () => {
         return baseResp()
       })
 
-      const executePromise = invoke(baseReq())
+      const executePromise = invoke(baseReq({ requestId: 'req-1' }))
       // Cancel while execute is still in progress
-      await invokeCancel()
+      await invokeCancel({ requestId: 'req-1' })
       await executePromise
 
       expect(capturedSignal?.aborted).toBe(true)
@@ -807,6 +807,29 @@ describe('http IPC handler', () => {
       await invoke(baseReq())
       // Second cancel should be a no-op (controller was cleared after first execute)
       await expect(invokeCancel()).resolves.toBeUndefined()
+    })
+
+    it('cancels only the matching in-flight request id', async () => {
+      const signals = new Map<string, AbortSignal | undefined>()
+      const done = new Map<string, () => void>()
+      mockExec.mockImplementation(async (request, opts) => {
+        const requestId = (request as { requestId?: string }).requestId ?? 'unknown'
+        signals.set(requestId, opts?.signal)
+        await new Promise<void>((resolve) => { done.set(requestId, resolve) })
+        return baseResp()
+      })
+
+      const first = invoke(baseReq({ requestId: 'req-1' }))
+      const second = invoke(baseReq({ requestId: 'req-2' }))
+      await vi.waitFor(() => expect(signals.size).toBe(2))
+
+      await invokeCancel({ requestId: 'req-1' })
+      expect(signals.get('req-1')?.aborted).toBe(true)
+      expect(signals.get('req-2')?.aborted).toBe(false)
+
+      done.get('req-1')?.()
+      done.get('req-2')?.()
+      await Promise.all([first, second])
     })
   })
 

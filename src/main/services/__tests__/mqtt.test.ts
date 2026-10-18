@@ -31,8 +31,38 @@ import {
   isMqttConnected
 } from '../mqtt'
 
-const sender = { send: vi.fn() }
-const asSender = sender as never
+function makeSender() {
+  const listeners = new Map<string, Map<() => void, () => void>>()
+  let destroyed = false
+  const listenersFor = (event: string) => {
+    const existing = listeners.get(event)
+    if (existing) return existing
+    const next = new Map<() => void, () => void>()
+    listeners.set(event, next)
+    return next
+  }
+  return {
+    send: vi.fn(),
+    isDestroyed: () => destroyed,
+    once: (event: string, handler: () => void) => {
+      const wrapped = () => {
+        listeners.get(event)?.delete(handler)
+        handler()
+      }
+      listenersFor(event).set(handler, wrapped)
+    },
+    off: (event: string, handler: () => void) => {
+      listeners.get(event)?.delete(handler)
+    },
+    destroy: () => {
+      destroyed = true
+      for (const handler of [...(listeners.get('destroyed')?.values() ?? [])]) handler()
+    },
+  }
+}
+
+let sender = makeSender()
+let asSender = sender as never
 
 // The mqtt module is loaded lazily, so the client only exists after the dynamic import resolves.
 async function startConnect(id: string, options = {}) {
@@ -53,7 +83,8 @@ async function connect(id = 'c1', options = {}) {
 beforeEach(() => {
   state.clients = []
   state.lastOpts = null
-  sender.send.mockClear()
+  sender = makeSender()
+  asSender = sender as never
   for (const id of ['c1', 'c2']) disconnectMqtt(id)
 })
 
@@ -123,5 +154,13 @@ describe('mqtt service', () => {
     disconnectMqtt('c1')
     expect(client.end).toHaveBeenCalled()
     expect(isMqttConnected('c1')).toBe(false)
+  })
+
+  it('tears down the connection when the renderer is destroyed', async () => {
+    const client = await connect()
+    sender.destroy()
+    expect(client.end).toHaveBeenCalledWith(true)
+    expect(isMqttConnected('c1')).toBe(false)
+    expect(sender.send).toHaveBeenCalledTimes(1)
   })
 })

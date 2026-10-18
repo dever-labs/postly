@@ -137,7 +137,7 @@ export function CollectionsSidebar() {
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
       {/* Same height as the drag strip above the editor pages (pt-8), so the window can be dragged from edge to edge */}
-      <div data-testid="sidebar-drag-strip" className="drag-region h-8 shrink-0" />
+      <div data-testid="sidebar-drag-strip" className="drag-region shrink-0 pt-8 pb-4" />
       <div
         role="tablist"
         aria-label="Sidebar view"

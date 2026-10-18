@@ -150,9 +150,15 @@ describe('useRequestsStore — sendRequest', () => {
 })
 
 describe('useRequestsStore — cancelRequest', () => {
-  it('calls window.api.http.cancel', () => {
+  it('passes the editing request id to window.api.http.cancel', () => {
+    useRequestsStore.setState({ editingRequest: makeRequest({ id: 'req-cancel' }) })
     useRequestsStore.getState().cancelRequest()
-    expect(mockHttpCancel).toHaveBeenCalledOnce()
+    expect(mockHttpCancel).toHaveBeenCalledWith({ requestId: 'req-cancel' })
+  })
+
+  it('falls back to a plain cancel when no request is selected', () => {
+    useRequestsStore.getState().cancelRequest()
+    expect(mockHttpCancel).toHaveBeenCalledWith(undefined)
   })
 })
 

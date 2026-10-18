@@ -25,6 +25,10 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+function isGitBackedSource(source: CollectionSource): boolean {
+  return ['git', 'github', 'gitlab'].includes(source)
+}
+
 interface GroupSectionProps {
   source: CollectionSource
   integration?: Integration | null
@@ -84,13 +88,13 @@ export function GroupSection({ source, integration, folders, requests, searchQue
     if (!collection) return
     if (!folder.parentId) {
       renameCollection(folder.id, name)
-      if (['git', 'github', 'gitlab'].includes(collection.source)) {
+      if (isGitBackedSource(collection.source)) {
         openGitAction({ type: 'push', collectionId: collection.id, title: `Renamed collection to '${name}'` })
       }
       return
     }
     renameGroup(folder.id, name)
-    if (['git', 'github', 'gitlab'].includes(collection.source)) {
+    if (isGitBackedSource(collection.source)) {
       openGitAction({ type: 'push', collectionId: collection.id, title: `Renamed folder to '${name}'`, subtitle: collection.name })
     }
   }
@@ -99,7 +103,7 @@ export function GroupSection({ source, integration, folders, requests, searchQue
     setAddingFolderTo(null)
     const folderId = await createSubFolder(parent.id, name)
     const collection = getRootCollection(parent.id, folders)
-    if (folderId && collection && ['git', 'github', 'gitlab'].includes(collection.source)) {
+    if (folderId && collection && isGitBackedSource(collection.source)) {
       openGitAction({
         type: 'push',
         collectionId: collection.id,
@@ -111,13 +115,24 @@ export function GroupSection({ source, integration, folders, requests, searchQue
   }
 
   const handleAddRequest = (folder: Folder) => {
-    void addRequestToFolder(folder.id)
+    const collection = getRootCollection(folder.id, folders)
+    void addRequestToFolder(folder.id).then((requestId) => {
+      if (requestId && collection && isGitBackedSource(collection.source)) {
+        openGitAction({
+          type: 'push',
+          collectionId: collection.id,
+          title: 'Created endpoint',
+          subtitle: collection.name,
+          onCancel: () => useCollectionsStore.getState().deleteRequest(requestId),
+        })
+      }
+    })
   }
 
   const handleDeleteFolder = (folder: Folder) => {
     const collection = getRootCollection(folder.id, folders)
     if (!folder.parentId) {
-      if (['git', 'github', 'gitlab'].includes(folder.source)) {
+      if (isGitBackedSource(folder.source)) {
         openGitAction({ type: 'delete-collection', collectionId: folder.id, title: `Delete collection '${folder.name}'` })
       } else {
         openDeleteCollection(folder.id)
@@ -126,7 +141,7 @@ export function GroupSection({ source, integration, folders, requests, searchQue
     }
 
     void deleteGroup(folder.id).then(() => {
-      if (collection && ['git', 'github', 'gitlab'].includes(collection.source)) {
+      if (collection && isGitBackedSource(collection.source)) {
         openGitAction({ type: 'push', collectionId: collection.id, title: `Deleted folder '${folder.name}'`, subtitle: collection.name })
       }
     })
@@ -135,7 +150,7 @@ export function GroupSection({ source, integration, folders, requests, searchQue
   const handleDeleteRequest = (folder: Folder, requestId: string) => {
     const collection = getRootCollection(folder.id, folders)
     void useCollectionsStore.getState().deleteRequest(requestId).then(() => {
-      if (collection && ['git', 'github', 'gitlab'].includes(collection.source)) {
+      if (collection && isGitBackedSource(collection.source)) {
         openGitAction({ type: 'push', collectionId: collection.id, title: 'Deleted endpoint', subtitle: collection.name })
       }
     })
@@ -243,7 +258,7 @@ export function GroupSection({ source, integration, folders, requests, searchQue
                   return
                 }
                 await load()
-                if (['git', 'github', 'gitlab'].includes(source)) {
+                if (isGitBackedSource(source)) {
                   openGitAction({
                     type: 'push',
                     collectionId,
