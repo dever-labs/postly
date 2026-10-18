@@ -6,7 +6,7 @@ import { convertBrunoYamlFiles, isBrunoYamlFolder } from './import-bruno-yaml'
 import { convertInsomnia, convertInsomniaEnvironment, insomniaKind } from './import-insomnia'
 import { convertPostmanV3Files, isPostmanV3Folder } from './import-postman-v3'
 import { convertPostman, convertPostmanEnvironment, isPostmanCollection, isPostmanEnvironment, isPostmanV1Collection } from './import-postman'
-import { list } from './import-util'
+import { list, MAX_IMPORT_ENVIRONMENTS } from './import-util'
 
 export type ImportFormat =
   | 'postly'
@@ -75,6 +75,15 @@ function summarizePostmanEnvironment(doc: Record<string, unknown>): { environmen
   return { environment, warnings }
 }
 
+function ensureEnvironmentLimit(collections: unknown[], environments?: ExportEnvironment[]): void {
+  const total = collections.reduce<number>((count, collection) => {
+    if (typeof collection !== 'object' || collection === null) return count
+    const nested = (collection as Partial<ExportCollection>).environments
+    return count + (Array.isArray(nested) ? nested.length : 0)
+  }, 0) + (environments?.length ?? 0)
+  if (total > MAX_IMPORT_ENVIRONMENTS) throw new Error(`The import has more than ${MAX_IMPORT_ENVIRONMENTS} environments.`)
+}
+
 function normalizePreviewEnvironments(value: unknown): ExportEnvironment[] | undefined {
   if (!Array.isArray(value)) return undefined
   return value.flatMap((entry) => {
@@ -110,6 +119,7 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
   const obj = doc as Record<string, unknown>
   if (typeof obj.$schema === 'string' && obj.$schema.startsWith('postly/') && Array.isArray(obj.collections)) {
     const environments = normalizePreviewEnvironments(obj.environments)
+    ensureEnvironmentLimit(obj.collections as ExportCollection[], environments)
     return { format: 'postly', collections: (obj.collections as ExportCollection[]).map(summarize), ...(environments ? { environments } : {}), warnings: [] }
   }
   if (isOpenApiDocument(obj)) {
@@ -119,20 +129,24 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     } catch (err) {
       throw new Error(`Invalid OpenAPI document: ${(err as Error).message}`, { cause: err })
     }
+    ensureEnvironmentLimit([result.collection])
     return { format: 'openapi', collections: [summarize(result.collection)], warnings: result.warnings }
   }
   if (isPostmanCollection(obj)) {
     const result = convertPostman(obj)
+    ensureEnvironmentLimit([result.collection])
     return { format: 'postman', collections: [summarize(result.collection)], warnings: result.warnings }
   }
   if (isPostmanEnvironment(obj)) {
     const result = summarizePostmanEnvironment(obj)
+    ensureEnvironmentLimit([], [result.environment])
     return { format: 'postman-environment', collections: [], environments: [result.environment], warnings: result.warnings }
   }
   const insomnia = insomniaKind(obj)
   if (insomnia === 'unsupported') throw new Error('This Insomnia file type is not supported. Export a collection or workspace from Insomnia.')
   if (insomnia === 'environment') {
     const result = convertInsomniaEnvironment(obj)
+    ensureEnvironmentLimit([], result.environments)
     return { format: 'insomnia-environment', collections: [], environments: result.environments, warnings: result.warnings }
   }
   if (insomnia) {
@@ -140,8 +154,10 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
     const warnings: string[] = []
     const converted = convertInsomnia(obj, insomnia)
     if (converted.collections.length === 0 && converted.environments) {
+      ensureEnvironmentLimit([], converted.environments)
       return { format: 'insomnia-environment', collections: [], environments: converted.environments, warnings: converted.warnings ?? [] }
     }
+    ensureEnvironmentLimit(converted.collections.map((entry) => entry.collection), converted.environments)
     warnings.push(...(converted.warnings ?? []))
     for (const entry of converted.collections) {
       let { collection } = entry
@@ -163,16 +179,21 @@ export async function previewImport(text: string, options: { sourceUrl?: string 
   }
   if (isBrunoEnvironmentExport(obj)) {
     const result = convertBrunoEnvironmentExport(obj)
+    ensureEnvironmentLimit([], result.environments)
     return { format: 'bruno-environment', collections: [], environments: result.environments, warnings: result.warnings }
   }
   if (isBrunoExport(obj)) {
     const result = convertBrunoExport(obj)
+    ensureEnvironmentLimit([result.collection])
     return { format: 'bruno', collections: [summarize(result.collection)], warnings: result.warnings }
   }
   if (isPostmanV1Collection(obj)) throw new Error('This is a Postman collection v1 file, which is not supported. Export it again as Collection v2.1.')
   if (obj.$kind === 'collection') {
     const entries = convertPostmanV3Files([{ path: 'collection.yaml', text }])
-    if (entries.length > 0) return { format: 'postman', collections: entries.map((e) => summarize(e.collection)), warnings: multi(entries) }
+    if (entries.length > 0) {
+      ensureEnvironmentLimit(entries.map((entry) => entry.collection))
+      return { format: 'postman', collections: entries.map((e) => summarize(e.collection)), warnings: multi(entries) }
+    }
   }
   throw new Error('Unrecognised format. Supported: Postly export, Postman collection v2.x, Insomnia v4/v5 export, Bruno JSON export, OpenAPI 3.x and Swagger 2 (JSON or YAML).')
 }

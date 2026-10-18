@@ -590,6 +590,90 @@ environments:
     })
   })
 
+  it('rejects v4 workspace imports with more than 5000 environments', async () => {
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        { _id: 'wrk_1', _type: 'workspace', parentId: null, name: 'W', description: '' },
+        { _id: 'env_base', _type: 'environment', parentId: 'wrk_1', name: 'Base', data: {} },
+        ...Array.from({ length: 5000 }, (_, index) => ({
+          _id: `env_${index + 1}`,
+          _type: 'environment',
+          parentId: 'env_base',
+          name: `Env ${index + 1}`,
+          data: {},
+        })),
+      ],
+    }))).rejects.toThrow(/more than 5000 environments/i)
+  })
+
+  it('bounds standalone v4 environment nesting depth instead of recursing indefinitely', async () => {
+    const resources: Array<Record<string, unknown>> = []
+    let parentId: string | null = null
+    for (let depth = 0; depth <= 65; depth += 1) {
+      const id = `env_${depth}`
+      resources.push({
+        _id: id,
+        _type: 'environment',
+        parentId,
+        name: `Env ${depth}`,
+        data: {},
+      })
+      parentId = id
+    }
+
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources,
+    }))).rejects.toThrow(/nested deeper than 64 levels/i)
+  })
+
+  it('counts kvPairData environment rows against the import budget', async () => {
+    await expect(previewImport(JSON.stringify({
+      _type: 'export',
+      __export_format: 4,
+      resources: [
+        {
+          _id: 'env_base',
+          _type: 'environment',
+          parentId: null,
+          name: 'Base',
+          kvPairData: Array.from({ length: 20001 }, (_, index) => ({
+            id: `pair_${index + 1}`,
+            name: `key_${index + 1}`,
+            value: String(index + 1),
+            type: 'str',
+            enabled: true,
+          })),
+        },
+      ],
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
+  it('counts merged base environment rows against the import budget in v5 collections', async () => {
+    await expect(previewImport(JSON.stringify({
+      type: 'collection.insomnia.rest/5.0',
+      schema_version: '5.1',
+      name: 'Huge envs',
+      meta: { id: 'wrk_huge' },
+      collection: [],
+      environments: {
+        name: 'Base',
+        meta: { id: 'env_base' },
+        data: Object.fromEntries(Array.from({ length: 12000 }, (_, index) => [`base_${index + 1}`, `${index + 1}`])),
+        subEnvironments: [
+          {
+            name: 'Merged',
+            meta: { id: 'env_merged', sortKey: 1 },
+            data: Object.fromEntries(Array.from({ length: 9001 }, (_, index) => [`child_${index + 1}`, `${index + 1}`])),
+          },
+        ],
+      },
+    }))).rejects.toThrow(/more than 20000 requests and folders/i)
+  })
+
   it('explains other unsupported Insomnia file types', async () => {
     await expect(previewImport('type: mcpClient.insomnia/5.0\nname: x\n')).rejects.toThrow(/not supported/)
   })

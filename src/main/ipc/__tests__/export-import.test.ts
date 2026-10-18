@@ -397,6 +397,55 @@ describe('importData', () => {
     expect(envVarInsert?.params).toContain(1)
   })
 
+  it('stringifies object and array variable values, and blanks nullish ones', () => {
+    const file = makeFile({
+      collections: [
+        {
+          name: 'Env API',
+          description: '',
+          source: 'local',
+          auth: { type: 'none', config: {} },
+          ssl: 'inherit',
+          requests: [],
+          folders: [],
+          variables: [
+            { key: 'obj', value: { ok: true }, isSecret: false },
+            { key: 'list', value: [1, 2], isSecret: false },
+            { key: 'none', value: null, isSecret: false },
+            { key: 'missing', value: undefined, isSecret: false },
+          ] as unknown as Array<{ key: string; value: string; isSecret: boolean }>,
+          environments: [
+            {
+              name: 'Nested',
+              variables: [
+                { key: 'envObj', value: { nested: true }, isSecret: false },
+                { key: 'envNone', value: null, isSecret: false },
+              ] as unknown as Array<{ key: string; value: string; isSecret: boolean }>,
+            },
+          ],
+        },
+      ],
+    })
+
+    importData(file)
+
+    expect(mockCollectionVariableStatements).toHaveBeenCalledWith(expect.any(String), [
+      { key: 'obj', value: '{"ok":true}', isSecret: false },
+      { key: 'list', value: '[1,2]', isSecret: false },
+      { key: 'none', value: '', isSecret: false },
+      { key: 'missing', value: '', isSecret: false },
+    ])
+
+    const envVarInserts = mockTransaction.mock.calls
+      .flatMap(([st]) => st)
+      .filter((statement) => statement.sql.includes('INSERT INTO env_vars'))
+      .map((statement) => statement.params)
+    expect(envVarInserts).toEqual(expect.arrayContaining([
+      expect.arrayContaining(['envObj', '{"nested":true}']),
+      expect.arrayContaining(['envNone', '']),
+    ]))
+  })
+
   // ── new format ────────────────────────────────────────────────────────────
 
   describe('new format (folders)', () => {

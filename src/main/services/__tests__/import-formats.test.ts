@@ -109,6 +109,33 @@ describe('previewImport', () => {
       })),
     }))).rejects.toThrow(/more than 5000 environments/i)
   })
+
+  it('rejects Postly previews with more than 5000 total environments', async () => {
+    await expect(previewImport(JSON.stringify({
+      $schema: 'postly/v1',
+      exportedAt: '2026-10-17T00:00:00.000Z',
+      collections: [{
+        name: 'Imported API',
+        description: '',
+        source: 'local',
+        auth: { type: 'none', config: {} },
+        ssl: 'inherit',
+        requests: [],
+        folders: [],
+        environments: Array.from({ length: 2501 }, (_, index) => ({ name: `Collection ${index + 1}`, variables: [] })),
+      }],
+      environments: Array.from({ length: 2500 }, (_, index) => ({ name: `Top ${index + 1}`, variables: [] })),
+    }))).rejects.toThrow(/more than 5000 environments/i)
+  })
+
+  it('rejects other previews with more than 5000 environments', async () => {
+    await expect(previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Too many servers', version: '1' },
+      servers: Array.from({ length: 5001 }, (_, index) => ({ url: `https://server-${index + 1}.example.test` })),
+      paths: { '/ping': { get: { responses: {} } } },
+    }))).rejects.toThrow(/more than 5000 environments/i)
+  })
 })
 
 describe('previewFolder', () => {

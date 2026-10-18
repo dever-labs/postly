@@ -191,7 +191,7 @@ describe('documents published by real tools and vendors', () => {
     const requests = walk(collections[0].collection)
     expect(requests.length).toBeGreaterThan(0)
     for (const r of requests) {
-      expect(r.url, r.name).toMatch(/^\{\{baseUrl\}\}\//)
+      expect(r.url, r.name).toMatch(/^(?:\{\{baseUrl\}\}|)\//)
       expect(r.url.replace(/\{\{[^}]+\}\}/g, ''), r.name).not.toMatch(/[{}]/)
       if (r.bodyType === 'raw-json') expect(() => JSON.parse(r.bodyContent), r.name).not.toThrow()
     }
@@ -320,6 +320,53 @@ describe('OpenAPI edge cases', () => {
     expect(warnings.join()).not.toMatch(/own servers/)
   })
 
+  it('splits server query strings before joining paths, across root, path and operation servers', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Query Servers', version: '1' },
+      servers: [{ url: 'https://edge.example.test/v2?tenant=blue' }],
+      paths: {
+        '/root': {
+          get: {
+            parameters: [{ name: 'kind', in: 'query', schema: { type: 'string' }, example: 'bird' }],
+            responses: {},
+          },
+        },
+        '/pets': {
+          get: {
+            parameters: [{ name: 'kind', in: 'query', schema: { type: 'string' }, example: 'cat' }],
+            responses: {},
+          },
+          servers: [{ url: 'https://path.example.test/team?scope=staff' }],
+          post: {
+            servers: [{ url: 'https://op.example.test/root?tenant=green&fixed=1' }],
+            parameters: [{ name: 'kind', in: 'query', schema: { type: 'string' }, example: 'dog' }],
+            responses: {},
+          },
+        },
+      },
+    }))
+
+    const requests = Object.fromEntries(walk(preview.collections[0].collection).map((request) => [request.name, request] as const))
+    expect(preview.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://edge.example.test/v2', isSecret: false })
+    expect(requests['GET /root'].url).toBe('{{baseUrl}}/root')
+    expect((requests['GET /root'].params as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])).toEqual([
+      ['tenant', 'blue'],
+      ['kind', 'bird'],
+    ])
+    expect(requests['GET /pets'].url).toBe('https://path.example.test/team/pets')
+    expect((requests['GET /pets'].params as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])).toEqual([
+      ['scope', 'staff'],
+      ['kind', 'cat'],
+    ])
+    expect(requests['POST /pets'].url).toBe('https://op.example.test/root/pets')
+    expect((requests['POST /pets'].params as Array<{ key: string; value: string }>).map((row) => [row.key, row.value])).toEqual([
+      ['tenant', 'green'],
+      ['fixed', '1'],
+      ['kind', 'dog'],
+    ])
+  })
+
   it('warns about references to other files instead of silently dropping them', async () => {
     const { warnings } = await run({
       '/a': { post: { requestBody: { content: { 'application/json': { schema: { $ref: './pet.yaml' } } } }, responses: {} } },
@@ -371,9 +418,9 @@ describe('OpenAPI edge cases', () => {
       info: { title: 'Default Server', version: '1' },
       paths: { '/pets': { get: { responses: {} } } },
     }))
-    expect(local.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: '/', isSecret: false })
-    expect(walk(local.collections[0].collection)[0].url).toBe('{{baseUrl}}/pets')
-    expect(local.warnings.join()).toMatch(/The server URL "\/" is relative/)
+    expect(local.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: '', isSecret: false })
+    expect(walk(local.collections[0].collection)[0].url).toBe('/pets')
+    expect(local.warnings.join()).toMatch(/No server URL found/)
 
     const fetched = await previewImport(JSON.stringify({
       openapi: '3.0.0',
@@ -382,6 +429,19 @@ describe('OpenAPI edge cases', () => {
       paths: { '/pets': { get: { responses: {} } } },
     }), { sourceUrl: 'https://spec.test/openapi.json' })
     expect(fetched.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://spec.test', isSecret: false })
+  })
+
+  it('keeps an explicit root server relative, without producing protocol-relative request URLs', async () => {
+    const preview = await previewImport(JSON.stringify({
+      openapi: '3.0.0',
+      info: { title: 'Root Server', version: '1' },
+      servers: [{ url: '/' }],
+      paths: { '/pets': { get: { responses: {} } } },
+    }))
+
+    expect(preview.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: '', isSecret: false })
+    expect(walk(preview.collections[0].collection)[0].url).toBe('/pets')
+    expect(preview.warnings.join()).toMatch(/The server URL "\/" is relative/)
   })
 })
 
@@ -400,6 +460,31 @@ describe('server environments', () => {
     expect(env?.variables).toEqual([
       { key: 'baseUrl', value: 'https://{{serverBaseUrl}}.x.com', isSecret: false },
       { key: 'serverBaseUrl', value: 'p', isSecret: false },
+    ])
+  })
+
+  it('resolves relative templated servers against sourceUrl in both baseUrl and environments', async () => {
+    const preview = await previewImport(doc([
+      { url: '/api/{stage}', variables: { stage: { default: 'dev' } } },
+      { url: '/mirror/{stage}', variables: { stage: { default: 'prod' } } },
+    ]), { sourceUrl: 'https://spec.test/openapi.json' })
+
+    expect(preview.collections[0].collection.variables).toContainEqual({ key: 'baseUrl', value: 'https://spec.test/api/dev', isSecret: false })
+    expect(preview.collections[0].collection.environments).toEqual([
+      {
+        name: 'spec.test',
+        variables: [
+          { key: 'baseUrl', value: 'https://spec.test/api/{{stage}}', isSecret: false },
+          { key: 'stage', value: 'dev', isSecret: false },
+        ],
+      },
+      {
+        name: 'spec.test',
+        variables: [
+          { key: 'baseUrl', value: 'https://spec.test/mirror/{{stage}}', isSecret: false },
+          { key: 'stage', value: 'prod', isSecret: false },
+        ],
+      },
     ])
   })
 })
@@ -566,9 +651,9 @@ describe('OpenAPI helper coverage', () => {
     expect(converted.collection.requests).toEqual([])
     expect(converted.collection.folders).toEqual([])
     expect(converted.warnings).toEqual(expect.arrayContaining([
-      'The server URL "/" is relative; set {{baseUrl}} to the full address (for example https://host/).',
+      'No server URL found; set {{baseUrl}} in the collection variables.',
       'The document has no operations.',
     ]))
-    expect(converted.collection.variables).toContainEqual({ key: 'baseUrl', value: '/', isSecret: false })
+    expect(converted.collection.variables).toContainEqual({ key: 'baseUrl', value: '', isSecret: false })
   })
 })

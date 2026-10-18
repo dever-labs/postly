@@ -217,6 +217,13 @@ function arrayField<T>(value: unknown, message: string): T[] {
   return value as T[]
 }
 
+function normalizeVariableValue(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 function normalizeVariables(value: unknown, message: string): VariableRow[] | undefined {
   if (value == null) return undefined
   if (!Array.isArray(value)) throw new Error(message)
@@ -225,7 +232,7 @@ function normalizeVariables(value: unknown, message: string): VariableRow[] | un
     const variable = row as Partial<VariableRow>
     return [{
       key: typeof variable.key === 'string' ? variable.key : String(variable.key ?? ''),
-      value: typeof variable.value === 'string' ? variable.value : String(variable.value ?? ''),
+      value: normalizeVariableValue(variable.value),
       isSecret: !!variable.isSecret,
     }]
   })

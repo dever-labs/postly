@@ -15,6 +15,7 @@ const NO_AUTH: Auth = { type: 'none', config: {} }
 
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\//i
 
 export function isOpenApiDocument(doc: unknown): boolean {
   return isObj(doc) && (typeof doc.openapi === 'string' || typeof doc.swagger === 'string') && isObj(doc.paths)
@@ -89,10 +90,21 @@ function serverTemplateUrl(server: Obj): string {
 /** Same treatment as the collection baseUrl: relative URLs resolve against the source, trailing slashes go. */
 function normalizeBaseUrl(value: string, sourceUrl?: string): string {
   let url = value
-  if (url && !url.includes('{{') && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && sourceUrl) {
-    try { url = new URL(url, sourceUrl).href } catch { /* kept as written */ }
+  if (url && !ABSOLUTE_URL.test(url) && sourceUrl) {
+    const placeholders: string[] = []
+    const safeUrl = url.replace(/\{\{[^}]+\}\}/g, (match) => {
+      const token = `__POSTLY_TEMPLATE_${placeholders.length}__`
+      placeholders.push(match)
+      return token
+    })
+    try {
+      url = new URL(safeUrl, sourceUrl).href
+      placeholders.forEach((match, index) => {
+        url = url.replaceAll(`__POSTLY_TEMPLATE_${index}__`, match)
+      })
+    } catch { /* kept as written */ }
   }
-  if (url === '/') return '/'
+  if (url === '/') return ''
   return url.replace(/\/+$/, '')
 }
 
@@ -106,9 +118,36 @@ function rootServers(doc: Obj, isV3: boolean): Obj[] {
   return servers.length > 0 ? servers : [{ url: '/' }]
 }
 
-function resolvedServer(server: Obj | undefined, sourceUrl?: string): { rawUrl: string; url: string } {
-  const rawUrl = server ? serverUrl(server) : '/'
-  return { rawUrl, url: normalizeBaseUrl(rawUrl, sourceUrl) }
+function queryRowsFromString(query: string): Array<ReturnType<typeof kv>> {
+  return query.split('&').filter(Boolean).map((pair) => {
+    const eq = pair.indexOf('=')
+    return kv(eq < 0 ? pair : pair.slice(0, eq), eq < 0 ? '' : pair.slice(eq + 1), true)
+  })
+}
+
+function mergeQueryRows(serverQuery: string | null, operationQuery: Array<ReturnType<typeof kv>>): Array<ReturnType<typeof kv>> {
+  if (!serverQuery) return operationQuery
+  const overriddenKeys = new Set(operationQuery.map((row) => row.key))
+  return [
+    ...queryRowsFromString(serverQuery).filter((row) => !overriddenKeys.has(row.key)),
+    ...operationQuery,
+  ]
+}
+
+function resolvedServerUrl(rawUrl: string, sourceUrl?: string): { rawUrl: string; url: string; query: string | null } {
+  const hash = rawUrl.indexOf('#')
+  const withoutHash = hash >= 0 ? rawUrl.slice(0, hash) : rawUrl
+  const queryIndex = withoutHash.indexOf('?')
+  const url = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash
+  return {
+    rawUrl,
+    url: normalizeBaseUrl(url, sourceUrl),
+    query: queryIndex >= 0 ? withoutHash.slice(queryIndex + 1) : null,
+  }
+}
+
+function resolvedServer(server: Obj | undefined, sourceUrl?: string): { rawUrl: string; url: string; query: string | null } {
+  return resolvedServerUrl(server ? serverUrl(server) : '/', sourceUrl)
 }
 
 function requestUrl(base: string, path: string): string {
@@ -142,7 +181,7 @@ function openApiServerEnvironment(server: Obj, index: number, sourceUrl?: string
   return {
     name,
     variables: [
-      { key: 'baseUrl', value: normalizeBaseUrl(serverTemplateUrl(server), sourceUrl), isSecret: false },
+      { key: 'baseUrl', value: resolvedServerUrl(serverTemplateUrl(server), sourceUrl).url, isSecret: false },
       ...serverVariableRows(server),
     ],
   }
@@ -268,6 +307,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
   const environments: ExportEnvironment[] = []
   const v3RootServers = isV3 ? rootServers(doc, true) : []
   const rootServer = v3RootServers[0]
+  const usesDefaultRootServer = isV3 && (!Array.isArray(doc.servers) || doc.servers.filter(isObj).length === 0)
 
   let baseUrl = ''
   if (isV3) {
@@ -275,7 +315,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
     const root = resolvedServer(servers[0], sourceUrl)
     baseUrl = root.url
     if (servers.length > 1) environments.push(...servers.map((server, index) => openApiServerEnvironment(server, index, sourceUrl)))
-    if (root.rawUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(root.rawUrl) && !sourceUrl) warnings.push(relativeServerWarning(root.rawUrl))
+    if (!usesDefaultRootServer && root.rawUrl && !ABSOLUTE_URL.test(root.rawUrl) && !sourceUrl) warnings.push(relativeServerWarning(root.rawUrl))
   } else {
     const host = str(doc.host)
     const schemes = Array.isArray(doc.schemes) ? doc.schemes : []
@@ -284,8 +324,8 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
     environments.push(...swaggerEnvironments(doc, sourceUrl))
     if (rawBaseUrl && !/^[a-z][a-z0-9+.-]*:\/\//i.test(rawBaseUrl) && !sourceUrl) warnings.push(relativeServerWarning(rawBaseUrl))
   }
-  if (baseUrl) variables.set('baseUrl', baseUrl)
-  else warnings.push('No server URL found; set {{baseUrl}} in the collection variables.')
+  if (isV3 || baseUrl) variables.set('baseUrl', baseUrl)
+  if (!baseUrl && (!isV3 || usesDefaultRootServer) && !sourceUrl) warnings.push('No server URL found; set {{baseUrl}} in the collection variables.')
 
   const schemes: Obj = isV3
     ? (isObj(doc.components) && isObj(doc.components.securitySchemes) ? doc.components.securitySchemes : {})
@@ -357,7 +397,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
       }
 
       const urlUsesRootServer = !isV3 || resolvedEffectiveServer.url === baseUrl
-      let url = urlUsesRootServer ? `{{baseUrl}}${path}` : requestUrl(resolvedEffectiveServer.url, path)
+      let url = urlUsesRootServer && baseUrl ? requestUrl('{{baseUrl}}', path) : requestUrl(resolvedEffectiveServer.url, path)
       for (const p of params.filter((x) => x.in === 'path')) {
         const name = str(p.name)
         const value = paramValue(p)
@@ -434,7 +474,7 @@ export function convertOpenApi(doc: Obj, sourceUrl?: string): ImportResult {
         method: method.toUpperCase(),
         url,
         protocol: 'http',
-        params: query.flatMap((p) => queryRows(p, paramValue(p))),
+        params: mergeQueryRows(resolvedEffectiveServer.query, query.flatMap((p) => queryRows(p, paramValue(p)))),
         headers: headers.map((p) => kv(str(p.name), paramValue(p), p.required === true)),
         bodyType,
         bodyContent,

@@ -175,6 +175,10 @@ function mergeEnvironmentRows(base: EnvironmentVariable[], override: Environment
   return [...merged.values()]
 }
 
+function takeRows(budget: ImportBudget, count: number): void {
+  for (let index = 0; index < count; index += 1) budget.take()
+}
+
 function isPrivateEnvironment(raw: Obj | undefined): boolean {
   if (!raw) return false
   const meta = isObj(raw.meta) ? raw.meta : {}
@@ -194,7 +198,10 @@ function flattenEnvironmentRows(
   for (const [key, value] of Object.entries(data)) {
     const name = prefix ? `${prefix}.${key}` : key
     if (isObj(value)) flattenEnvironmentRows(value, budget, isSecret, name, out, depth + 1)
-    else out.push({ key: name, value: Array.isArray(value) ? JSON.stringify(value) : str(value), isSecret })
+    else {
+      budget.take(depth + 1)
+      out.push({ key: name, value: Array.isArray(value) ? JSON.stringify(value) : str(value), isSecret })
+    }
   }
   return out
 }
@@ -204,6 +211,7 @@ function environmentRows(raw: Obj | undefined, dataKey: 'data' | 'environment', 
   const isSecret = isPrivateEnvironment(raw)
   if (Array.isArray(raw.kvPairData)) {
     const pairs = list(raw.kvPairData).filter((row) => str(row.name) && row.enabled !== false)
+    takeRows(budget, pairs.length)
     return pairs.map((row) => ({
       key: str(row.name),
       value: str(row.value),
@@ -258,7 +266,9 @@ function convertStandaloneV4Environments(resources: Obj[]): InsomniaImport {
   const byParent = new Map<string, Obj[]>()
   for (const environment of environments) {
     const parentId = str(environment.parentId)
-    byParent.set(parentId, [...(byParent.get(parentId) ?? []), environment])
+    const siblings = byParent.get(parentId) ?? []
+    siblings.push(environment)
+    byParent.set(parentId, siblings)
   }
   const environmentIds = new Set(environments.map((resource) => str(resource._id)))
   const roots = environments
@@ -267,13 +277,19 @@ function convertStandaloneV4Environments(resources: Obj[]): InsomniaImport {
       return !parentId || !environmentIds.has(parentId)
     })
     .sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
-  const visit = (environment: Obj): Array<{ environment: ExportEnvironment; warnings: string[] }> => [
-    convertStandaloneEnvironment(environment, 'data', budget),
-    ...(byParent.get(str(environment._id)) ?? [])
-      .sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
-      .flatMap((child) => visit(child)),
-  ]
-  const entries = roots.flatMap((root) => visit(root))
+  const entries: Array<{ environment: ExportEnvironment; warnings: string[] }> = []
+  const stack = [...roots].reverse().map((environment) => ({ environment, depth: 0 }))
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) continue
+    budget.take(current.depth)
+    budget.takeEnvironment()
+    entries.push(convertStandaloneEnvironment(current.environment, 'data', budget))
+    const children = [...(byParent.get(str(current.environment._id)) ?? [])].sort((a, b) => sortKeyOf(a) - sortKeyOf(b))
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push({ environment: children[index], depth: current.depth + 1 })
+    }
+  }
 
   return {
     collections: [],
@@ -394,6 +410,7 @@ function convertTree(name: string, description: string, roots: Node[], baseEnv: 
   for (const raw of [...subEnvironments].sort((a, b) => sortKeyOf(a) - sortKeyOf(b))) {
     const label = `Environment "${str(raw.name) || 'Imported'}"`
     const rows = mergeEnvironmentRows(baseEnvironmentRows, convertEnvironmentValueRows(environmentRows(raw, 'data', budget), label))
+    takeRows(budget, rows.length)
     environments.push({
       name: str(raw.name) || 'Imported',
       variables: rows,
@@ -515,7 +532,9 @@ function convertExport(doc: Obj): InsomniaImport {
   const byParent = new Map<string, Obj[]>()
   for (const r of resources) {
     const parent = str(r.parentId)
-    byParent.set(parent, [...(byParent.get(parent) ?? []), r])
+    const children = byParent.get(parent) ?? []
+    children.push(r)
+    byParent.set(parent, children)
   }
   const nodesOf = (parentId: string, depth = 0): Node[] =>
     (byParent.get(parentId) ?? [])
@@ -532,6 +551,8 @@ function convertExport(doc: Obj): InsomniaImport {
     const children = byParent.get(id) ?? []
     const env = children.find((r) => r._type === 'environment')
     const subEnvs = env ? (byParent.get(str(env._id)) ?? []).filter((r) => r._type === 'environment') : []
+    if (env) budget.takeEnvironment()
+    if (subEnvs.length > 0) budget.takeEnvironment(subEnvs.length)
     const hasCookies = children.some((r) => r._type === 'cookie_jar' && list(r.cookies).length > 0)
     const suites = children.filter((r) => r._type === 'unit_test_suite')
     const tests = suites.reduce((n, s) => n + (byParent.get(str(s._id)) ?? []).filter((r) => r._type === 'unit_test').length, 0)
@@ -562,6 +583,8 @@ function convertV5(doc: Obj, kind: InsomniaKind): InsomniaImport {
   const roots = nodesOf(doc.collection)
   const env = isObj(doc.environments) ? doc.environments : undefined
   const subEnvs = env && Array.isArray(env.subEnvironments) ? list(env.subEnvironments) : []
+  if (env) budget.takeEnvironment()
+  if (subEnvs.length > 0) budget.takeEnvironment(subEnvs.length)
   const hasCookies = isObj(doc.cookieJar) && Array.isArray(doc.cookieJar.cookies) && doc.cookieJar.cookies.length > 0
   const tests = Array.isArray(doc.testSuites) ? doc.testSuites.reduce((n, s) => n + (isObj(s) && Array.isArray(s.tests) ? s.tests.length : 0), 0) : 0
   const specContents = isObj(doc.spec) ? doc.spec.contents : undefined
@@ -594,6 +617,8 @@ export function convertInsomniaEnvironment(doc: Obj): { environments: ExportEnvi
   const env = isObj(doc.environments) ? doc.environments : undefined
   if (!env) throw new Error('The Insomnia environment file contains no environments.')
   const budget = new ImportBudget()
+  budget.takeEnvironment()
+  budget.takeEnvironment(list(env.subEnvironments).length)
   const entries = [
     convertStandaloneEnvironment(env, 'data', budget),
     ...list(env.subEnvironments)
