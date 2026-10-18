@@ -41,3 +41,4 @@ test-results/
 bin/
 e2e/.generated-import-sources*/
 e2e/.generated-import-environments*/
+e2e/.generated-imported-requests*

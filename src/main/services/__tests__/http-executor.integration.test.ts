@@ -11,11 +11,16 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { executeRequest, HttpRequest } from '../http-executor'
-import { MocklyServer, getFreePort } from './helpers/mockly'
+import { MocklyServer, getFreePort } from '@dever-labs/mockly-driver'
+import type { MocklyHttpMock } from './helpers/mockly-driver'
 
 // ─── Shared server setup ─────────────────────────────────────────────────────
 
-let server: MocklyServer
+type MocklyServerWithMatchers = Omit<MocklyServer, 'addMock'> & {
+  addMock(mock: MocklyHttpMock): Promise<void>
+}
+
+let server: MocklyServerWithMatchers
 
 function req(overrides: Partial<HttpRequest> & { url: string }): HttpRequest {
   return {
@@ -37,7 +42,7 @@ beforeAll(async () => {
         patches: [{ mock_id: 'health-check', status: 503, body: '{"error":"down"}' }],
       },
     ],
-  })
+  }) as MocklyServerWithMatchers
 }, 30_000)
 
 afterAll(() => server?.stop())

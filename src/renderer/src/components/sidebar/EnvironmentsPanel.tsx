@@ -21,10 +21,10 @@ function InlineInput({ onConfirm, onCancel }: { onConfirm: (v: string) => void; 
         placeholder="Environment name…"
         className="flex-1 rounded-sm bg-th-surface-raised px-2 py-1 text-sm text-th-text-primary placeholder-th-text-subtle outline-hidden ring-1 ring-blue-500/50"
       />
-      <button onClick={() => { if (val.trim()) onConfirm(val.trim()); else onCancel() }} className="text-green-400 light:text-green-800 hover:text-green-300">
+      <button aria-label="Create environment" onClick={() => { if (val.trim()) onConfirm(val.trim()); else onCancel() }} className="text-green-400 light:text-green-800 hover:text-green-300">
         <Check className="h-3.5 w-3.5" />
       </button>
-      <button onClick={onCancel} className="text-th-text-subtle hover:text-th-text-secondary">
+      <button aria-label="Cancel creating environment" onClick={onCancel} className="text-th-text-subtle hover:text-th-text-secondary">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -67,6 +67,7 @@ export function EnvironmentsPanel() {
               <button
                 onClick={(e) => { e.stopPropagation(); setActive(env.id) }}
                 title={isActive ? 'Active' : 'Set as active'}
+                aria-label={isActive ? `Active environment: ${env.name}` : `Set ${env.name} as active`}
                 className="shrink-0 focus:outline-hidden"
               >
                 <div className={cn(
@@ -79,6 +80,7 @@ export function EnvironmentsPanel() {
 
               <button
                 onClick={(e) => { e.stopPropagation(); if (isSelected) setSelectedEnvId(null); deleteEnvironment(env.id) }}
+                aria-label={`Delete ${env.name}`}
                 className="shrink-0 rounded-sm p-0.5 text-th-text-faint opacity-0 hover:text-rose-400 focus:outline-hidden group-hover/env:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />

@@ -18,7 +18,7 @@
  *   • Enterprise URL      — applyFeedUrl() correctly routes requests
  *   • Enterprise config   — getEnterpriseConfig() reads enterprise.json from disk
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
+ * The Mockly binary is resolved from @dever-labs/mockly-driver.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
@@ -26,7 +26,7 @@ import os from 'os'
 import fs from 'fs'
 import path from 'path'
 import type { BrowserWindow } from 'electron'
-import { MocklyServer, getFreePort } from './helpers/mockly'
+import { MocklyServer, getFreePort } from '@dever-labs/mockly-driver'
 import type { UpdaterEvent } from '../updater'
 
 // ─── Mock electron ─────────────────────────────────────────────────────────────

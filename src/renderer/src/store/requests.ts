@@ -21,6 +21,8 @@ type StreamMessage =
   | { type: 'events'; events: StreamEvent[] }
 
 let pendingResume: { lastEventId: string; previous: StreamState } | null = null
+let streamGenerationCounter = 0
+let activeStreamGeneration: number | null = null
 
 const endStream = (stream: StreamState | null): StreamState | null => (stream ? { ...stream, active: false } : null)
 
@@ -314,6 +316,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (!editingRequest || isLoading) return
 
     const resume = pendingResume
+    const requestId = editingRequest.id
+    const streamGeneration = ++streamGenerationCounter
+    activeStreamGeneration = streamGeneration
     pendingResume = null
     set({ isLoading: true, response: null, stream: null })
 
@@ -350,6 +355,9 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (extractRules.length > 0) httpRequest.extractRules = extractRules
 
     const offStream = window.api.http.onStream((raw) => {
+      if (activeStreamGeneration !== streamGeneration) return
+      if (get().editingRequest?.id !== requestId) return
+
       const message = raw as StreamMessage
       if (message.type === 'start') {
         const base: StreamState = resume ? { ...resume.previous, kind: message.kind, active: true } : { kind: message.kind, events: [], dropped: 0, active: true }
@@ -392,7 +400,10 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
     } finally {
-      offStream()
+      setTimeout(() => {
+        if (activeStreamGeneration === streamGeneration) activeStreamGeneration = null
+        offStream()
+      }, 0)
     }
   },
 

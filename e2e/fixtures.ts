@@ -1,6 +1,7 @@
 import { test as base, _electron as electron, expect } from '@playwright/test'
 import type { Page, ElectronApplication } from '@playwright/test'
 import path from 'path'
+import { ensureMocklyServer, type MocklyServer } from '../src/main/services/__tests__/helpers/mockly-driver'
 
 const ROOT = path.join(__dirname, '..')
 const MAIN = path.join(ROOT, 'out', 'main', 'index.js')
@@ -9,6 +10,11 @@ const RENDERER_URL = `file://${path.join(ROOT, 'out', 'renderer', 'index.html').
 type Fixtures = {
   electronApp: ElectronApplication
   window: Page
+  server: MocklyServer
+}
+
+type WorkerFixtures = {
+  serverWorker: MocklyServer
 }
 
 /**
@@ -16,7 +22,16 @@ type Fixtures = {
  * across all tests in one file. This avoids the overhead (and flakiness) of
  * launching and tearing down a process for every test case.
  */
-export const test = base.extend<Record<string, never>, Fixtures>({
+export const test = base.extend<Fixtures, WorkerFixtures>({
+  serverWorker: [
+    async ({}, use) => {
+      const server = await ensureMocklyServer()
+      await use(server)
+      await server.stop()
+    },
+    { scope: 'worker' },
+  ],
+
   electronApp: [
     async ({}, use) => {
       const app = await electron.launch({
@@ -44,6 +59,12 @@ export const test = base.extend<Record<string, never>, Fixtures>({
     },
     { scope: 'worker' },
   ],
+
+  server: async ({ serverWorker }, use) => {
+    await serverWorker.reset()
+    await use(serverWorker)
+    await serverWorker.reset()
+  },
 })
 
 export { expect }

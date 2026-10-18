@@ -1,8 +1,8 @@
 /**
- * Integration tests for OAuth token flows using Mockly as the real HTTP backend.
+ * Integration tests for OAuth token flows using a real HTTP stub backend.
  *
  * These tests exercise the actual HTTP token request path — real network calls to
- * a Mockly server — and verify that:
+ * a stub server — and verify that:
  *
  *   • clientCredentials sends the correct form params and returns a Token.
  *   • refreshTokenGrant sends the correct form params and returns a Token.
@@ -17,12 +17,11 @@
  *
  * The database layer is mocked — these tests focus purely on HTTP behaviour.
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
 import { BrowserWindow } from 'electron'
-import { MocklyServer } from './helpers/mockly'
+import { MocklyServer } from '@dever-labs/mockly-driver'
 import type { OAuthConfig, Token } from '../oauth'
 
 // ─── Mock database (not under test here) ─────────────────────────────────────
@@ -119,7 +118,6 @@ function parseFormBody(body: string): Record<string, string> {
   return Object.fromEntries(new URLSearchParams(body))
 }
 
-const TOKEN_MOCK_ID = 'oauth-token'
 
 const TOKEN_RESPONSE = {
   access_token: 'integration-access-token',
@@ -132,11 +130,18 @@ const TOKEN_RESPONSE = {
 // ─── Shared server setup ─────────────────────────────────────────────────────
 
 let server: MocklyServer
+const TOKEN_ENDPOINT_ID = 'oauth-token-endpoint'
 
 beforeAll(async () => {
   server = await MocklyServer.create()
+}, 30_000)
+
+afterAll(() => server?.stop())
+
+beforeEach(async () => {
+  await server.reset()
   await server.addMock({
-    id: TOKEN_MOCK_ID,
+    id: TOKEN_ENDPOINT_ID,
     request: { method: 'POST', path: '/oauth2/token' },
     response: {
       status: 200,
@@ -144,12 +149,6 @@ beforeAll(async () => {
       body: JSON.stringify(TOKEN_RESPONSE),
     },
   })
-}, 30_000)
-
-afterAll(() => server?.stop())
-
-beforeEach(async () => {
-  await server.clearCalls(TOKEN_MOCK_ID)
   partitionHistory.length = 0
   mockSetCertVerifyProc.mockClear()
 })
@@ -188,10 +187,10 @@ describe('clientCredentials', () => {
 
     await clientCredentials(makeConfig())
 
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(calls).toHaveLength(1)
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(requests).toHaveLength(1)
 
-    const params = parseFormBody(calls[0].body ?? '')
+    const params = parseFormBody(requests[0].body ?? '')
     expect(params['grant_type']).toBe('client_credentials')
     expect(params['client_id']).toBe('test-client')
     expect(params['scope']).toBe('read write')
@@ -203,8 +202,8 @@ describe('clientCredentials', () => {
 
     await clientCredentials(makeConfig({ clientSecret: 's3cr3t' }))
 
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    const params = parseFormBody(calls[0].body ?? '')
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    const params = parseFormBody(requests[0].body ?? '')
     expect(params['client_secret']).toBe('s3cr3t')
   })
 
@@ -212,7 +211,7 @@ describe('clientCredentials', () => {
     const { clientCredentials } = await import('../oauth')
 
     await server.addMock({
-      id: 'token-error',
+      id: 'oauth2-token-error',
       request: { method: 'POST', path: '/oauth2/token-error' },
       response: {
         status: 400,
@@ -228,14 +227,13 @@ describe('clientCredentials', () => {
       clientCredentials(makeConfig({ tokenUrl: `${server.httpBase}/oauth2/token-error` })),
     ).rejects.toThrow('Client authentication failed')
 
-    await server.deleteMock('token-error')
   })
 
   it('surfaces the HTTP status when the token endpoint returns 5xx', async () => {
     const { clientCredentials } = await import('../oauth')
 
     await server.addMock({
-      id: 'token-500',
+      id: 'oauth2-token-500',
       request: { method: 'POST', path: '/oauth2/token-500' },
       response: {
         status: 500,
@@ -248,7 +246,6 @@ describe('clientCredentials', () => {
       clientCredentials(makeConfig({ tokenUrl: `${server.httpBase}/oauth2/token-500` })),
     ).rejects.toThrow('500')
 
-    await server.deleteMock('token-500')
   })
 })
 
@@ -283,10 +280,10 @@ describe('refreshTokenGrant', () => {
       tokenUrl: `${server.httpBase}/oauth2/token`,
     })
 
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(calls).toHaveLength(1)
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(requests).toHaveLength(1)
 
-    const params = parseFormBody(calls[0].body ?? '')
+    const params = parseFormBody(requests[0].body ?? '')
     expect(params['grant_type']).toBe('refresh_token')
     expect(params['refresh_token']).toBe('my-refresh-token')
     expect(params['client_id']).toBe('refresh-client')
@@ -408,11 +405,11 @@ describe('authorizeAuthCode — session partition persistence', () => {
 
     const token = await authorizeAuthCode(AUTH_CONFIG)
 
-    // Verify Mockly received the code exchange request.
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(calls).toHaveLength(1)
+    // Verify the stub server received the code exchange request.
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(requests).toHaveLength(1)
 
-    const params = parseFormBody(calls[0].body ?? '')
+    const params = parseFormBody(requests[0].body ?? '')
     expect(params['grant_type']).toBe('authorization_code')
     expect(params['code']).toBe('integration-auth-code')
     expect(params['client_id']).toBe('session-client')
@@ -440,7 +437,7 @@ describe('authorizeAuthCode — session partition persistence', () => {
 // These tests simulate the exact pattern that triggered the bug: one or more
 // "decoy" navigation events that match the redirect-URI origin and carry a code
 // but the wrong (or absent) state, followed by the legitimate IDP callback with
-// the correct state. The real token exchange is completed against a live Mockly
+// the correct state. The real token exchange is completed against the live stub
 // server so the full code→token round-trip is exercised.
 
 describe('authorizeAuthCode — state validation', () => {
@@ -551,9 +548,9 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
     // Only the real code (not the decoy) must reach the token endpoint.
-    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
 
   it('ignores a will-redirect with no state param and resolves on the real callback', async () => {
@@ -599,9 +596,9 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(calls).toHaveLength(1)
-    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(requests).toHaveLength(1)
+    expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
 
   it('ignores will-redirect decoys but resolves when the real callback comes via will-navigate', async () => {
@@ -632,7 +629,7 @@ describe('authorizeAuthCode — state validation', () => {
 
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
-    // Token fields from Mockly response.
+    // Token fields from the stub response.
     expect(token.accessToken).toBe('integration-access-token')
     expect(token.tokenType).toBe('Bearer')
     expect(token.refreshToken).toBe('integration-refresh-token')
@@ -659,8 +656,8 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeAuthCode({ ...AUTH_CONFIG })
 
     expect(token.accessToken).toBe('integration-access-token')
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
   })
 
   it('does not call event.preventDefault() on decoy events — IDP intermediate navigations are not blocked', async () => {
@@ -714,9 +711,9 @@ describe('authorizeAuthCode — state validation', () => {
     const token = await authorizeInline(inlineConfig)
 
     expect(token.accessToken).toBe('integration-access-token')
-    const { calls } = await server.getCalls(TOKEN_MOCK_ID)
-    expect(calls).toHaveLength(1)
-    expect(parseFormBody(calls[0].body ?? '')['code']).toBe('integration-auth-code')
+    const requests = (await server.getCalls(TOKEN_ENDPOINT_ID)).calls
+    expect(requests).toHaveLength(1)
+    expect(parseFormBody(requests[0].body ?? '')['code']).toBe('integration-auth-code')
     // The token's oauthConfigId must be the config hash, not the empty id.
     expect(token.oauthConfigId).toHaveLength(32)
     expect(token.oauthConfigId).not.toBe('')

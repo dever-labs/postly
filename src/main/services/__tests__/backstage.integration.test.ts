@@ -1,11 +1,10 @@
 /**
- * Integration tests for backstage.ts using Mockly as a real HTTP backend.
+ * Integration tests for backstage.ts using a real HTTP stub backend.
  *
  * Unlike backstage.test.ts (which mocks axios), these tests exercise the
- * real HTTP path: the service makes actual network requests to Mockly.
+ * real HTTP path: the service makes actual network requests to the stub server.
  * Only the database layer is mocked.
  *
- * Prerequisites: run `node scripts/download-mockly.mjs` to download the binary.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -26,7 +25,7 @@ vi.mock('../../database', () => ({
 //
 // We can't spin up real Chromium here, so BrowserWindow itself is faked.
 // But executeJavaScript is wired to perform a *real* fetch against the
-// Mockly server below, so the HTTP contract (endpoint shape, response
+// stub server below, so the HTTP contract (endpoint shape, response
 // parsing) is still exercised end-to-end — only the windowing/navigation
 // chrome is stubbed out.
 const { createdWindows } = vi.hoisted(() => {
@@ -74,9 +73,9 @@ vi.mock('electron', () => {
     loadURL(url: string) {
       this.webContents.url = url
       // Real navigation, like real Electron: hit the URL over HTTP against
-      // Mockly so a wrong/typo'd start URL fails the test instead of only
-      // being checked as a string.
-      void fetch(url).catch(() => { /* network errors are surfaced via waitForCalls timing out */ })
+      // the stub server so a wrong/typo'd start URL fails the test instead of
+      // only being checked as a string.
+      void fetch(url).catch(() => { /* network errors are surfaced via request polling timing out */ })
     }
     on(event: string, cb: () => void) {
       if (event === 'closed') this.closedListeners.push(cb)
@@ -96,7 +95,8 @@ vi.mock('electron', () => {
 
 import { queryOne, run } from '../../database'
 import { syncCatalog, authenticateWithBackstageGuest, authenticateWithBackstage } from '../backstage'
-import { MocklyServer } from './helpers/mockly'
+import { MocklyServer } from '@dever-labs/mockly-driver'
+import type { MocklyHttpMock } from './helpers/mockly-driver'
 
 // ─── Minimal OpenAPI spec for testing ────────────────────────────────────────
 
@@ -123,10 +123,14 @@ const MINIMAL_OAS3 = JSON.stringify({
 
 // ─── Server lifecycle ─────────────────────────────────────────────────────────
 
-let server: MocklyServer
+type MocklyServerWithMatchers = Omit<MocklyServer, 'addMock'> & {
+  addMock(mock: MocklyHttpMock): Promise<void>
+}
+
+let server: MocklyServerWithMatchers
 
 beforeAll(async () => {
-  server = await MocklyServer.create()
+  server = await MocklyServer.create() as MocklyServerWithMatchers
 }, 30_000)
 
 afterAll(() => server?.stop())
@@ -149,7 +153,7 @@ function settings(overrides: Record<string, unknown> = {}) {
   }
 }
 
-const EMPTY_CATALOG_MOCKS = [
+const EMPTY_CATALOG_MOCKS: MocklyHttpMock[] = [
   {
     id: 'catalog-apis',
     request: { method: 'GET', path: '/api/catalog/entities', query: { filter: 'kind=API' } },
@@ -583,7 +587,7 @@ describe('syncCatalog — auth token', () => {
       response: { status: 200, headers: { 'Content-Type': 'application/json' }, body: '[]' },
     })
 
-    // If the token isn't forwarded, Mockly won't match the header and will 404
+    // If the token isn't forwarded, the stub won't match the header and will 404
     const result = await syncCatalog(settings({ token: 'my-secret-token' }))
     expect(result).toBeDefined()
   })
@@ -679,7 +683,7 @@ describe('authenticateWithBackstageGuest', () => {
 // interactive OAuth providers. Each opens a BrowserWindow pointed at
 // "/api/auth/<provider>/start" and, once navigation settles away from the
 // auth pages, fetches "/api/auth/<provider>/refresh" from inside the page.
-// The fetch is real (against Mockly); only the BrowserWindow chrome is faked.
+// The fetch is real (against the stub server); only the BrowserWindow chrome is faked.
 
 describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstage — %s', (provider) => {
   const OAUTH_RESPONSE = {
@@ -689,7 +693,7 @@ describe.each(['github', 'gitlab', 'google'] as const)('authenticateWithBackstag
 
   it('opens a window at the provider start URL', async () => {
     // Mock the real Backstage "/start" route so navigation isn't just
-    // asserted as a string — Mockly must actually receive the request,
+    // asserted as a string — the stub server must actually receive the request,
     // catching a wrong/typo'd URL that a string-only assertion would miss.
     await server.addMock({
       id: `${provider}-start`,

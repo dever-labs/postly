@@ -52,6 +52,8 @@ test.describe('Streaming responses', () => {
     await urlInput.fill(`${base}/events`)
     await window.waitForTimeout(200)
     await window.getByTestId('send-button').click()
+    await expect(window.getByTestId('stream-tab-trigger')).toBeVisible({ timeout: 10_000 })
+    await window.getByTestId('stream-tab-trigger').click()
 
     const events = window.getByTestId('stream-event')
     await expect(events).toHaveCount(2, { timeout: 10_000 })
