@@ -31,17 +31,20 @@ vi.mock('../settings-utils', () => ({
 }))
 
 import { registerOAuthHandlers } from '../oauth'
-import { queryOne } from '../../database'
-import { authorizeAuthCode, clientCredentials, getValidToken, getValidTokenForConfig, authorizeInline } from '../../services/oauth'
+import { queryAll, queryOne, run } from '../../database'
+import { authorizeAuthCode, clientCredentials, getValidToken, getValidTokenForConfig, authorizeInline, configHashKey } from '../../services/oauth'
 import { getGeneralSettings } from '../settings-utils'
 
 const mockQ1 = vi.mocked(queryOne)
+const mockQAll = vi.mocked(queryAll)
+const mockRun = vi.mocked(run)
 const mockAuthorizeAuthCode = vi.mocked(authorizeAuthCode)
 const mockClientCredentials = vi.mocked(clientCredentials)
 const mockGetValidToken = vi.mocked(getValidToken)
 const mockGetValidTokenForConfig = vi.mocked(getValidTokenForConfig)
 const mockAuthorizeInline = vi.mocked(authorizeInline)
 const mockGetGeneralSettings = vi.mocked(getGeneralSettings)
+const mockConfigHashKey = vi.mocked(configHashKey)
 
 const fakeToken = { id: 't1', oauthConfigId: 'cfg1', accessToken: 'tok', tokenType: 'Bearer', createdAt: Date.now() }
 
@@ -66,6 +69,106 @@ describe('OAuth IPC handlers', () => {
     vi.clearAllMocks()
     mockGetGeneralSettings.mockReturnValue({ sslVerification: true, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
     registerOAuthHandlers()
+  })
+
+  describe('config CRUD', () => {
+    it('lists configs mapped to renderer-friendly field names', async () => {
+      mockQAll.mockReturnValueOnce([
+        {
+          id: 'cfg1',
+          name: 'Client credentials',
+          grant_type: 'client_credentials',
+          client_id: 'client-id',
+          client_secret: 'secret',
+          auth_url: null,
+          token_url: 'https://token.example.com',
+          scopes: 'read write',
+          redirect_uri: 'https://app.example.com/callback',
+        },
+      ] as never)
+
+      await expect(invoke('postly:oauth:configs:list', undefined)).resolves.toEqual({
+        data: [{
+          id: 'cfg1',
+          name: 'Client credentials',
+          grantType: 'client_credentials',
+          clientId: 'client-id',
+          clientSecret: 'secret',
+          authUrl: undefined,
+          tokenUrl: 'https://token.example.com',
+          scopes: 'read write',
+          redirectUri: 'https://app.example.com/callback',
+        }],
+      })
+    })
+
+    it('creates a config after validating redirectUri', async () => {
+      mockQ1.mockReturnValueOnce({
+        id: 'cfg-created',
+        name: 'Created',
+        grant_type: 'authorization_code',
+        client_id: 'client-id',
+        client_secret: 'secret',
+        auth_url: 'https://auth.example.com',
+        token_url: 'https://token.example.com',
+        scopes: 'openid profile',
+        redirect_uri: 'https://app.example.com/callback',
+      })
+
+      await expect(invoke('postly:oauth:configs:create', {
+        name: 'Created',
+        grantType: 'authorization_code',
+        clientId: 'client-id',
+        clientSecret: 'secret',
+        authUrl: 'https://auth.example.com',
+        tokenUrl: 'https://token.example.com',
+        scopes: 'openid profile',
+        redirectUri: 'https://app.example.com/callback',
+      })).resolves.toEqual({
+        data: {
+          id: 'cfg-created',
+          name: 'Created',
+          grantType: 'authorization_code',
+          clientId: 'client-id',
+          clientSecret: 'secret',
+          authUrl: 'https://auth.example.com',
+          tokenUrl: 'https://token.example.com',
+          scopes: 'openid profile',
+          redirectUri: 'https://app.example.com/callback',
+        },
+      })
+
+      expect(mockRun).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO oauth_configs'),
+        expect.arrayContaining(['Created', 'authorization_code', 'client-id', 'secret', 'https://auth.example.com', 'https://token.example.com', 'openid profile', 'https://app.example.com/callback']),
+      )
+    })
+
+    it('rejects missing and invalid redirect URIs', async () => {
+      await expect(invoke('postly:oauth:configs:create', {
+        name: 'Broken',
+        grantType: 'authorization_code',
+        clientId: 'client-id',
+        tokenUrl: 'https://token.example.com',
+        redirectUri: '',
+      })).resolves.toEqual({ error: 'redirectUri is required' })
+
+      await expect(invoke('postly:oauth:configs:create', {
+        name: 'Broken',
+        grantType: 'authorization_code',
+        clientId: 'client-id',
+        tokenUrl: 'https://token.example.com',
+        redirectUri: '/relative',
+      })).resolves.toEqual({ error: 'redirectUri must be a valid absolute URL' })
+    })
+
+    it('deletes both tokens and configs for a config id', async () => {
+      await expect(invoke('postly:oauth:configs:delete', { id: 'cfg1' })).resolves.toEqual({ data: true })
+      expect(mockRun.mock.calls).toEqual([
+        ['DELETE FROM tokens WHERE oauth_config_id = ?', ['cfg1']],
+        ['DELETE FROM oauth_configs WHERE id = ?', ['cfg1']],
+      ])
+    })
   })
 
   // ── postly:oauth:authorize ─────────────────────────────────────────────────
@@ -110,6 +213,13 @@ describe('OAuth IPC handlers', () => {
       expect(mockGetValidToken).toHaveBeenCalledWith('cfg1', true)
     })
 
+    describe('token clearing', () => {
+      it('deletes stored tokens for a saved config', async () => {
+        await expect(invoke('postly:oauth:token:clear', { configId: 'cfg1' })).resolves.toEqual({ data: true })
+        expect(mockRun).toHaveBeenCalledWith('DELETE FROM tokens WHERE oauth_config_id = ?', ['cfg1'])
+      })
+    })
+
     it('passes sslVerification=false to getValidToken when global SSL is disabled', async () => {
       mockGetGeneralSettings.mockReturnValue({ sslVerification: false, followRedirects: true, defaultTimeout: 30000, autoUpdate: true })
       mockGetValidToken.mockResolvedValue(fakeToken)
@@ -142,6 +252,14 @@ describe('OAuth IPC handlers', () => {
       mockGetValidTokenForConfig.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:inline:token:get', fakeOAuthConfig)
       expect(mockGetValidTokenForConfig).toHaveBeenCalledWith(fakeOAuthConfig, true)
+    })
+
+    describe('inline token clearing', () => {
+      it('clears tokens by the inline config hash key', async () => {
+        mockConfigHashKey.mockReturnValueOnce('inline-hash')
+        await expect(invoke('postly:oauth:inline:token:clear', fakeOAuthConfig)).resolves.toEqual({ data: true })
+        expect(mockRun).toHaveBeenCalledWith('DELETE FROM tokens WHERE oauth_config_id = ?', ['inline-hash'])
+      })
     })
 
     it('passes sslVerification=false to getValidTokenForConfig when global SSL is disabled', async () => {

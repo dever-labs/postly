@@ -1,4 +1,12 @@
+import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
+
+async function getUnsavedCount(window: Page): Promise<number> {
+  const badge = window.getByTestId('working-set-unsaved')
+  if ((await badge.count()) === 0) return 0
+  const text = await badge.textContent()
+  return Number.parseInt(text?.split(' ')[0] ?? '0', 10)
+}
 
 test('working set tracks opened, pinned and unsaved requests', async ({ window }) => {
   const suffix = Date.now()
@@ -37,7 +45,8 @@ test('working set tracks opened, pinned and unsaved requests', async ({ window }
   await expect(item(names[0])).toHaveCount(1)
 
   // an edit marks the request unsaved and surfaces it in the working set
+  const unsavedBefore = await getUnsavedCount(window)
   await item(names[0]).locator('button').first().click()
   await window.getByPlaceholder('Request name').fill(`${names[0]} edited`)
-  await expect(window.getByTestId('working-set-unsaved')).toHaveText('1 unsaved')
+  await expect.poll(() => getUnsavedCount(window)).toBe(unsavedBefore + 1)
 })

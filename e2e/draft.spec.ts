@@ -7,13 +7,20 @@
  *
  * Requires a built app (`npm run build` before `npm run test:e2e`).
  */
+import type { Page } from '@playwright/test'
 import { test, expect } from './fixtures'
+import { waitForRequestDraft } from './helpers'
 
 const SAVED_URL = 'https://api.example.com/saved'
 const DRAFT_URL = 'https://api.example.com/draft'
 
 let collectionName: string
 let requestName: string
+let requestId: string
+
+function dirtyRequestRow(window: Page) {
+  return window.locator(`[aria-label="GET ${requestName}, unsaved changes"]`)
+}
 
 test.describe('Draft cache & dirty indicator', () => {
   test.beforeAll(async ({ window }) => {
@@ -31,11 +38,12 @@ test.describe('Draft cache & dirty indicator', () => {
       return (res as { data: { id: string } }).data.id
     }, colId)
 
-    await window.evaluate(
+    requestId = await window.evaluate(
       async ({ grpId, name, url }: { grpId: string; name: string; url: string }) => {
         const res = await window.api.requests.create({ folderId: grpId, name, method: 'GET' })
         const id = (res as { data: { id: string } }).data.id
         await window.api.requests.update({ id, url })
+        return id
       },
       { grpId, name: requestName, url: SAVED_URL }
     )
@@ -57,7 +65,7 @@ test.describe('Draft cache & dirty indicator', () => {
   })
 
   test('sidebar shows no dirty dot on clean request', async ({ window }) => {
-    await expect(window.locator('[data-testid="request-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyRequestRow(window)).toHaveCount(0)
   })
 
   test('editing URL makes save button amber', async ({ window }) => {
@@ -68,7 +76,7 @@ test.describe('Draft cache & dirty indicator', () => {
   })
 
   test('dirty dot appears in sidebar after edit', async ({ window }) => {
-    await expect(window.locator('[data-testid="request-dirty-dot"]')).toBeVisible()
+    await expect(dirtyRequestRow(window)).toBeVisible()
   })
 
   test('discard button appears when dirty', async ({ window }) => {
@@ -79,7 +87,7 @@ test.describe('Draft cache & dirty indicator', () => {
     // Ensure the DRAFT_URL is set and wait for the 500ms debounce to persist to SQLite
     const urlInput = window.locator('[data-testid="url-input"]')
     await urlInput.fill(DRAFT_URL)
-    await window.waitForTimeout(700)
+    await waitForRequestDraft(window, requestId, (draft) => draft?.url === DRAFT_URL)
 
     // Reload simulates reopening the app — the draft should be restored
     await window.reload()
@@ -94,7 +102,7 @@ test.describe('Draft cache & dirty indicator', () => {
   })
 
   test('dirty indicator is still shown after reload with draft', async ({ window }) => {
-    await expect(window.locator('[data-testid="request-dirty-dot"]')).toBeVisible()
+    await expect(dirtyRequestRow(window)).toBeVisible()
     await expect(window.locator('[data-testid="request-save-button"]')).toHaveClass(/text-amber-400/)
   })
 
@@ -118,7 +126,7 @@ test.describe('Draft cache & dirty indicator', () => {
 
     const saveBtn = window.locator('[data-testid="request-save-button"]')
     await expect(saveBtn).not.toHaveClass(/text-amber-400/, { timeout: 5_000 })
-    await expect(window.locator('[data-testid="request-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyRequestRow(window)).toHaveCount(0)
     await expect(window.locator('[data-testid="request-discard-button"]')).not.toBeVisible()
   })
 
@@ -133,6 +141,6 @@ test.describe('Draft cache & dirty indicator', () => {
     // Should revert to the last saved URL (DRAFT_URL, which we saved above)
     await expect(urlInput).toHaveValue(DRAFT_URL)
     await expect(window.locator('[data-testid="request-save-button"]')).not.toHaveClass(/text-amber-400/)
-    await expect(window.locator('[data-testid="request-dirty-dot"]')).not.toBeVisible()
+    await expect(dirtyRequestRow(window)).toHaveCount(0)
   })
 })

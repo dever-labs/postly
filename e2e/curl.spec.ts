@@ -22,7 +22,6 @@ test.describe('cURL import and export', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
 
     // Paste a cURL command into the URL bar
     const command = `curl -X POST 'https://api.example.test/items?x=1' -H 'Content-Type: application/json' -H 'X-Trace: {{trace}}' -u 'ann:hunter2' -d '{"name":"widget"}' --max-time 5`

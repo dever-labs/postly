@@ -746,7 +746,6 @@ test.describe('Import environments', () => {
       await window.getByText(names.secretCollection).first().click()
       await window.getByText(names.secretRequest, { exact: true }).first().click()
       await window.getByTestId('url-input').waitFor({ state: 'visible' })
-      await window.waitForTimeout(300)
       await window.getByTestId('send-button').click()
       await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
 

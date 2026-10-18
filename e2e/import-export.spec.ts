@@ -62,11 +62,17 @@ async function getRootFolderIdByName(window: Page, name: string) {
 }
 
 const timestamp = Date.now()
-const importedCollectionIds: string[] = []
 
 const newFormatCollectionName = `New Format API ${timestamp}`
 const rootLevelCollectionName = `Root Level API ${timestamp}`
 const legacyCollectionName = `Legacy API ${timestamp}`
+const deepCollectionName = `Deep API ${timestamp}`
+const importedCollectionNames = [
+  newFormatCollectionName,
+  rootLevelCollectionName,
+  legacyCollectionName,
+  deepCollectionName,
+]
 
 const endpointsFolderName = `Endpoints ${timestamp}`
 const newFormatRequestName = `Get Health ${timestamp}`
@@ -75,11 +81,17 @@ const legacyGroupName = `Users ${timestamp}`
 const legacyRequestName = `List Users ${timestamp}`
 
 test.afterAll(async ({ window }) => {
-  await window.evaluate(async (ids: string[]) => {
-    for (const id of ids) {
-      await window.api.folders.delete({ id })
+  await window.evaluate(async (names: string[]) => {
+    const result = await window.api.folders.list()
+    const folders = ((result as { data?: Array<Record<string, unknown>> }).data ?? [])
+    const imported = folders.filter((folder) => {
+      const parentId = (folder.parentId ?? folder.parent_id) as string | null | undefined
+      return !parentId && names.includes(String(folder.name))
+    })
+    for (const folder of imported) {
+      await window.api.folders.delete({ id: String(folder.id) })
     }
-  }, importedCollectionIds)
+  }, importedCollectionNames)
 })
 
 test.describe('Import — new format (folders)', () => {
@@ -104,10 +116,8 @@ test.describe('Import — new format (folders)', () => {
         ],
       },
     ])
-
     const collectionId = await getRootFolderIdByName(window, newFormatCollectionName)
     if (!collectionId) throw new Error(`Imported collection not found: ${newFormatCollectionName}`)
-    importedCollectionIds.push(collectionId)
   })
 
   test('shows the imported collection in the sidebar', async ({ window }) => {
@@ -139,10 +149,8 @@ test.describe('Import — new format with root-level requests', () => {
         folders: [],
       },
     ])
-
     const collectionId = await getRootFolderIdByName(window, rootLevelCollectionName)
     if (!collectionId) throw new Error(`Imported collection not found: ${rootLevelCollectionName}`)
-    importedCollectionIds.push(collectionId)
   })
 
   test('shows the collection', async ({ window }) => {
@@ -177,10 +185,8 @@ test.describe('Import — old format (groups)', () => {
         ],
       },
     ])
-
     const collectionId = await getRootFolderIdByName(window, legacyCollectionName)
     if (!collectionId) throw new Error(`Imported collection not found: ${legacyCollectionName}`)
-    importedCollectionIds.push(collectionId)
   })
 
   test('shows the legacy collection in the sidebar', async ({ window }) => {
@@ -201,7 +207,6 @@ test.describe('Import — old format (groups)', () => {
 
 // ── 3-level deep nesting ────────────────────────────────────────────────────
 
-const deepCollectionName = `Deep API ${timestamp}`
 const deepLevel1Name = `Level 1 ${timestamp}`
 const deepLevel2Name = `Level 2 ${timestamp}`
 const deepRequestName = `Deep Request ${timestamp}`
@@ -237,10 +242,8 @@ test.describe('Import — 3-level deep nesting', () => {
         ],
       },
     ])
-
     const collectionId = await getRootFolderIdByName(window, deepCollectionName)
     if (!collectionId) throw new Error(`Imported collection not found: ${deepCollectionName}`)
-    importedCollectionIds.push(collectionId)
   })
 
   test('shows the root collection', async ({ window }) => {

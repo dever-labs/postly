@@ -57,9 +57,7 @@ test.describe('API key authentication', () => {
     await window.getByText(reqName).first().click()
     const urlInput = window.getByTestId('url-input')
     await urlInput.waitFor({ state: 'visible' })
-    await window.waitForTimeout(400)
     await urlInput.fill(`${base}/things`)
-    await window.waitForTimeout(200)
 
     await window.getByRole('tab', { name: 'Auth' }).click()
     await window.getByRole('button', { name: 'API Key' }).click()
@@ -72,7 +70,6 @@ test.describe('API key authentication', () => {
     expect(seen.at(-1)).toMatchObject({ url: '/things', key: 'super-secret-key' })
 
     await window.getByTestId('auth-apikey-query').click()
-    await window.waitForTimeout(300)
     await window.getByTestId('send-button').click()
     await expect(window.getByTestId('response-status')).toContainText('200', { timeout: 10_000 })
     expect(seen.at(-1)).toMatchObject({ url: '/things?X-Api-Key=super-secret-key' })
@@ -83,7 +80,6 @@ test.describe('API key authentication', () => {
 
     // Digest: the 401 challenge is answered automatically
     await urlInput.fill(`${base}/digest`)
-    await window.waitForTimeout(200)
     await window.getByRole('tab', { name: 'Auth' }).click()
     await window.getByRole('button', { name: 'Digest' }).click()
     const digest = window.getByTestId('auth-digest')
