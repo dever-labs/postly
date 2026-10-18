@@ -10,8 +10,11 @@ const base: ExportableRequest = {
   sslVerification: 'enabled', protocolConfig: {},
 } as ExportableRequest
 
-const gen = (lang: SnippetLanguage, over: Partial<ExportableRequest> = {}, secrets = true) =>
-  generateSnippet(lang, { ...base, ...over }, { includeSecrets: secrets })!
+const gen = (lang: SnippetLanguage, over: Partial<ExportableRequest> = {}, secrets = true) => {
+  const snippet = generateSnippet(lang, { ...base, ...over }, { includeSecrets: secrets })
+  if (!snippet) throw new Error(`snippet not generated for ${lang}`)
+  return snippet
+}
 
 describe('code snippets', () => {
   it('has a generator for every language and skips non-HTTP protocols', () => {

@@ -18,9 +18,10 @@ npm run dev                              # start with hot reload
 npm run typecheck                        # verify types before committing
 npm run lint                             # check for lint errors
 npm test                                 # run test suite
+npm run test:integration                 # exercise real HTTP flows
 ```
 
-All four checks (typecheck, lint, test, commitlint) must pass before opening a PR.
+Before opening a PR, make sure `npm run typecheck && npm run lint && npm test` passes locally. GitHub Actions also runs integration tests, E2E tests, multi-OS builds, dependency/security checks, and CodeQL on pull requests.
 
 The commit template is also picked up by GitHub Desktop's **"Generate commit message"** button and any tool using the GitHub Copilot SDK — ensuring AI-generated messages follow the project convention.
 
@@ -31,10 +32,10 @@ The commit template is also picked up by GitHub Desktop's **"Generate commit mes
 - **Add tests** for new behaviour where feasible
 - **Keep commits clean** — squash fixups before asking for review
 
-### Commit message format (Conventional Commits — enforced)
+### Commit message format (Conventional Commits — expected)
 
 Every commit must follow [Conventional Commits](https://www.conventionalcommits.org/).
-This is checked by commitlint in CI and drives automatic versioning (see `release-please-config.json`).
+This is no longer gated by commitlint in CI, but it still drives release automation and changelog generation through `release-please` (see `release-please-config.json`).
 
 ```
 <type>(<optional scope>): <short description in lowercase, no trailing period>
@@ -56,7 +57,7 @@ docs: document conventional commit rules
 chore(deps): bump electron to 36.x
 ```
 
-**Bad (rejected by CI):**
+**Bad (won't version cleanly):**
 ```
 Fixed bug                  # missing type
 feat: Fixed bug            # capitalised subject

@@ -17,6 +17,7 @@ jobs:
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -37,6 +38,7 @@ jobs:
   electron-security-lint:
     name: Electron Security Check
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -47,9 +49,24 @@ jobs:
 
       - run: npm ci
 
-      - name: Install electronegativity
-        run: npm install -g @doyensec/electronegativity
-
       - name: Run Electronegativity
-        continue-on-error: true
-        run: electronegativity -i .
+        run: npx @doyensec/electronegativity@1.10.3 -i . -r -o electronegativity.sarif
+
+      - name: Upload Electronegativity SARIF
+        uses: github/codeql-action/upload-sarif@cee97f86b972a3ded3c58d04148362b193ddc518 # v4.38.3
+        with:
+          sarif_file: electronegativity.sarif
+          category: electronegativity
+
+      - name: Upload Electronegativity report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4.6.2
+        with:
+          name: electronegativity-report
+          path: electronegativity.sarif
+          retention-days: 14
+
+      - name: Baseline note
+        run: |
+          echo "Electronegativity findings are uploaded to code scanning and as a workflow artifact."
+          echo "The current baseline is not clean, so this scan remains report-only until findings are triaged."
