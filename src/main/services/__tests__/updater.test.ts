@@ -49,6 +49,7 @@ import {
   installUpdate,
   setUpdateFeedUrl,
   applyFeedUrl,
+  validateUpdateFeedUrl,
   __setAutoUpdaterForTesting,
 } from '../updater'
 
@@ -115,6 +116,10 @@ describe('dev mode (not packaged)', () => {
   it('setUpdateFeedUrl is a no-op', () => {
     setUpdateFeedUrl('https://updates.example.com')
     expect(mockAutoUpdater.setFeedURL).not.toHaveBeenCalled()
+  })
+
+  it('still validates update feed URLs in dev mode', () => {
+    expect(() => setUpdateFeedUrl('javascript:alert(1)')).toThrow('Update feed URL must use HTTPS')
   })
 })
 
@@ -251,6 +256,40 @@ describe('applyFeedUrl', () => {
     isPackaged = false
     applyFeedUrl('https://updates.internal.corp/postly/')
     expect(mockAutoUpdater.setFeedURL).not.toHaveBeenCalled()
+  })
+})
+
+describe('validateUpdateFeedUrl', () => {
+  beforeEach(() => {
+    delete process.env.NODE_ENV
+  })
+
+  it('accepts https URLs', () => {
+    expect(validateUpdateFeedUrl('https://updates.example.com/postly/')).toBe('https://updates.example.com/postly/')
+  })
+
+  it('rejects malformed URLs', () => {
+    expect(() => validateUpdateFeedUrl('not a url')).toThrow('valid absolute URL')
+  })
+
+  it('rejects non-http schemes', () => {
+    expect(() => validateUpdateFeedUrl('file:///etc/passwd')).toThrow('must use HTTPS')
+  })
+
+  it('allows localhost http feeds in dev mode', () => {
+    isPackaged = false
+    expect(validateUpdateFeedUrl('http://127.0.0.1:3000/updates')).toBe('http://127.0.0.1:3000/updates')
+  })
+
+  it('rejects non-loopback http feeds in packaged mode', () => {
+    isPackaged = true
+    expect(() => validateUpdateFeedUrl('http://updates.example.com/postly/')).toThrow('must use HTTPS')
+  })
+
+  it('allows localhost http feeds in tests even when packaged', () => {
+    isPackaged = true
+    process.env.NODE_ENV = 'test'
+    expect(validateUpdateFeedUrl('http://localhost:3000/postly/')).toBe('http://localhost:3000/postly/')
   })
 })
 

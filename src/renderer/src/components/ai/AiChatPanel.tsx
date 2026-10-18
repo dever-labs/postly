@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Send, Sparkles, Plus, Loader2, StopCircle } from 'lucide-react'
 import { useCollectionsStore } from '@/store/collections'
 import { useSettingsStore } from '@/store/settings'
+import { useUIStore } from '@/store/ui'
 import { buildSystemPrompt } from '@/lib/aiContext'
 import type { AiContext } from '@/lib/aiContext'
 import { cn } from '@/lib/utils'
+import { getRootCollection } from '@/lib/folder-tree'
 
 interface EndpointDraft {
   name: string
@@ -69,6 +71,9 @@ export function AiChatPanel({ context, folderId }: Props) {
   const streamBufferRef = useRef<string>('')
 
   const createLocalRequest = useCollectionsStore((state) => state.createLocalRequest)
+  const folders = useCollectionsStore((state) => state.folders)
+  const deleteRequest = useCollectionsStore((state) => state.deleteRequest)
+  const openGitAction = useUIStore((state) => state.openGitAction)
   const aiSettings = useSettingsStore((state) => state.ai)
 
   useEffect(() => {
@@ -127,10 +132,11 @@ export function AiChatPanel({ context, folderId }: Props) {
   const addEndpoint = async (msgIdx: number, epIdx: number, ep: EndpointDraft) => {
     const targetFolderId = folderId ?? context.folderId ?? context.collectionId
     if (!targetFolderId) return
-    const beforeIds = new Set(useCollectionsStore.getState().requests.map((request) => request.id))
-    await createLocalRequest(targetFolderId)
-    await new Promise((resolve) => setTimeout(resolve, 150))
-    const newReq = useCollectionsStore.getState().requests.find((request) => !beforeIds.has(request.id) && request.folderId === targetFolderId)
+    const newRequestId = await createLocalRequest(targetFolderId)
+    if (!newRequestId) return
+    const collection = getRootCollection(targetFolderId, folders)
+    const isGitBacked = collection && ['git', 'github', 'gitlab'].includes(collection.source)
+    const newReq = useCollectionsStore.getState().requests.find((request) => request.id === newRequestId)
     if (newReq) {
       await window.api.requests.update({
         id: newReq.id, name: ep.name, protocol: ep.protocol, method: ep.method, url: ep.url,
@@ -140,6 +146,15 @@ export function AiChatPanel({ context, folderId }: Props) {
         bodyType: ep.bodyType, bodyContent: ep.bodyContent,
       })
       await useCollectionsStore.getState().load()
+      if (isGitBacked) {
+        openGitAction({
+          type: 'push',
+          collectionId: collection.id,
+          title: `Created endpoint '${ep.name}'`,
+          subtitle: collection.name,
+          onCancel: () => deleteRequest(newReq.id),
+        })
+      }
     }
     setAddedMap((prev) => ({ ...prev, [msgIdx]: new Set([...(prev[msgIdx] ?? []), epIdx]) }))
   }

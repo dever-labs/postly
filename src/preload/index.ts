@@ -48,7 +48,7 @@ const api = {
   },
   http: {
     execute: (request: unknown) => ipcRenderer.invoke('postly:http:execute', request),
-    cancel: () => ipcRenderer.invoke('postly:http:cancel'),
+    cancel: (data?: { requestId?: string }) => ipcRenderer.invoke('postly:http:cancel', data),
     onStream: (cb: (data: unknown) => void) => {
       const handler = (_: unknown, data: unknown) => cb(data)
       ipcRenderer.on('postly:http:stream', handler)

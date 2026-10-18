@@ -44,6 +44,10 @@ export function SettingsModal() {
   const [activeTab, setActiveTab] = useState(settingsTab)
 
   useEffect(() => {
+    if (settingsOpen) setActiveTab(settingsTab)
+  }, [settingsOpen, settingsTab])
+
+  useEffect(() => {
     if (!settingsOpen) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSettings() }
     document.addEventListener('keydown', onKey)

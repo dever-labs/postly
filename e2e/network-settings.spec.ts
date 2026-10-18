@@ -7,6 +7,7 @@ test.describe('Network settings', () => {
   })
 
   test('proxy can be configured, saved and reports the route', async ({ window }) => {
+    await window.evaluate(() => window.api.proxy.set({ mode: 'system', url: '', username: '', password: '', bypass: '' }))
     await window.locator('[data-testid="btn-settings"]').click()
     await window.getByRole('button', { name: 'Network' }).click()
 

@@ -233,6 +233,24 @@ describe('registerGitHubHandlers', () => {
     )
   })
 
+  it('reuses the stored client secret when the renderer does not get it back', async () => {
+    const user = { login: 'octocat', name: 'Octo Cat', avatarUrl: 'https://example.com/cat.png' }
+    mockStartGitHubOAuth.mockResolvedValue({ token: 'new-token', user })
+    mockQueryOne.mockReturnValue({ value: JSON.stringify({ orgs: ['existing-org'], clientSecret: 'stored-secret' }) })
+
+    await handlers['postly:github:oauth'](null, {
+      baseUrl: 'https://github.com',
+      clientId: 'cid',
+      clientSecret: '',
+    })
+
+    expect(mockStartGitHubOAuth).toHaveBeenCalledWith({
+      baseUrl: 'https://github.com',
+      clientId: 'cid',
+      clientSecret: 'stored-secret',
+    })
+  })
+
   it('returns { error } from oauth when oauth fails', async () => {
     mockStartGitHubOAuth.mockRejectedValue(new Error('oauth failed'))
 

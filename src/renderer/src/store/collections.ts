@@ -18,8 +18,8 @@ interface CollectionsState {
   createSubFolder: (parentId: string, name: string) => Promise<string | null>
   createRootFolder: (name: string, source?: CollectionSource, integrationId?: string) => Promise<string | null>
   createGroup: (parentId: string, name: string) => Promise<string | null>
-  addRequestToFolder: (folderId: string) => Promise<void>
-  addRequestToCollection: (collectionId: string) => Promise<void>
+  addRequestToFolder: (folderId: string) => Promise<string | null>
+  addRequestToCollection: (collectionId: string) => Promise<string | null>
   deleteCollection: (id: string, commitMessage?: string) => Promise<void>
   renameCollection: (id: string, name: string) => Promise<void>
   deleteRequest: (id: string) => Promise<void>
@@ -30,7 +30,7 @@ interface CollectionsState {
   updateGroup: (id: string, updates: { name?: string; description?: string; authType?: AuthType; authConfig?: Record<string, string>; sslVerification?: SslVerification; networkSettings?: NetworkSettings | null; collapsed?: boolean }) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
   renameGroup: (id: string, name: string) => Promise<void>
-  createLocalRequest: (folderId: string) => Promise<void>
+  createLocalRequest: (folderId: string) => Promise<string | null>
   moveRequestToFolder: (requestId: string, newFolderId: string, insertBeforeId: string | null) => Promise<void>
   moveRequestToGroup: (requestId: string, newFolderId: string, insertBeforeId: string | null) => Promise<void>
   moveFolder: (folderId: string, newParentId: string | null, insertBeforeId: string | null) => Promise<void>
@@ -160,14 +160,15 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
     const { data, error } = await window.api.requests.create({ folderId, name: 'New Request', method: 'GET' })
     if (error) {
       console.error('Failed to create request:', error)
-      return
+      return null
     }
     const request = normalizeRequest(data as Record<string, unknown>)
     set((state) => ({ requests: [...state.requests, request] }))
+    return request.id
   },
 
   addRequestToCollection: async (collectionId: string) => {
-    await get().addRequestToFolder(collectionId)
+    return get().addRequestToFolder(collectionId)
   },
 
   deleteCollection: async (id: string, commitMessage?: string) => {
@@ -286,7 +287,7 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
   },
 
   createLocalRequest: async (folderId: string) => {
-    await get().addRequestToFolder(folderId)
+    return get().addRequestToFolder(folderId)
   },
 
   moveRequestToFolder: async (requestId: string, newFolderId: string, insertBeforeId: string | null) => {

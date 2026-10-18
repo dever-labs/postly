@@ -110,13 +110,15 @@ function Banner({
   // macOS traffic lights sit on its left edge, the minimize/maximize/close buttons on its right edge elsewhere
   const leftPadding = window.api.platform === 'darwin' ? 'pl-20 pr-4' : 'pl-4 pr-44'
   return (
-    <div data-testid="update-banner" className={`drag-region flex h-8 shrink-0 items-center justify-between gap-3 border-b text-xs ${leftPadding} ${bg}`}>
-      <div className="flex flex-1 items-center gap-3">{children}</div>
-      {onDismiss && (
-        <button onClick={onDismiss} className="no-drag shrink-0 opacity-60 hover:opacity-100 focus:outline-hidden">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
+    <div data-testid="update-banner" className={`drag-region relative shrink-0 pt-8 pb-4 text-xs ${leftPadding} ${bg}`}>
+      <div className={`absolute inset-0 flex items-center justify-between gap-3 border-b ${leftPadding} ${bg}`}>
+        <div className="flex flex-1 items-center gap-3">{children}</div>
+        {onDismiss && (
+          <button onClick={onDismiss} className="no-drag shrink-0 opacity-60 hover:opacity-100 focus:outline-hidden">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

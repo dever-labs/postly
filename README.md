@@ -95,7 +95,7 @@ The recommended way to install on macOS is via [Homebrew](https://brew.sh) — i
 brew install dever-labs/tap/postly
 ```
 
-Alternatively, download the `.dmg` from the [Releases](https://github.com/dever-labs/postly/releases) page. Because Postly is not notarized, macOS will block it on first launch. To allow it, run this once after installing:
+Alternatively, download the `.dmg` from the [Releases](https://github.com/dever-labs/postly/releases) page. The release workflow signs and notarizes macOS builds only when the required Apple secrets are configured. If a given release was published without notarization, macOS may block it on first launch; in that case run:
 
 ```bash
 xattr -cr /Applications/Postly.app

@@ -103,8 +103,8 @@ test.describe('OAuth session persistence', () => {
       return window.api.oauth.authorize({ configId: id })
     }, configId)
 
-    expect((result as { data: { accessToken: string; tokenType: string } }).data.accessToken).toBe('e2e-access-token')
-    expect((result as { data: { accessToken: string; tokenType: string } }).data.tokenType).toBe('Bearer')
+    expect((result as { data: { tokenType: string; hasRefreshToken: boolean } }).data.tokenType).toBe('Bearer')
+    expect((result as { data: { tokenType: string; hasRefreshToken: boolean } }).data.hasRefreshToken).toBe(true)
 
     const requests = await server.waitForCalls(TOKEN_ENDPOINT_ID, 1)
     expect(requests.count).toBe(1)

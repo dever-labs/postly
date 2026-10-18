@@ -4,6 +4,7 @@ import { kvpToRecord, serializeRequest } from '@/lib/normalizers'
 import { normalizeNetworkSettings } from '@/lib/networkSettings'
 import { useCollectionsStore } from './collections'
 import { useEnvironmentsStore } from './environments'
+import { useHistoryStore } from './history'
 import { useVariablesStore } from './variables'
 import { EXTRACT_RULES_KEY, parseRules } from '../../../shared/extract'
 import { MAX_STREAM_EVENTS, type StreamEvent, type StreamKind } from '../../../shared/stream'
@@ -23,6 +24,7 @@ type StreamMessage =
 let pendingResume: { lastEventId: string; previous: StreamState } | null = null
 let streamGenerationCounter = 0
 let activeStreamGeneration: number | null = null
+let activeHttpRequestId: string | null = null
 
 const endStream = (stream: StreamState | null): StreamState | null => (stream ? { ...stream, active: false } : null)
 
@@ -319,6 +321,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     const requestId = editingRequest.id
     const streamGeneration = ++streamGenerationCounter
     activeStreamGeneration = streamGeneration
+    activeHttpRequestId = requestId
     pendingResume = null
     set({ isLoading: true, response: null, stream: null })
 
@@ -338,6 +341,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     }
 
     const httpRequest: HttpRequest = {
+      requestId,
       method: editingRequest.protocol === 'graphql' ? 'POST' : editingRequest.method,
       url: editingRequest.url,
       headers: kvpToRecord(editingRequest.headers),
@@ -400,6 +404,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
       }
       set({ response: errorResponse, isLoading: false, stream: endStream(get().stream) })
     } finally {
+      void useHistoryStore.getState().load()
+      if (activeHttpRequestId === requestId) activeHttpRequestId = null
       setTimeout(() => {
         if (activeStreamGeneration === streamGeneration) activeStreamGeneration = null
         offStream()
@@ -415,9 +421,8 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     pendingResume = { lastEventId: last, previous: stream }
     void get().sendRequest()
   },
-
   cancelRequest: () => {
-    void window.api.http.cancel()
+    void window.api.http.cancel(activeHttpRequestId ? { requestId: activeHttpRequestId } : undefined)
   },
 
   saveRequest: async () => {
@@ -426,6 +431,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
 
     // Cancel any pending draft save and clear undo history
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    pendingDraftRequest = null
     clearUndo()
 
     // Clear dirty flag before serializing so the DB is written with is_dirty = 0
@@ -456,6 +462,7 @@ export const useRequestsStore = create<RequestsState>((set, get) => ({
     if (!editingRequest || isScratchId(editingRequest.id)) return
 
     if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null }
+    pendingDraftRequest = null
     clearUndo()
     await window.api.drafts.request.delete({ requestId: editingRequest.id })
 

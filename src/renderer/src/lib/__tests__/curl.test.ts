@@ -7,6 +7,11 @@ const must = (s: string) => {
   if (!r) throw new Error('not parsed')
   return r
 }
+const mustBuildCurl = (...args: Parameters<typeof buildCurl>) => {
+  const result = buildCurl(...args)
+  if (!result) throw new Error('curl not built')
+  return result
+}
 const kv = (r: { headers: { key: string; value: string }[] }) => Object.fromEntries(r.headers.map((h) => [h.key, h.value]))
 
 describe('tokenize', () => {
@@ -174,10 +179,10 @@ describe('buildCurl', () => {
   })
 
   it('writes method, headers, params and JSON body', () => {
-    const out = buildCurl({
+    const out = mustBuildCurl({
       ...base, method: 'POST', params: [{ id: 'p', key: 'a b', value: 'c&d', enabled: true }, { id: 'q', key: 'off', value: '1', enabled: false }],
       headers: [h('X-Id', '1')], bodyType: 'raw-json', bodyContent: '{"it\'s":1}',
-    }, { includeSecrets: false })!
+    }, { includeSecrets: false })
     expect(out.command).toContain("-X POST 'https://api.test/x?a%20b=c%26d'")
     expect(out.command).toContain("-H 'X-Id: 1'")
     expect(out.command).toContain("-H 'Content-Type: application/json'")
@@ -187,27 +192,27 @@ describe('buildCurl', () => {
 
   it('masks credentials unless secrets are included', () => {
     const req = { ...base, headers: [h('Authorization', 'Bearer s3cret'), h('X-Api-Key', 'k')], authType: 'basic' as const, authConfig: { username: 'ann', password: 'pw' } }
-    const masked = buildCurl(req, { includeSecrets: false })!
+    const masked = mustBuildCurl(req, { includeSecrets: false })
     expect(masked.command).not.toMatch(/s3cret|pw|X-Api-Key: k/)
     expect(masked.command).toContain("-u 'ann:<password>'")
     expect(masked.notes.join(' ')).toMatch(/placeholders/)
-    const full = buildCurl(req, { includeSecrets: true })!
+    const full = mustBuildCurl(req, { includeSecrets: true })
     expect(full.command).toContain('Bearer s3cret')
     expect(full.command).toContain("-u 'ann:pw'")
     expect(full.notes).toHaveLength(0)
   })
 
   it('exports bearer auth as an Authorization header', () => {
-    const r = buildCurl({ ...base, authType: 'bearer', authConfig: { token: 'tok' } }, { includeSecrets: true })!
+    const r = mustBuildCurl({ ...base, authType: 'bearer', authConfig: { token: 'tok' } }, { includeSecrets: true })
     expect(r.command).toContain("-H 'Authorization: Bearer tok'")
-    expect(buildCurl({ ...base, authType: 'bearer', authConfig: { token: 'tok' } }, { includeSecrets: false })!.command).toContain('<token>')
+    expect(mustBuildCurl({ ...base, authType: 'bearer', authConfig: { token: 'tok' } }, { includeSecrets: false }).command).toContain('<token>')
   })
 
   it('resolves variables or keeps placeholders', () => {
     const req = { ...base, url: '{{base}}/x', headers: [h('X-Env', '{{env}}')], params: [{ id: 'p', key: 'k', value: '{{v}}', enabled: true }] }
-    const kept = buildCurl(req, { includeSecrets: false })!
+    const kept = mustBuildCurl(req, { includeSecrets: false })
     expect(kept.command).toContain("'{{base}}/x?k={{v}}'")
-    const resolved = buildCurl(req, { includeSecrets: false, variables: { base: 'https://h.test', env: 'prod' } })!
+    const resolved = mustBuildCurl(req, { includeSecrets: false, variables: { base: 'https://h.test', env: 'prod' } })
     expect(resolved.command).toContain("'https://h.test/x?k={{v}}'")
     expect(resolved.command).toContain('X-Env: prod')
     expect(resolved.notes.join(' ')).toMatch(/\{\{v\}\}/)
@@ -215,17 +220,17 @@ describe('buildCurl', () => {
 
   it('exports form bodies, files and binary bodies as placeholders', () => {
     const rows = JSON.stringify([{ id: '1', key: 'a', value: 'b', enabled: true }, { id: '2', key: 'f', value: '/tmp/x.txt', enabled: true, fieldType: 'file' }])
-    const form = buildCurl({ ...base, method: 'POST', bodyType: 'form-data', bodyContent: rows }, { includeSecrets: false })!
+    const form = mustBuildCurl({ ...base, method: 'POST', bodyType: 'form-data', bodyContent: rows }, { includeSecrets: false })
     expect(form.command).toContain("-F 'a=b'")
     expect(form.command).toContain("-F 'f=@/tmp/x.txt'")
-    const bin = buildCurl({ ...base, method: 'POST', bodyType: 'binary', bodyContent: '/tmp/b.bin' }, { includeSecrets: false })!
+    const bin = mustBuildCurl({ ...base, method: 'POST', bodyType: 'binary', bodyContent: '/tmp/b.bin' }, { includeSecrets: false })
     expect(bin.command).toContain("--data-binary '@/tmp/b.bin'")
   })
 
   it('notes inherited auth, and handles HEAD, -k and GraphQL', () => {
-    expect(buildCurl({ ...base, authType: 'inherit' }, { includeSecrets: false })!.notes.join(' ')).toMatch(/inherited/)
-    expect(buildCurl({ ...base, method: 'HEAD', sslVerification: 'disabled' }, { includeSecrets: false })!.command).toMatch(/curl -I 'https:\/\/api.test\/x' \\\n {2}-k/)
-    const gql = buildCurl({ ...base, protocol: 'graphql', bodyContent: '{ me { id } }', protocolConfig: { variables: '{"a":1}' } }, { includeSecrets: false })!
+    expect(mustBuildCurl({ ...base, authType: 'inherit' }, { includeSecrets: false }).notes.join(' ')).toMatch(/inherited/)
+    expect(mustBuildCurl({ ...base, method: 'HEAD', sslVerification: 'disabled' }, { includeSecrets: false }).command).toMatch(/curl -I 'https:\/\/api.test\/x' \\\n {2}-k/)
+    const gql = mustBuildCurl({ ...base, protocol: 'graphql', bodyContent: '{ me { id } }', protocolConfig: { variables: '{"a":1}' } }, { includeSecrets: false })
     expect(gql.command).toContain('-X POST')
     expect(gql.command).toContain(`--data-raw '{"query":"{ me { id } }","variables":{"a":1}}'`)
   })
@@ -239,14 +244,14 @@ describe('buildCurl redaction and GET bodies', () => {
       params: [{ id: 'p', key: 'access_token', value: 'BBB', enabled: true }, { id: 'q', key: 'q', value: 'ok', enabled: true }],
       bodyType: 'raw-json' as const, bodyContent: '{"user":"ann","password":"CCC","nested":{"client_secret":"DDD"}}',
     }
-    const out = buildCurl(req, { includeSecrets: false })!
+    const out = mustBuildCurl(req, { includeSecrets: false })
     for (const leaked of ['hunter2', 'AAA', 'BBB', 'CCC', 'DDD']) expect(out.command).not.toContain(leaked)
     expect(out.command).toContain('page=2')
     expect(out.command).toContain('q=ok')
     expect(out.command).toContain('token={{tok}}')
     expect(out.command).toContain('"user":"ann"')
     expect(out.notes.join(' ')).toMatch(/placeholders/)
-    const full = buildCurl(req, { includeSecrets: true })!
+    const full = mustBuildCurl(req, { includeSecrets: true })
     for (const kept of ['hunter2', 'AAA', 'BBB', 'CCC', 'DDD']) expect(full.command).toContain(kept)
   })
 
@@ -257,20 +262,20 @@ describe('buildCurl redaction and GET bodies', () => {
       { id: '3', key: 'auth_file', value: '/tmp/a', enabled: true, fieldType: 'file' },
     ])
     for (const bodyType of ['form-data', 'x-www-form-urlencoded'] as const) {
-      const out = buildCurl({ ...base, method: 'POST', bodyType, bodyContent: rows }, { includeSecrets: false })!
+      const out = mustBuildCurl({ ...base, method: 'POST', bodyType, bodyContent: rows }, { includeSecrets: false })
       expect(out.command).not.toContain('sekret')
       expect(out.command).toContain('name=ann')
     }
-    const raw = buildCurl({ ...base, method: 'POST', bodyType: 'raw-text', bodyContent: 'grant_type=password&client_secret=zzz' }, { includeSecrets: false })!
+    const raw = mustBuildCurl({ ...base, method: 'POST', bodyType: 'raw-text', bodyContent: 'grant_type=password&client_secret=zzz' }, { includeSecrets: false })
     expect(raw.command).not.toContain('zzz')
     expect(raw.command).toContain('grant_type=password')
   })
 
   it('keeps -X GET when a GET has a body, and drops bodies from HEAD', () => {
-    const get = buildCurl({ ...base, method: 'GET', bodyType: 'raw-json', bodyContent: '{"q":1}' }, { includeSecrets: false })!
+    const get = mustBuildCurl({ ...base, method: 'GET', bodyType: 'raw-json', bodyContent: '{"q":1}' }, { includeSecrets: false })
     expect(get.command).toContain('-X GET')
     expect(must(get.command).method).toBe('GET')
-    const head = buildCurl({ ...base, method: 'HEAD', bodyType: 'raw-json', bodyContent: '{"q":1}' }, { includeSecrets: false })!
+    const head = mustBuildCurl({ ...base, method: 'HEAD', bodyType: 'raw-json', bodyContent: '{"q":1}' }, { includeSecrets: false })
     expect(head.command).not.toContain('--data-raw')
     expect(head.notes.join(' ')).toMatch(/HEAD/)
   })
@@ -288,7 +293,7 @@ describe('round trip', () => {
       { ...base, method: 'GET', authType: 'bearer', authConfig: { token: 't' } },
     ]
     for (const original of cases) {
-      const cmd = buildCurl(original, { includeSecrets: true })!.command
+      const cmd = mustBuildCurl(original, { includeSecrets: true }).command
       const parsed = must(cmd)
       expect(parsed.method).toBe(original.method)
       expect(parsed.url).toBe(original.url)

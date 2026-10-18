@@ -37,7 +37,7 @@ Postly follows Electron security best practices:
 ## Dependencies
 
 We run automated dependency audits on every PR and weekly via GitHub Actions.
-Critical vulnerabilities block merges. Dependabot is enabled for automated patch PRs.
+High and critical findings are surfaced in CI. Repository enforcement is handled through required status checks on `main`, and Dependabot is enabled for automated patch PRs.
 
 ### Supply-chain attack protection
 

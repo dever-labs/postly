@@ -1,7 +1,8 @@
 import { Globe, History, Layers, Settings, Link, Download, Upload } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent, DragOverEvent } from '@dnd-kit/core'
+import { useShallow } from 'zustand/react/shallow'
 import { WorkingSet } from '@/components/sidebar/WorkingSet'
 import { HistoryPanel } from '@/components/sidebar/HistoryPanel'
 import { EnvironmentsPanel } from '@/components/sidebar/EnvironmentsPanel'
@@ -10,7 +11,6 @@ import { SidebarSearch } from '@/components/sidebar/SidebarSearch'
 import { Badge } from '@/components/ui/Badge'
 import { Tree } from '@/components/ui/Tree'
 import { useCollectionsStore } from '@/store/collections'
-import { useEnvironmentsStore } from '@/store/environments'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
@@ -34,7 +34,10 @@ const SIDEBAR_TABS = [
 
 function DragOverlayContent({ id }: { id: string }) {
   const [type, itemId] = id.split(':')
-  const { folders, requests } = useCollectionsStore()
+  const { folders, requests } = useCollectionsStore(useShallow((state) => ({
+    folders: state.folders,
+    requests: state.requests,
+  })))
 
   let label = ''
   let badge: React.ReactNode = null
@@ -118,26 +121,23 @@ async function handleDragEnd(event: DragEndEvent) {
 }
 
 export function CollectionsSidebar() {
-  const { folders, requests, searchQuery, load } = useCollectionsStore()
-  const { integrations, load: loadIntegrations } = useIntegrationsStore()
-  const { load: loadEnvironments } = useEnvironmentsStore()
+  const folders = useCollectionsStore((state) => state.folders)
+  const requests = useCollectionsStore((state) => state.requests)
+  const searchQuery = useCollectionsStore((state) => state.searchQuery)
+  const integrations = useIntegrationsStore((state) => state.integrations)
   const selectItem = useUIStore((state) => state.selectItem)
-  const { openSettings, sidebarTab, setSidebarTab } = useUIStore()
+  const openSettings = useUIStore((state) => state.openSettings)
+  const sidebarTab = useUIStore((state) => state.sidebarTab)
+  const setSidebarTab = useUIStore((state) => state.setSidebarTab)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [dragActiveId, setDragActiveId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
-  useEffect(() => {
-    void load()
-    void loadIntegrations()
-    void loadEnvironments()
-  }, [load, loadIntegrations, loadEnvironments])
-
   return (
     <div data-testid="sidebar" className="flex h-full flex-col bg-th-bg">
       {/* Same height as the drag strip above the editor pages (pt-8), so the window can be dragged from edge to edge */}
-      <div data-testid="sidebar-drag-strip" className="drag-region h-8 shrink-0" />
+      <div data-testid="sidebar-drag-strip" className="drag-region shrink-0 pt-8 pb-4" />
       <div
         role="tablist"
         aria-label="Sidebar view"

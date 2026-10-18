@@ -202,6 +202,27 @@ describe('OAuth IPC handlers', () => {
       const result = await invoke('postly:oauth:authorize', { configId: 'missing' })
       expect(result).toEqual({ error: 'OAuth config not found' })
     })
+
+    it('redacts token secrets from authorize responses', async () => {
+      mockQ1.mockReturnValue(fakeConfigRow)
+      mockAuthorizeAuthCode.mockResolvedValue({ ...fakeToken, refreshToken: 'refresh-token', scope: 'read write' })
+
+      const result = await invoke('postly:oauth:authorize', { configId: 'cfg1' })
+
+      expect(result).toEqual({
+        data: {
+          id: 't1',
+          oauthConfigId: 'cfg1',
+          tokenType: 'Bearer',
+          createdAt: fakeToken.createdAt,
+          expiresAt: undefined,
+          scope: 'read write',
+          hasRefreshToken: true,
+        },
+      })
+      expect(JSON.stringify(result)).not.toContain('refresh-token')
+      expect(JSON.stringify(result)).not.toContain('accessToken')
+    })
   })
 
   // ── postly:oauth:token:get ─────────────────────────────────────────────────
@@ -225,6 +246,22 @@ describe('OAuth IPC handlers', () => {
       mockGetValidToken.mockResolvedValue(fakeToken)
       await invoke('postly:oauth:token:get', { configId: 'cfg1' })
       expect(mockGetValidToken).toHaveBeenCalledWith('cfg1', false)
+    })
+
+    it('returns only token metadata', async () => {
+      mockGetValidToken.mockResolvedValue({ ...fakeToken, refreshToken: 'refresh-token' })
+      const result = await invoke('postly:oauth:token:get', { configId: 'cfg1' })
+      expect(result).toEqual({
+        data: {
+          id: 't1',
+          oauthConfigId: 'cfg1',
+          tokenType: 'Bearer',
+          createdAt: fakeToken.createdAt,
+          expiresAt: undefined,
+          scope: undefined,
+          hasRefreshToken: true,
+        },
+      })
     })
   })
 

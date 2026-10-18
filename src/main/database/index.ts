@@ -8,8 +8,10 @@ import { encryptDb, decryptDb, isEncrypted } from './db-crypto'
 let db: Database
 let SQL: SqlJsStatic
 let dbPath: string
+export const PERSIST_DEBOUNCE_MS = 250
 
 let sqlJsPromise: Promise<SqlJsStatic> | null = null
+let deferredPersistTimer: ReturnType<typeof setTimeout> | null = null
 
 /** Start compiling the sql.js WASM early so it overlaps with app/window startup. */
 export function preloadSqlJs(): Promise<SqlJsStatic> {
@@ -377,7 +379,7 @@ function runMigrations(): void {
   )`)
 }
 
-/** Flush the in-memory DB to disk. Call after every write. */
+/** Flush the in-memory DB to disk immediately. */
 export function persistDb(): void {
   if (!db || !dbPath) return
   const data = encryptDb(db.export())
@@ -386,18 +388,19 @@ export function persistDb(): void {
   fs.renameSync(tmp, dbPath)
 }
 
-let deferredPersistTimer: ReturnType<typeof setTimeout> | null = null
-
 /**
- * Schedule a debounced persist (2 s). Use for high-frequency writes such as
- * draft auto-saves where an immediate full-DB flush on every keystroke would
- * cause excessive synchronous disk I/O.
+ * Schedule a coalesced persist so a burst of writes becomes one export/encrypt/write cycle.
+ * The crash window is bounded to the latest delay (250 ms by default).
  */
-export function schedulePersist(delayMs = 2000): void {
+export function schedulePersist(delayMs = PERSIST_DEBOUNCE_MS): void {
   if (deferredPersistTimer) clearTimeout(deferredPersistTimer)
   deferredPersistTimer = setTimeout(() => {
     deferredPersistTimer = null
-    persistDb()
+    try {
+      persistDb()
+    } catch (err) {
+      console.error('Failed to persist database:', err)
+    }
   }, delayMs)
 }
 
@@ -451,7 +454,7 @@ export function queryOne<T = Record<string, unknown>>(sql: string, params?: unkn
   return result
 }
 
-/** Execute an INSERT / UPDATE / DELETE statement. Persists to disk immediately. */
+/** Execute an INSERT / UPDATE / DELETE statement and persist immediately. */
 export function run(sql: string, params?: unknown[]): void {
   db.run(sql, params as Parameters<typeof db.run>[1])
   persistDb()
@@ -460,7 +463,7 @@ export function run(sql: string, params?: unknown[]): void {
 /**
  * Execute multiple write statements inside a single SQLite transaction.
  * Unlike calling `run` multiple times, this does NOT call `persistDb()` between
- * statements — it calls it exactly once after a successful COMMIT.
+ * statements — it persists exactly once after a successful COMMIT.
  * Rolls back automatically on error.
  */
 export function runTransaction(statements: Array<{ sql: string; params?: unknown[] }>): void {
@@ -484,4 +487,42 @@ export function runTransaction(statements: Array<{ sql: string; params?: unknown
 export function runDraft(sql: string, params?: unknown[]): void {
   db.run(sql, params as Parameters<typeof db.run>[1])
   schedulePersist()
+}
+
+export function installPersistFlushHandlers(options?: {
+  onSignal?: (signal: 'SIGTERM' | 'SIGINT', handler: () => void) => void
+  onUncaughtException?: (handler: (error: unknown) => void) => void
+  flush?: () => void
+  exit?: (code: number) => void
+  log?: (message: string, error?: unknown) => void
+}): void {
+  const onSignal = options?.onSignal ?? ((signal, handler) => { process.once(signal, handler) })
+  const onUncaughtException = options?.onUncaughtException ?? ((handler) => { process.once('uncaughtException', handler) })
+  const flush = options?.flush ?? flushPersist
+  const exit = options?.exit ?? ((code) => { process.exit(code) })
+  const log = options?.log ?? ((message, error) => { console.error(message, error) })
+
+  const flushSafely = (reason: string): void => {
+    try {
+      flush()
+    } catch (err) {
+      log(`Failed to flush database during ${reason}:`, err)
+    }
+  }
+
+  onSignal('SIGTERM', () => {
+    flushSafely('SIGTERM')
+    exit(143)
+  })
+
+  onSignal('SIGINT', () => {
+    flushSafely('SIGINT')
+    exit(130)
+  })
+
+  onUncaughtException((error) => {
+    flushSafely('uncaughtException')
+    log('Uncaught exception in main process:', error)
+    exit(1)
+  })
 }

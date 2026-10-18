@@ -14,17 +14,19 @@ vi.mock('../../database', () => ({
   queryAll: vi.fn(),
   queryOne: vi.fn(),
   run: vi.fn(),
+  runTransaction: vi.fn(),
 }))
 
 vi.mock('../../services/git-local', () => ({}))
 vi.mock('../../services/variable-store', () => ({ deleteCollectionVariables: vi.fn() }))
 
 import { registerCollectionHandlers } from '../collections'
-import { queryAll, queryOne, run } from '../../database'
+import { queryAll, queryOne, run, runTransaction } from '../../database'
 
 const mockQueryAll = vi.mocked(queryAll)
 const mockQueryOne = vi.mocked(queryOne)
 const mockRun = vi.mocked(run)
+const mockRunTransaction = vi.mocked(runTransaction)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -230,7 +232,9 @@ describe('postly:reorder', () => {
       updates: [{ id: 'f1', sortOrder: 2 }],
     })
 
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    expect(mockRun).not.toHaveBeenCalled()
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    const { sql, params } = statements[0]
     expect(sql).toContain('sort_order = ?')
     expect(sql).not.toContain('parent_id')
     expect(params).toContain(2)
@@ -242,7 +246,8 @@ describe('postly:reorder', () => {
       updates: [{ id: 'f1', sortOrder: 0, newParentId: 'parent-2' }],
     })
 
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    const { sql, params } = statements[0]
     expect(sql).toContain('parent_id = ?')
     expect(params).toContain('parent-2')
   })
@@ -253,7 +258,8 @@ describe('postly:reorder', () => {
       updates: [{ id: 'f1', sortOrder: 0, newParentId: null }],
     })
 
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    const { sql, params } = statements[0]
     expect(sql).toContain('parent_id = ?')
     // null must be passed so SQLite stores NULL — not undefined which would skip the update
     expect(params).toContain(null)
@@ -265,7 +271,8 @@ describe('postly:reorder', () => {
       updates: [{ id: 'f1', sortOrder: 1 }],
     })
 
-    const [sql] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    const { sql } = statements[0]
     expect(sql).not.toContain('parent_id')
   })
 
@@ -275,8 +282,25 @@ describe('postly:reorder', () => {
       updates: [{ id: 'r1', sortOrder: 0, newParentId: 'f2' }],
     })
 
-    const [sql, params] = mockRun.mock.calls[0] as [string, unknown[]]
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    const { sql, params } = statements[0]
     expect(sql).toContain('folder_id = ?')
     expect(params).toContain('f2')
+  })
+
+  it('batches every reorder update into one transaction', async () => {
+    await handlers['postly:reorder'](null, {
+      type: 'request',
+      updates: [
+        { id: 'r1', sortOrder: 0, newParentId: 'f2' },
+        { id: 'r2', sortOrder: 1 },
+      ],
+    })
+
+    expect(mockRunTransaction).toHaveBeenCalledTimes(1)
+    const [statements] = mockRunTransaction.mock.calls[0] as [Array<{ sql: string; params: unknown[] }>]
+    expect(statements).toHaveLength(2)
+    expect(statements[0].sql).toContain('UPDATE requests SET')
+    expect(statements[1].sql).toContain('UPDATE requests SET')
   })
 })

@@ -13,7 +13,33 @@ let lastHeaders: Record<string, string | string[] | undefined> = {}
 
 function makeSender() {
   const events: Event[] = []
-  const sender = { send: (_ch: string, e: Event) => { events.push(e) } } as unknown as Sender
+  const listeners = new Map<string, Map<() => void, () => void>>()
+  let destroyed = false
+  const listenersFor = (event: string) => {
+    const existing = listeners.get(event)
+    if (existing) return existing
+    const next = new Map<() => void, () => void>()
+    listeners.set(event, next)
+    return next
+  }
+  const sender = {
+    send: (_ch: string, e: Event) => { events.push(e) },
+    isDestroyed: () => destroyed,
+    once: (event: string, handler: () => void) => {
+      const wrapped = () => {
+        listeners.get(event)?.delete(handler)
+        handler()
+      }
+      listenersFor(event).set(handler, wrapped)
+    },
+    off: (event: string, handler: () => void) => {
+      listeners.get(event)?.delete(handler)
+    },
+    destroy: () => {
+      destroyed = true
+      for (const handler of [...(listeners.get('destroyed')?.values() ?? [])]) handler()
+    },
+  } as unknown as Sender & { destroy: () => void }
   return { sender, events }
 }
 
@@ -115,6 +141,15 @@ describe('websocket service', () => {
     expect(isWebSocketConnected('b')).toBe(true)
   })
 
+  it('tears down the connection when the renderer is destroyed', async () => {
+    const { sender, events } = makeSender()
+    await connectWebSocket('a', url, {}, sender)
+    sender.destroy()
+    await until(() => !isWebSocketConnected('a'))
+    expect(events.some((e) => e.type === 'close')).toBe(false)
+    expect(() => sendWebSocketMessage('a', 'x')).toThrow('No active WebSocket connection')
+  })
+
   it('rejects and emits an error event when the server is unreachable', async () => {
     const { sender, events } = makeSender()
     await expect(connectWebSocket('a', 'ws://127.0.0.1:1', {}, sender)).rejects.toBeTruthy()
@@ -126,4 +161,3 @@ describe('websocket service', () => {
     expect(isWebSocketConnected('ghost')).toBe(false)
   })
 })
-

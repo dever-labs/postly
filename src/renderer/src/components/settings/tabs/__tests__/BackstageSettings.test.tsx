@@ -51,12 +51,13 @@ describe('BackstageSettings — OAuth token persistence', () => {
       error: null,
     })
 
-    // After sign-in, the backend has persisted the real token — the UI must
-    // re-fetch it rather than assume it's blank.
+    // After sign-in, the backend has persisted the real token, but only a
+    // hasToken flag comes back to the renderer.
     mockGet.mockResolvedValueOnce({
       data: {
         baseUrl: 'https://backstage.example.com',
-        token: 'real-oauth-token',
+        token: '',
+        hasToken: true,
         autoSync: false,
         authProvider: 'github',
         connectedUser: { name: 'Ada Lovelace', email: 'ada@example.com' },
@@ -71,13 +72,14 @@ describe('BackstageSettings — OAuth token persistence', () => {
     await waitFor(() => expect(screen.getByText('Ada Lovelace')).toBeDefined())
 
     // Simulate the user then flipping "Auto-sync" and clicking Save — this
-    // must not persist an empty token and destroy the just-completed sign-in.
+    // must preserve the saved token in the main process instead of clearing it.
     await userEvent.click(screen.getByText('Auto-sync on startup'))
     await userEvent.click(screen.getByText('Save'))
 
     await waitFor(() => expect(mockSet).toHaveBeenCalled())
     const savedValue = mockSet.mock.calls[0][0].value
-    expect(savedValue.token).toBe('real-oauth-token')
+    expect(savedValue.token).toBe('')
+    expect(savedValue.hasToken).toBe(true)
     expect(savedValue.connectedUser?.name).toBe('Ada Lovelace')
   })
 })

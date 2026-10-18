@@ -17,7 +17,10 @@ import { cn } from '@/lib/utils'
 const PrettyTab = lazy(() => import('@/components/response/tabs/PrettyTab').then((m) => ({ default: m.PrettyTab })))
 
 export function ResponseViewer() {
-  const { response, isLoading, stream, resumeStream } = useRequestsStore()
+  const response = useRequestsStore((state) => state.response)
+  const isLoading = useRequestsStore((state) => state.isLoading)
+  const stream = useRequestsStore((state) => state.stream)
+  const resumeStream = useRequestsStore((state) => state.resumeStream)
   const streaming = !!stream
   const [tab, setTab] = useState(streaming ? 'stream' : 'pretty')
   useEffect(() => { setTab(streaming ? 'stream' : 'pretty') }, [streaming])

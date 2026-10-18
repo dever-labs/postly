@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { isLoopbackHost } from '../security'
 
 export type UpdaterEventType = 'checking' | 'available' | 'not-available' | 'progress' | 'downloaded' | 'error'
 
@@ -45,6 +46,31 @@ let win: BrowserWindow | null = null
 let offeredVersion: string | undefined
 let _autoUpdater: AutoUpdater | null = null
 let listenersAttached = false
+
+function allowInsecureLoopbackFeed(): boolean {
+  return !app.isPackaged || process.env['NODE_ENV'] === 'test'
+}
+
+export function validateUpdateFeedUrl(feedUrl: string | undefined): string | undefined {
+  const trimmed = feedUrl?.trim()
+  if (!trimmed) return undefined
+
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw new Error('Update feed URL must be a valid absolute URL.')
+  }
+
+  if (parsed.protocol === 'https:') return parsed.toString()
+  if (parsed.protocol !== 'http:') {
+    throw new Error('Update feed URL must use HTTPS. HTTP is only allowed for localhost in development and tests.')
+  }
+  if (!allowInsecureLoopbackFeed() || !isLoopbackHost(parsed.hostname)) {
+    throw new Error('Update feed URL must use HTTPS. HTTP is only allowed for localhost in development and tests.')
+  }
+  return parsed.toString()
+}
 
 function getAutoUpdater(): AutoUpdater {
   if (_autoUpdater) return _autoUpdater
@@ -94,10 +120,11 @@ export function getEnterpriseConfig(): EnterpriseConfig {
  * interfere with the standard GitHub release flow.
  */
 export function applyFeedUrl(feedUrl: string | undefined): void {
+  const validated = validateUpdateFeedUrl(feedUrl)
   if (!app.isPackaged) return
   const au = readyUpdater()
-  if (feedUrl) {
-    au.setFeedURL({ provider: 'generic', url: feedUrl })
+  if (validated) {
+    au.setFeedURL({ provider: 'generic', url: validated })
   } else {
     au.setFeedURL(GITHUB_FEED)
   }
@@ -160,7 +187,6 @@ export function installUpdate(): void {
 
 /** @deprecated Use applyFeedUrl() directly. Kept for IPC back-compat. */
 export function setUpdateFeedUrl(feedUrl: string): void {
-  if (!app.isPackaged) return
   applyFeedUrl(feedUrl || undefined)
 }
 

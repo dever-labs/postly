@@ -5,9 +5,25 @@ import type { TlsOptions } from './certificates'
 interface WsConnection {
   ws: WebSocket
   sender: WebContents
+  detachSenderDestroyed: () => void
 }
 
 const connections = new Map<string, WsConnection>()
+
+function canSendTo(sender: WebContents): boolean {
+  return !sender.isDestroyed()
+}
+
+function safeSend(sender: WebContents, payload: Record<string, unknown>): void {
+  if (canSendTo(sender)) sender.send('postly:ws:event', payload)
+}
+
+function detachSenderDestroyed(sender: WebContents, handler: () => void): () => void {
+  sender.once('destroyed', handler)
+  return () => {
+    sender.off('destroyed', handler)
+  }
+}
 
 export async function connectWebSocket(
   connectionId: string,
@@ -18,8 +34,10 @@ export async function connectWebSocket(
 ): Promise<void> {
   const { default: WebSocketCtor } = await import('ws')
   return new Promise((resolve, reject) => {
+    let settled = false
     const existing = connections.get(connectionId)
     if (existing) {
+      existing.detachSenderDestroyed()
       // Drop the old socket's listeners so its late 'close' can neither emit a stale
       // event to the renderer nor evict the replacement connection from the map.
       existing.ws.removeAllListeners()
@@ -30,18 +48,44 @@ export async function connectWebSocket(
 
     const ws = new WebSocketCtor(url, { headers, ...tls })
     const forget = () => {
-      if (connections.get(connectionId)?.ws === ws) connections.delete(connectionId)
+      if (connections.get(connectionId)?.ws === ws) {
+        connections.get(connectionId)?.detachSenderDestroyed()
+        connections.delete(connectionId)
+      }
     }
+    const onSenderDestroyed = () => {
+      const mapped = connections.get(connectionId)
+      if (mapped && mapped.ws !== ws) return
+      forget()
+      ws.removeAllListeners()
+      ws.on('error', () => {})
+      ws.close(1001, 'Renderer destroyed')
+      if (!settled) {
+        settled = true
+        reject(new Error('Renderer was destroyed before the connection opened'))
+      }
+    }
+    const detachDestroyed = detachSenderDestroyed(sender, onSenderDestroyed)
 
     ws.on('open', () => {
-      connections.set(connectionId, { ws, sender })
-      sender.send('postly:ws:event', { connectionId, type: 'open' })
+      if (!canSendTo(sender)) {
+        detachDestroyed()
+        ws.removeAllListeners()
+        ws.on('error', () => {})
+        ws.close(1001, 'Renderer destroyed')
+        settled = true
+        reject(new Error('Renderer was destroyed before the connection opened'))
+        return
+      }
+      connections.set(connectionId, { ws, sender, detachSenderDestroyed: detachDestroyed })
+      safeSend(sender, { connectionId, type: 'open' })
+      settled = true
       resolve()
     })
 
     ws.on('message', (data: WebSocket.RawData) => {
       const payload = data instanceof Buffer ? data.toString('utf8') : String(data)
-      sender.send('postly:ws:event', {
+      safeSend(sender, {
         connectionId,
         type: 'message',
         data: payload,
@@ -51,7 +95,7 @@ export async function connectWebSocket(
 
     ws.on('close', (code: number, reason: Buffer) => {
       forget()
-      sender.send('postly:ws:event', {
+      safeSend(sender, {
         connectionId,
         type: 'close',
         code,
@@ -61,8 +105,11 @@ export async function connectWebSocket(
 
     ws.on('error', (err: Error) => {
       forget()
-      sender.send('postly:ws:event', { connectionId, type: 'error', message: err.message })
-      reject(err)
+      safeSend(sender, { connectionId, type: 'error', message: err.message })
+      if (!settled) {
+        settled = true
+        reject(err)
+      }
     })
   })
 }
@@ -76,6 +123,7 @@ export function sendWebSocketMessage(connectionId: string, message: string): voi
 export function disconnectWebSocket(connectionId: string): void {
   const conn = connections.get(connectionId)
   if (conn) {
+    conn.detachSenderDestroyed()
     conn.ws.close(1000, 'Client disconnected')
     connections.delete(connectionId)
   }
