@@ -4,6 +4,54 @@ All notable changes to Postly will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/dever-labs/postly/compare/v0.8.4...v0.9.0) (2026-10-19)
+
+
+### Features
+
+* **a11y:** keyboard navigation, focus management and contrast fixes ([#302](https://github.com/dever-labs/postly/issues/302)) ([5cf463c](https://github.com/dever-labs/postly/commit/5cf463ccd2712753e10f70585069b8f1525720e0))
+* **auth:** API key, Digest and AWS Signature V4 authentication ([#288](https://github.com/dever-labs/postly/issues/288)) ([efe601a](https://github.com/dever-labs/postly/commit/efe601a41454a810cf9ed03de915ba0550e8e9fd))
+* **curl:** import and export cURL, copy as cURL ([#280](https://github.com/dever-labs/postly/issues/280)) ([cbc3125](https://github.com/dever-labs/postly/commit/cbc3125d1d0fa9f51e0cfd01ba46b47863b8e11f)), closes [#264](https://github.com/dever-labs/postly/issues/264)
+* **extract:** post-response rules that save response values into variables ([#285](https://github.com/dever-labs/postly/issues/285)) ([7a843df](https://github.com/dever-labs/postly/commit/7a843df66e9dea5cdc5f1fed6020665781d22aec))
+* **history:** keep a searchable history of sent requests ([9e1bee0](https://github.com/dever-labs/postly/commit/9e1bee086c91580e27515780140888a28bd94d05)), closes [#254](https://github.com/dever-labs/postly/issues/254)
+* **history:** searchable request history ([eb011ce](https://github.com/dever-labs/postly/commit/eb011ce50dd03d3d2d79e463e765b7e4affe2551))
+* **http:** cookie jar with per-environment storage, Cookies tab and manager ([#283](https://github.com/dever-labs/postly/issues/283)) ([842e7b6](https://github.com/dever-labs/postly/commit/842e7b6cf81dc2bef1f81a2103840fa6114fb6d8)), closes [#258](https://github.com/dever-labs/postly/issues/258)
+* **http:** per-collection, folder and request timeout and redirect overrides ([#291](https://github.com/dever-labs/postly/issues/291)) ([579dde1](https://github.com/dever-labs/postly/commit/579dde1b867fc7fddff8c432ce4620d24b86be81))
+* **http:** Server-Sent Events and streaming responses ([#287](https://github.com/dever-labs/postly/issues/287)) ([2fd1e9b](https://github.com/dever-labs/postly/commit/2fd1e9bee274f9fd3c38b0fc365606f6d27388b2))
+* **import:** import environments from Insomnia, Bruno, OpenAPI and Postman v3 ([#306](https://github.com/dever-labs/postly/issues/306)) ([c454ffa](https://github.com/dever-labs/postly/commit/c454ffa4f714029d5809c5283fb28d63e0b02268))
+* **import:** import OpenAPI 3.x and Swagger 2 documents from file or URL ([#303](https://github.com/dever-labs/postly/issues/303)) ([2a53f31](https://github.com/dever-labs/postly/commit/2a53f3175b7d31c2f0d7d95ea3364c54e1e469e2))
+* **import:** import Postman, Insomnia and Bruno collections ([#305](https://github.com/dever-labs/postly/issues/305)) ([dcdd7f7](https://github.com/dever-labs/postly/commit/dcdd7f7e8f3510b8cd6f09ba660cea474e3c00bb))
+* **navigation:** working set and back/forward instead of tabs ([b6413fa](https://github.com/dever-labs/postly/commit/b6413fafc909b9f3dfb7c778ca95fbc3029dc664))
+* **navigation:** working set and back/forward instead of tabs ([c1af86a](https://github.com/dever-labs/postly/commit/c1af86aa0c79ebc32dd09cd1f16dc33d838014b6)), closes [#255](https://github.com/dever-labs/postly/issues/255)
+* **palette:** add Ctrl/Cmd+K command palette ([88b8b09](https://github.com/dever-labs/postly/commit/88b8b09b8ed9d3170c11da668f695d50e9e0ce3f)), closes [#270](https://github.com/dever-labs/postly/issues/270)
+* **palette:** Ctrl/Cmd+K command palette ([13f0144](https://github.com/dever-labs/postly/commit/13f01449bc0c72b554162872ca9ca6bfdc7a58cb))
+* **palette:** show keyboard hints in the footer ([4076948](https://github.com/dever-labs/postly/commit/40769486958ec72c3083c87ab346756db6857176))
+* **proxy:** add system and manual proxy support ([5e8507b](https://github.com/dever-labs/postly/commit/5e8507b38755d18531c7b480a9f7ee8d76970b63))
+* **proxy:** add system and manual proxy support ([4b38d70](https://github.com/dever-labs/postly/commit/4b38d708fec6d64306039054ab455ff784b1772e)), closes [#256](https://github.com/dever-labs/postly/issues/256)
+* **response:** save, copy and preview response bodies ([#301](https://github.com/dever-labs/postly/issues/301)) ([ef4ac5a](https://github.com/dever-labs/postly/commit/ef4ac5ad3c9b390a2b4f9fdfef0c71cb558c0964))
+* **shortcuts:** central keyboard shortcuts and cheat sheet ([#279](https://github.com/dever-labs/postly/issues/279)) ([6faf45d](https://github.com/dever-labs/postly/commit/6faf45d7c9d096358df1d9e8af0a2f25ea6c9584))
+* **snippets:** copy requests as fetch, axios, Python, Go and C# code ([#282](https://github.com/dever-labs/postly/issues/282)) ([5d6e0e7](https://github.com/dever-labs/postly/commit/5d6e0e784597dc6bc9023702c53f1460376c625d)), closes [#265](https://github.com/dever-labs/postly/issues/265)
+* **tls:** client certificates (mTLS) and custom CA bundles ([#286](https://github.com/dever-labs/postly/issues/286)) ([96caf62](https://github.com/dever-labs/postly/commit/96caf6259600862a06a08a65ec89a7fba05368ab))
+* **variables:** global and collection variables with built-in dynamic variables ([#284](https://github.com/dever-labs/postly/issues/284)) ([dc611bc](https://github.com/dever-labs/postly/commit/dc611bc55c324c11680a8de1d0cc8a9e1f602e90))
+
+
+### Bug Fixes
+
+* **git:** accept Postly's git environment and explain when git is missing ([#289](https://github.com/dever-labs/postly/issues/289)) ([0d6310c](https://github.com/dever-labs/postly/commit/0d6310cb86e18f8601abcfb09008483b90fa13c0))
+* **history:** mask non-string secrets, tolerate bad escapes, unify param rule ([1156d82](https://github.com/dever-labs/postly/commit/1156d82e6a45fc096d16dfa835ccefc74334e12c))
+* **history:** mask secret params and body fields before storing ([af80f7d](https://github.com/dever-labs/postly/commit/af80f7dd5fb469ed7a7fada9fe804cf1b7c89020))
+* **http:** send Params-tab entries with the request ([#281](https://github.com/dever-labs/postly/issues/281)) ([dda565f](https://github.com/dever-labs/postly/commit/dda565fd5a694dddc07434813766658f817900da))
+* **layout:** draggable update header and correct window-button placement per OS ([#290](https://github.com/dever-labs/postly/issues/290)) ([0cd0ff2](https://github.com/dever-labs/postly/commit/0cd0ff2c41bdf048b71d3930cec7849c1fa4900d))
+* **navigation:** back from a history request returns to the last real request ([67e4f5c](https://github.com/dever-labs/postly/commit/67e4f5c5336c675b1585619b8b05471efea7ad3e))
+* per-request cancel, connection cleanup, settings deep-links and git overlay coverage ([#310](https://github.com/dever-labs/postly/issues/310)) ([0790b03](https://github.com/dever-labs/postly/commit/0790b03fa344ce57827da551e11e21702102ef9c))
+* **proxy:** strip embedded URL credentials, match IPv6 and CIDR bypass entries ([45b40d8](https://github.com/dever-labs/postly/commit/45b40d8e540ec049ebe1da39b00398813bcdb663))
+* **ui:** align working set actions; clearer history rows ([046263e](https://github.com/dever-labs/postly/commit/046263e1848af936f76ddc5860953c93ddf827cf))
+
+
+### Performance Improvements
+
+* bound response and message memory, coalesce DB writes, narrow store selectors ([#311](https://github.com/dever-labs/postly/issues/311)) ([04bbc2a](https://github.com/dever-labs/postly/commit/04bbc2aac759c18a55715a6876bc7fa5aebdf7cb))
+
 ## [0.8.4](https://github.com/dever-labs/postly/compare/v0.8.3...v0.8.4) (2026-10-08)
 
 
