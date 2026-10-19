@@ -225,7 +225,7 @@
     "http-proxy-agent": "^9.1.0",
     "httpntlm": "^1.8.13",
     "https-proxy-agent": "^9.1.0",
-    "lucide-react": "^1.55.0",
+    "lucide-react": "^1.58.0",
     "monaco-editor": "^0.57.0",
     "mqtt": "^5.16.0",
     "openapi-types": "^12.1.3",
