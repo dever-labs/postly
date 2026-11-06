@@ -43,6 +43,7 @@ Configure auth once on a collection or group, and requests inherit it automatica
 Pull APIs directly from any git repository or Backstage:
 - **Any git host** — GitHub, GitLab, Gitea, Azure DevOps, Bitbucket, self-hosted — uses your system git credentials (SSH or HTTPS, no token setup needed in the app)
 - **Backstage** — discovers APIs via the Backstage software catalog; sign in to Backstage itself with OAuth (browser, PKCE), a token, guest or a provider popup
+- **`postly://` links** — "Open in Postly" from a Backstage API page: `postly://open?backstage=<base URL>&entity=api:<namespace>/<name>` ([details](docs/integrations.md#open-in-postly-links))
 
 Collections from each source appear as separate groups in the sidebar. `*.postly.json` collection files can be committed back to the repository from within the app; OpenAPI specs are read-only.
 

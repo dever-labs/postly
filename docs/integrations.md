@@ -117,6 +117,27 @@ devhub (`https://hub.dever.dk`) already allows Postly ([dever-labs/devhub#82](ht
 
 Postly fetches all API entities from the catalog and creates a collection for each Component that provides APIs, and for each API not provided by a Component (OpenAPI/Swagger, GraphQL and gRPC definitions).
 
+### "Open in Postly" links
+
+Postly registers the `postly://` URL scheme, so a Backstage page (devhub's API pages, for instance) can link straight into it:
+
+```
+postly://open?backstage=<url-encoded base URL>&entity=<url-encoded entity ref>
+```
+
+For example:
+
+```
+postly://open?backstage=https%3A%2F%2Fhub.dever.dk&entity=api%3Amockly%2Fmockly-management-api
+```
+
+- `backstage` — the Backstage base URL, `http://` or `https://` only, no credentials, query or fragment.
+- `entity` — `kind:namespace/name`, where kind is `api` or `component`.
+
+Clicking it brings Postly to the front and opens that entity's collection. If no source exists for that base URL yet, Postly asks before adding it (with **OAuth** sign-in). If the entity isn't in the last sync, Postly syncs once more before reporting it as not found. Links with anything else — other actions, parameters, schemes or malformed refs — are refused.
+
+Installed builds register the scheme automatically (Windows installer, macOS app bundle, Linux `.desktop` file; the portable Windows build and AppImage register it the first time they start). In development, start with `POSTLY_DEV_PROTOCOL=1 npm run dev` to register the dev build.
+
 ---
 
 ## Managing sources
