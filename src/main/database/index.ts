@@ -176,6 +176,8 @@ function runMigrations(): void {
   addColumnIfMissing('collections', 'collapsed', "INTEGER NOT NULL DEFAULT 0")
   // Integrations ssl verification
   addColumnIfMissing('integrations', 'ssl_verification', `TEXT NOT NULL DEFAULT 'enabled'`)
+  // Backstage OAuth sign-in: when the access token expires (epoch ms, 0 = unknown)
+  addColumnIfMissing('integrations', 'token_expires_at', 'INTEGER NOT NULL DEFAULT 0')
 
   db.run(`CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
