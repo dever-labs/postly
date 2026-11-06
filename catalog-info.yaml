@@ -1,0 +1,40 @@
+# Describes this repository in devhub (https://hub.dever.dk), dever-labs'
+# developer portal. devhub's GitHub discovery reads this file from the
+# default branch; docs come from docs/ (backstage.io/techdocs-ref).
+#   devhub/install  how to install it (Install card), <channel>:<id>, comma-separated
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: postly
+  namespace: postly
+  title: Postly
+  description: Cross-platform desktop API client for teams, with Backstage, GitHub and GitLab sources.
+  annotations:
+    github.com/project-slug: dever-labs/postly
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://github.com/dever-labs/postly/releases/latest
+      title: Latest release
+spec:
+  owner: group:postly/engineering
+  domain: domain:postly/postly
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: postly
+  namespace: postly
+  title: Postly
+  description: >
+    Electron desktop API client (REST, GraphQL, gRPC, WebSocket, MQTT) for
+    Windows, macOS and Linux.
+  annotations:
+    github.com/project-slug: dever-labs/postly
+    backstage.io/techdocs-ref: dir:.
+    devhub/install: brew-cask:dever-labs/tap/postly,scoop:dever-labs/postly
+  tags: [typescript, electron, react]
+spec:
+  type: desktop-app
+  lifecycle: production
+  owner: group:postly/engineering
+  system: system:postly/postly
