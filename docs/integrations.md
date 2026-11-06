@@ -59,16 +59,63 @@ Multiple files can coexist — each produces a separate collection in the sideba
 
 You need a running Backstage instance with the Software Catalog enabled. Postly reads API entities from the catalog API.
 
-Optionally, create a **service account token** if your Backstage instance requires authentication.
+### Authentication
+
+| Option | When to use |
+|---|---|
+| **Guest** | Local Backstage with the guest provider |
+| **Token** | A static service token — sees whatever the token may see, not what *you* may see |
+| **OAuth** | Sign in to Backstage itself in your browser — recommended for shared instances (e.g. devhub) |
+| **GitLab / GitHub / Google** | Backstage's sign-in popup for that provider |
+
+### Sign in with OAuth
+
+**OAuth** signs you in as yourself, through whatever login the Backstage instance uses (OIDC, SSO, …), so the catalog shows exactly what you're allowed to see. Backstage is the OAuth 2.0 authorization server; Postly is a public native client:
+
+1. Postly discovers the authorization server from `<base URL>/.well-known/oauth-authorization-server`, `<base URL>/api/auth/.well-known/oauth-authorization-server` or `<base URL>/api/auth/.well-known/openid-configuration` (first one that answers).
+2. It starts a one-shot callback server on `127.0.0.1` with a random free port and opens your **system browser** at the authorization endpoint (authorization code + PKCE S256, a random `state`, scope `openid offline_access`).
+3. You sign in and approve Postly in Backstage; the browser returns to the callback. A response with the wrong `state` is refused.
+4. Postly exchanges the code for an access token and a refresh token, stores both in its encrypted database (key protected by the OS keychain), and syncs the catalog.
+
+Access tokens are refreshed automatically before they expire and after a `401`; refresh tokens rotate. **Save & Reconnect** re-syncs without the browser while the refresh token is valid. **Sign out** (or removing the source) revokes the refresh token at Backstage and forgets both tokens.
+
+Postly identifies itself with a [Client ID Metadata Document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/) instead of a pre-registered client. Its client ID is the URL of that document, [`oauth/client.json`](../oauth/client.json) in this repo:
+
+```
+https://raw.githubusercontent.com/dever-labs/postly/main/oauth/client.json
+```
+
+#### What a Backstage admin needs to enable
+
+Backstage's auth backend must have Client ID Metadata Documents enabled (`auth.clientIdMetadataDocuments`, in recent `@backstage/plugin-auth-backend` releases) and allow Postly's client ID. Setting `allowedClientIdPatterns` replaces Backstage's defaults, so keep any you rely on:
+
+```yaml
+auth:
+  clientIdMetadataDocuments:
+    enabled: true
+    allowedClientIdPatterns:
+      - 'https://raw.githubusercontent.com/dever-labs/postly/main/oauth/client.json'
+      # Backstage's defaults, if you use them (Claude, VS Code, Codex):
+      # - 'https://claude.ai/*'
+      # - 'https://vscode.dev/*'
+      # - 'https://chatgpt.com/oauth/codex/*/client.json'
+  # Optional but recommended: without refresh tokens you sign in again every hour.
+  experimentalRefreshToken:
+    enabled: true
+```
+
+Redirects: the document registers `http://127.0.0.1/callback` and `http://localhost/callback`. Backstage (like RFC 8252 §7.3) matches loopback redirect URIs on scheme, host and path and ignores the port, so the random port Postly listens on is accepted. If you override `allowedRedirectUriPatterns`, keep `http://127.0.0.1:*/*`.
+
+devhub (`https://hub.dever.dk`) already allows Postly ([dever-labs/devhub#82](https://github.com/dever-labs/devhub/pull/82)).
 
 ### Connecting
 
 1. Click **Add Git Source** → select **Backstage**
-2. Enter a display name and your Backstage base URL (e.g. `http://localhost:7007`)
-3. Optionally enter a **service account token** if required
-4. Click **Connect**
+2. Enter a display name and your Backstage base URL (e.g. `http://localhost:7007` or `https://hub.dever.dk`)
+3. Pick an authentication option (and enter a **token** for Token)
+4. Click **Connect** — for OAuth, finish signing in in your browser
 
-Postly fetches all API entities from the catalog and creates a collection for each one that has an OpenAPI/Swagger definition.
+Postly fetches all API entities from the catalog and creates a collection for each Component that provides APIs, and for each API not provided by a Component (OpenAPI/Swagger, GraphQL and gRPC definitions).
 
 ---
 

@@ -5,11 +5,18 @@ import { startGitHubOAuth, startGitLabOAuth, requestGitHubDeviceCode, pollGitHub
 import { testConnectivity } from '../services/git-local'
 import { authenticateWithBackstage, authenticateWithBackstageGuest, syncCatalog } from '../services/backstage'
 import type { BackstageSettings } from '../services/backstage'
+import { signInWithBackstageOAuth } from '../services/backstage-oauth'
+import { refreshIntegrationToken, saveOAuthTokens, signOutBackstageOAuth, withBackstageAccessToken } from '../services/backstage-session'
+import { openExternalSafe } from '../security'
 
 // Temporary store for in-progress device flows (integrationId → DeviceCodeInfo)
 const pendingDeviceFlows = new Map<string, { deviceCode: string; interval: number; expiresIn: number; clientId: string; baseUrl: string; type: string }>()
 
+type Res = { data?: unknown; error?: string; syncResult?: unknown; syncError?: string }
+
 const SECRET_COLUMNS = ['token', 'client_secret'] as const
+/** Secrets the renderer has no use for even as a has_* flag. */
+const HIDDEN_COLUMNS = ['refresh_token'] as const
 
 /**
  * Strips credentials before a row crosses the IPC boundary. The renderer only learns
@@ -22,6 +29,7 @@ export function toPublicIntegration<T extends Record<string, unknown> | null | u
     out[`has_${col}`] = typeof out[col] === 'string' && out[col] !== ''
     delete out[col]
   }
+  for (const col of HIDDEN_COLUMNS) delete out[col]
   return out as T
 }
 
@@ -36,29 +44,7 @@ export function registerIntegrationHandlers(): void {
     } catch (err) { return { error: String(err) } }
   })
 
-  ipcMain.handle('postly:integrations:create', async (_, args: {
-    type: string; name: string; baseUrl: string; clientId?: string; clientSecret?: string; repo?: string; branch?: string
-  }) => {
-    try {
-      if (args.repo) {
-        let isValidRepoUrl = false
-        try { new URL(args.repo); isValidRepoUrl = true } catch { /* not an http(s) url */ }
-        if (!isValidRepoUrl) isValidRepoUrl = /^git@[^:]+:[^/]+\/.+/.test(args.repo)
-        if (!isValidRepoUrl) return { error: 'Invalid repository URL' }
-      }
-      if (args.baseUrl) {
-        try { new URL(args.baseUrl) } catch {
-          return { error: 'Invalid base URL' }
-        }
-      }
-      const id = crypto.randomUUID()
-      const now = Date.now()
-      run(`INSERT INTO integrations (id, type, name, base_url, client_id, client_secret, repo, branch, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disconnected', ?, ?)`,
-        [id, args.type, args.name, args.baseUrl, args.clientId ?? '', args.clientSecret ?? '', args.repo ?? '', args.branch ?? 'main', now, now])
-      return { data: publicIntegration(id) }
-    } catch (err) { return { error: String(err) } }
-  })
+  ipcMain.handle('postly:integrations:create', async (_, args: CreateIntegrationArgs) => createIntegration(args))
 
   ipcMain.handle('postly:integrations:update', async (_, args: { id: string; [key: string]: unknown }) => {
     try {
@@ -79,92 +65,19 @@ export function registerIntegrationHandlers(): void {
 
   ipcMain.handle('postly:integrations:delete', async (_, args: { id: string }) => {
     try {
+      const row = queryOne<Record<string, unknown>>('SELECT type, client_id FROM integrations WHERE id = ?', [args.id])
+      if (row?.type === 'backstage' && row.client_id === 'oauth') await signOutBackstageOAuth(args.id)
       run('DELETE FROM integrations WHERE id = ?', [args.id])
       return { data: true }
     } catch (err) { return { error: String(err) } }
   })
 
-  ipcMain.handle('postly:integrations:connect', async (_, args: { id: string }) => {
-    try {
-      const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [args.id])
-      if (!integration) return { error: 'Integration not found' }
-
-      const type = integration.type as string
-      let token = '', connectedUserJson = ''
-      let authProvider = 'token'
-
-      if (type === 'git') {
-        // Uses system git credentials — test connectivity and detect default branch
-        const { name, defaultBranch } = await testConnectivity(integration.repo as string)
-        connectedUserJson = JSON.stringify({ name, avatarUrl: '' })
-        token = ''
-        // Store the detected default branch so discoverAndImport uses the right one
-        run('UPDATE integrations SET branch = ?, updated_at = ? WHERE id = ?',
-          [defaultBranch, Date.now(), args.id])
-      } else if (type === 'github') {
-        const result = await startGitHubOAuth({
-          baseUrl: integration.base_url as string,
-          clientId: integration.client_id as string,
-          clientSecret: integration.client_secret as string,
-        })
-        token = result.token
-        connectedUserJson = JSON.stringify(result.user)
-      } else if (type === 'gitlab') {
-        const result = await startGitLabOAuth({
-          baseUrl: integration.base_url as string,
-          clientId: integration.client_id as string,
-        })
-        token = result.token
-        connectedUserJson = JSON.stringify(result.user)
-      } else if (type === 'backstage') {
-        // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google')
-        const ALLOWED_BS_PROVIDERS = ['token', 'guest', 'gitlab', 'github', 'google'] as const
-        type BsProvider = typeof ALLOWED_BS_PROVIDERS[number]
-        const raw = (integration.client_id as string) || 'token'
-        authProvider = ALLOWED_BS_PROVIDERS.includes(raw as BsProvider) ? raw : 'token'
-        const baseUrl = integration.base_url as string
-        const sslVerification = (integration.ssl_verification as string) !== 'disabled'
-
-        if (authProvider === 'guest') {
-          const result = await authenticateWithBackstageGuest(baseUrl, { sslVerification })
-          token = result.token
-          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
-        } else if (authProvider !== 'token') {
-          const result = await authenticateWithBackstage(baseUrl, authProvider)
-          token = result.token
-          connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
-        } else {
-          token = (integration.token as string) ?? ''
-          connectedUserJson = JSON.stringify({ name: 'Backstage', avatarUrl: '' })
-        }
-      }
-
-      run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
-        [token, connectedUserJson, 'connected', '', Date.now(), args.id])
-
-      // For Backstage, immediately sync the catalog with the fresh token
-      if (type === 'backstage') {
-        const sslVerification = (integration.ssl_verification as string) !== 'disabled'
-        try {
-          const syncResult = await syncCatalog({ baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'], sslVerification })
-          return { data: publicIntegration(args.id), syncResult }
-        } catch (syncErr) {
-          run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
-            [String(syncErr), Date.now(), args.id])
-          return { data: publicIntegration(args.id), syncError: String(syncErr) }
-        }
-      }
-
-      return { data: publicIntegration(args.id) }
-    } catch (err) {
-      run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
-        ['error', String(err), Date.now(), args.id])
-      return { error: String(err) }
-    }
-  })
+  ipcMain.handle('postly:integrations:connect', async (_, args: { id: string }) => connectIntegration(args))
 
   ipcMain.handle('postly:integrations:disconnect', async (_, args: { id: string }) => {
     try {
+      const row = queryOne<Record<string, unknown>>('SELECT type, client_id FROM integrations WHERE id = ?', [args.id])
+      if (row?.type === 'backstage' && row.client_id === 'oauth') await signOutBackstageOAuth(args.id)
       run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, updated_at = ? WHERE id = ?',
         ['', '', 'disconnected', Date.now(), args.id])
       return { data: true }
@@ -223,4 +136,150 @@ export function registerIntegrationHandlers(): void {
       return { error: String(err) }
     }
   })
+}
+
+/**
+ * OAuth sign-in for a Backstage source: reuses the stored refresh token when it
+ * still works (no browser round-trip on reconnect), otherwise runs the
+ * authorization code + PKCE flow in the system browser.
+ */
+async function connectBackstageOAuth(
+  integration: Record<string, unknown>,
+  options: { sslVerification: boolean },
+): Promise<{ token: string; user: { name: string } }> {
+  const id = integration.id as string
+  if (integration.refresh_token) {
+    try {
+      const token = await refreshIntegrationToken(id)
+      const user = parseConnectedUserName(integration.connected_user)
+      return { token, user: { name: user ?? 'Backstage user' } }
+    } catch { /* fall through to an interactive sign-in */ }
+  }
+  const { tokens, user } = await signInWithBackstageOAuth(integration.base_url as string, {
+    sslVerification: options.sslVerification,
+    openExternal: (url) => openExternalSafe(url),
+  })
+  saveOAuthTokens(id, tokens)
+  return { token: tokens.accessToken, user }
+}
+
+function parseConnectedUserName(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined
+  try {
+    const name = (JSON.parse(raw) as { name?: unknown }).name
+    return typeof name === 'string' && name ? name : undefined
+  } catch { return undefined }
+}
+
+export interface CreateIntegrationArgs {
+  type: string; name: string; baseUrl: string; clientId?: string; clientSecret?: string; repo?: string; branch?: string
+}
+
+export async function createIntegration(args: CreateIntegrationArgs): Promise<Res> {
+  try {
+    if (args.repo) {
+      let isValidRepoUrl = false
+      try { new URL(args.repo); isValidRepoUrl = true } catch { /* not an http(s) url */ }
+      if (!isValidRepoUrl) isValidRepoUrl = /^git@[^:]+:[^/]+\/.+/.test(args.repo)
+      if (!isValidRepoUrl) return { error: 'Invalid repository URL' }
+    }
+    if (args.baseUrl) {
+      try { new URL(args.baseUrl) } catch {
+        return { error: 'Invalid base URL' }
+      }
+    }
+    const id = crypto.randomUUID()
+    const now = Date.now()
+    run(`INSERT INTO integrations (id, type, name, base_url, client_id, client_secret, repo, branch, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disconnected', ?, ?)`,
+      [id, args.type, args.name, args.baseUrl, args.clientId ?? '', args.clientSecret ?? '', args.repo ?? '', args.branch ?? 'main', now, now])
+    return { data: publicIntegration(id) }
+  } catch (err) { return { error: String(err) } }
+}
+
+/** Connects (signs in to) an integration; for Backstage also syncs the catalog. Shared by IPC and deep links. */
+export async function connectIntegration(args: { id: string }): Promise<Res> {
+  try {
+    const integration = queryOne<Record<string, unknown>>('SELECT * FROM integrations WHERE id = ?', [args.id])
+    if (!integration) return { error: 'Integration not found' }
+
+    const type = integration.type as string
+    let token = '', connectedUserJson = ''
+    let authProvider = 'token'
+
+    if (type === 'git') {
+      // Uses system git credentials — test connectivity and detect default branch
+      const { name, defaultBranch } = await testConnectivity(integration.repo as string)
+      connectedUserJson = JSON.stringify({ name, avatarUrl: '' })
+      token = ''
+      // Store the detected default branch so discoverAndImport uses the right one
+      run('UPDATE integrations SET branch = ?, updated_at = ? WHERE id = ?',
+        [defaultBranch, Date.now(), args.id])
+    } else if (type === 'github') {
+      const result = await startGitHubOAuth({
+        baseUrl: integration.base_url as string,
+        clientId: integration.client_id as string,
+        clientSecret: integration.client_secret as string,
+      })
+      token = result.token
+      connectedUserJson = JSON.stringify(result.user)
+    } else if (type === 'gitlab') {
+      const result = await startGitLabOAuth({
+        baseUrl: integration.base_url as string,
+        clientId: integration.client_id as string,
+      })
+      token = result.token
+      connectedUserJson = JSON.stringify(result.user)
+    } else if (type === 'backstage') {
+      // client_id stores the auth_provider ('token'|'guest'|'gitlab'|'github'|'google'|'oauth')
+      const ALLOWED_BS_PROVIDERS = ['token', 'guest', 'gitlab', 'github', 'google', 'oauth'] as const
+      type BsProvider = typeof ALLOWED_BS_PROVIDERS[number]
+      const raw = (integration.client_id as string) || 'token'
+      authProvider = ALLOWED_BS_PROVIDERS.includes(raw as BsProvider) ? raw : 'token'
+      const baseUrl = integration.base_url as string
+      const sslVerification = (integration.ssl_verification as string) !== 'disabled'
+
+      if (authProvider === 'oauth') {
+        const result = await connectBackstageOAuth(integration, { sslVerification })
+        token = result.token
+        connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: '' })
+      } else if (authProvider === 'guest') {
+        const result = await authenticateWithBackstageGuest(baseUrl, { sslVerification })
+        token = result.token
+        connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+      } else if (authProvider !== 'token') {
+        const result = await authenticateWithBackstage(baseUrl, authProvider)
+        token = result.token
+        connectedUserJson = JSON.stringify({ name: result.user.name, avatarUrl: result.user.picture ?? '' })
+      } else {
+        token = (integration.token as string) ?? ''
+        connectedUserJson = JSON.stringify({ name: 'Backstage', avatarUrl: '' })
+      }
+    }
+
+    run('UPDATE integrations SET token = ?, connected_user = ?, status = ?, error_message = ?, updated_at = ? WHERE id = ?',
+      [token, connectedUserJson, 'connected', '', Date.now(), args.id])
+
+    // For Backstage, immediately sync the catalog with the fresh token
+    if (type === 'backstage') {
+      const sslVerification = (integration.ssl_verification as string) !== 'disabled'
+      try {
+        const settings = { baseUrl: integration.base_url as string, token, integrationId: args.id, autoSync: false, authProvider: authProvider as BackstageSettings['authProvider'], sslVerification }
+        const syncResult = authProvider === 'oauth'
+          ? await withBackstageAccessToken(args.id, (fresh) => syncCatalog({ ...settings, token: fresh }))
+          : await syncCatalog(settings)
+        return { data: publicIntegration(args.id), syncResult }
+      } catch (syncErr) {
+        run('UPDATE integrations SET error_message = ?, updated_at = ? WHERE id = ?',
+          [String(syncErr), Date.now(), args.id])
+        return { data: publicIntegration(args.id), syncError: String(syncErr) }
+      }
+    }
+
+    return { data: publicIntegration(args.id) }
+  } catch (err) {
+    run('UPDATE integrations SET status = ?, error_message = ?, updated_at = ? WHERE id = ?',
+      ['error', String(err), Date.now(), args.id])
+    return { error: String(err) }
+  }
 }
