@@ -237,6 +237,6 @@
     "tailwind-merge": "^3.7.0",
     "tough-cookie": "^6.0.2",
     "ws": "^8.22.0",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   }
 }
