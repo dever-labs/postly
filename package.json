@@ -41,6 +41,14 @@
       "!node_modules/**/{README,CHANGELOG,CONTRIBUTING}.md"
     ],
     "extraResources": [],
+    "protocols": [
+      {
+        "name": "Postly",
+        "schemes": [
+          "postly"
+        ]
+      }
+    ],
     "afterSign": "build/notarize.js",
     "electronFuses": {
       "runAsNode": false,
