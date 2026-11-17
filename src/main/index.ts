@@ -7,10 +7,32 @@ import { registerAllIpcHandlers, attachWindowEvents } from './ipc'
 import { setUpdaterWindow, initUpdater, checkForUpdates, applyFeedUrl, getEnterpriseConfig } from './services/updater'
 import { getGeneralSettings } from './ipc/settings-utils'
 import { SECURE_WEB_PREFERENCES, lockDownWindow } from './security'
+import { focusMainWindow, queueDeepLink, registerDeepLinkHandlers, registerProtocolClient } from './deep-links'
+import { findDeepLinkInArgv } from './services/deep-link'
 
 const userDataOverride = process.env['POSTLY_USER_DATA_DIR']
 if (userDataOverride) {
   app.setPath('userData', userDataOverride)
+}
+
+// One Postly per user-data dir: a second launch (e.g. the OS handing us a
+// postly:// link on Windows/Linux) forwards its argv here and exits.
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+let mainWindow: BrowserWindow | null = null
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  registerProtocolClient()
+  app.on('second-instance', (_event, argv) => {
+    focusMainWindow()
+    queueDeepLink(findDeepLinkInArgv(argv))
+  })
+  // macOS delivers links as events, possibly before 'ready'.
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    queueDeepLink(url)
+  })
+  queueDeepLink(findDeepLinkInArgv(process.argv))
 }
 
 function createWindow(): BrowserWindow {
@@ -54,6 +76,7 @@ function createWindow(): BrowserWindow {
 void preloadSqlJs().catch(() => {})
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
   Menu.setApplicationMenu(null)
 
   // Register a readiness gate BEFORE window creation so the renderer can call
@@ -64,7 +87,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('postly:ready', () => dbReadyPromise.then(() => ({ data: true })))
 
   registerAllIpcHandlers()
+  registerDeepLinkHandlers(() => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getAllWindows()[0] ?? null))
   const win = createWindow()
+  mainWindow = win
   attachWindowEvents(win)
 
   // Cheap: lets dev-mode "check now" emit events. electron-updater itself is
@@ -125,6 +150,7 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const w = createWindow()
+      mainWindow = w
       attachWindowEvents(w)
     }
   })

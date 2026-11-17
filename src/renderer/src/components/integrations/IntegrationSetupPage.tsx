@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, LogIn, UserRound } from 'lucide-react'
 import { useVariablesStore } from '@/store/variables'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
@@ -11,11 +11,12 @@ import { useUIStore } from '@/store/ui'
 type Phase = 'url' | 'collection' | 'importing' | 'done'
 type Mode = 'git' | 'backstage'
 
-type BsProvider = 'guest' | 'token' | 'gitlab' | 'github' | 'google'
+type BsProvider = 'guest' | 'token' | 'oauth' | 'gitlab' | 'github' | 'google'
 
 const BS_PROVIDERS: { value: BsProvider; icon: React.ReactNode; label: string }[] = [
   { value: 'guest',  icon: <UserRound className="h-4 w-4" />,  label: 'Guest'  },
   { value: 'token',  icon: <KeyRound className="h-4 w-4" />,   label: 'Token'  },
+  { value: 'oauth',  icon: <LogIn className="h-4 w-4" />,      label: 'OAuth'  },
   { value: 'gitlab', icon: <GitBranch className="h-4 w-4" />,  label: 'GitLab' },
   { value: 'github', icon: <GitFork className="h-4 w-4" />,     label: 'GitHub' },
   { value: 'google', icon: <Globe className="h-4 w-4" />,      label: 'Google' },
@@ -82,7 +83,7 @@ export function IntegrationSetupPage() {
   const [bsUrl, setBsUrl] = useState('http://localhost:7007')
   const [bsName, setBsName] = useState('Backstage')
   const [bsToken, setBsToken] = useState('')
-  const [bsProvider, setBsProvider] = useState<'token' | 'guest' | 'gitlab' | 'github' | 'google'>('guest')
+  const [bsProvider, setBsProvider] = useState<BsProvider>('guest')
   const [bsSslVerification, setBsSslVerification] = useState(true)
 
   const [error, setError] = useState<string | null>(null)
@@ -391,7 +392,10 @@ export function IntegrationSetupPage() {
                   <Input id="integrationsetup-token" type="password" placeholder="Service account token" value={bsToken} onChange={(e) => setBsToken(e.target.value)} />
                 </div>
               )}
-              {bsProvider !== 'token' && bsProvider !== 'guest' && (
+              {bsProvider === 'oauth' && (
+                <p className="text-xs text-th-text-subtle">Your browser opens to sign in to Backstage itself (OAuth 2.0 with PKCE). The Backstage instance must allow Postly&apos;s client ID — see the Backstage section of the integrations docs.</p>
+              )}
+              {bsProvider !== 'token' && bsProvider !== 'guest' && bsProvider !== 'oauth' && (
                 <p className="text-xs text-th-text-subtle">A browser window will open to sign in via {bsProvider.charAt(0).toUpperCase() + bsProvider.slice(1)}.</p>
               )}
 

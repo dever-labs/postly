@@ -282,6 +282,16 @@ const api = {
       delete: (data: { envId: string }) => ipcRenderer.invoke('postly:drafts:env:delete', data),
     },
   },
+  deepLink: {
+    /** Fired when a postly:// link was handled; reload sources/collections and open `collectionId` if set. */
+    onOpen: (cb: (payload: { collectionId?: string }) => void): (() => void) => {
+      const handler = (_: unknown, payload: { collectionId?: string }) => cb(payload ?? {})
+      ipcRenderer.on('postly:deep-link:open', handler)
+      return () => { ipcRenderer.removeListener('postly:deep-link:open', handler) }
+    },
+    /** Tells main the renderer is listening; queued links are handled from then on. */
+    ready: () => ipcRenderer.invoke('postly:deep-link:ready'),
+  },
   platform: process.platform,
   /** Resolves once the main-process database is initialised and ready to serve IPC requests. */
   waitForReady: (): Promise<void> => ipcRenderer.invoke('postly:ready').then(() => undefined),

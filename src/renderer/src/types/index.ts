@@ -203,7 +203,7 @@ export interface BackstageSettings {
   token: string
   hasToken?: boolean
   autoSync: boolean
-  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
+  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google' | 'oauth'
   connectedUser?: { name: string; email?: string; picture?: string }
   sslVerification?: boolean
 }

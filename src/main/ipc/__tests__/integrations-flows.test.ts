@@ -16,6 +16,14 @@ vi.mock('../../services/scm-oauth', () => ({
   pollGitLabDeviceToken: vi.fn()
 }))
 vi.mock('../../services/git-local', () => ({ testConnectivity: vi.fn() }))
+vi.mock('../../services/backstage-oauth', () => ({ signInWithBackstageOAuth: vi.fn() }))
+vi.mock('../../services/backstage-session', () => ({
+  refreshIntegrationToken: vi.fn(),
+  saveOAuthTokens: vi.fn(),
+  signOutBackstageOAuth: vi.fn(),
+  withBackstageAccessToken: vi.fn((_id: string, fn: (t: string) => Promise<unknown>) => fn('fresh-token')),
+}))
+vi.mock('../../security', () => ({ openExternalSafe: vi.fn() }))
 vi.mock('../../services/backstage', () => ({
   authenticateWithBackstage: vi.fn(),
   authenticateWithBackstageGuest: vi.fn(),
@@ -27,6 +35,8 @@ import { queryAll, queryOne, run } from '../../database'
 import * as scm from '../../services/scm-oauth'
 import { testConnectivity } from '../../services/git-local'
 import { authenticateWithBackstage, authenticateWithBackstageGuest, syncCatalog } from '../../services/backstage'
+import { signInWithBackstageOAuth } from '../../services/backstage-oauth'
+import * as session from '../../services/backstage-session'
 
 const mockQ1 = vi.mocked(queryOne)
 const mockRun = vi.mocked(run)
@@ -62,6 +72,12 @@ describe('integrations:list / delete / disconnect', () => {
     vi.mocked(queryOne).mockReturnValueOnce({ id: 'a', token: 'tok-123', client_secret: 'sec-456' })
     const created = await handlers['postly:integrations:create'](null, { type: 'backstage', name: 'n', baseUrl: 'https://b.example' })
     expect(JSON.stringify(created)).not.toMatch(/tok-123|sec-456/)
+  })
+
+  it('never exposes the refresh token, not even as a flag', async () => {
+    vi.mocked(queryAll).mockReturnValueOnce([{ id: 'a', token: 't', refresh_token: 'refresh-secret' }])
+    const list = await handlers['postly:integrations:list'](null)
+    expect(JSON.stringify(list)).not.toMatch(/refresh/)
   })
 
   it('deletes an integration', async () => {
@@ -139,6 +155,47 @@ describe('integrations:connect', () => {
     await connect({ ...base, type: 'backstage', client_id: 'github' })
     expect(authenticateWithBackstage).toHaveBeenCalledWith('https://host', 'github')
     expect(statusUpdate()?.[1]).toEqual(['bs', JSON.stringify({ name: 'U', avatarUrl: 'pic' }), 'connected', '', expect.any(Number), 'i1'])
+  })
+
+  it('backstage oauth provider signs in in the system browser, stores both tokens and syncs with a fresh token', async () => {
+    vi.mocked(signInWithBackstageOAuth).mockResolvedValueOnce({
+      tokens: { accessToken: 'acc', refreshToken: 'ref', expiresAt: 123 },
+      user: { name: 'jane', entityRef: 'user:default/jane' },
+    })
+    vi.mocked(session.withBackstageAccessToken).mockImplementationOnce((_id, fn) => fn('fresh-token'))
+    vi.mocked(syncCatalog).mockResolvedValueOnce({ entitiesFound: 1, synced: 1, skipped: 0, errors: [] })
+    const res = await connect({ ...base, type: 'backstage', client_id: 'oauth' })
+    expect(signInWithBackstageOAuth).toHaveBeenCalledWith('https://host', expect.objectContaining({ sslVerification: true, openExternal: expect.any(Function) }))
+    expect(session.saveOAuthTokens).toHaveBeenCalledWith('i1', { accessToken: 'acc', refreshToken: 'ref', expiresAt: 123 })
+    expect(statusUpdate()?.[1]).toEqual(['acc', JSON.stringify({ name: 'jane', avatarUrl: '' }), 'connected', '', expect.any(Number), 'i1'])
+    expect(syncCatalog).toHaveBeenCalledWith(expect.objectContaining({ token: 'fresh-token', authProvider: 'oauth' }))
+    expect(res.syncResult).toMatchObject({ synced: 1 })
+    expect(authenticateWithBackstage).not.toHaveBeenCalled()
+  })
+
+  it('backstage oauth reconnect reuses the refresh token without opening the browser', async () => {
+    vi.mocked(session.refreshIntegrationToken).mockResolvedValueOnce('refreshed')
+    vi.mocked(session.withBackstageAccessToken).mockImplementationOnce((_id, fn) => fn('refreshed'))
+    vi.mocked(syncCatalog).mockResolvedValueOnce({ entitiesFound: 0, synced: 0, skipped: 0, errors: [] })
+    await connect({ ...base, type: 'backstage', client_id: 'oauth', refresh_token: 'ref', connected_user: JSON.stringify({ name: 'jane' }) })
+    expect(signInWithBackstageOAuth).not.toHaveBeenCalled()
+    expect(statusUpdate()?.[1]).toEqual(['refreshed', JSON.stringify({ name: 'jane', avatarUrl: '' }), 'connected', '', expect.any(Number), 'i1'])
+  })
+
+  it('backstage oauth falls back to the browser when the refresh token no longer works', async () => {
+    vi.mocked(session.refreshIntegrationToken).mockRejectedValueOnce(new Error('expired'))
+    vi.mocked(signInWithBackstageOAuth).mockResolvedValueOnce({ tokens: { accessToken: 'acc2', expiresAt: 0 }, user: { name: 'jane' } })
+    vi.mocked(session.withBackstageAccessToken).mockImplementationOnce((_id, fn) => fn('acc2'))
+    vi.mocked(syncCatalog).mockResolvedValueOnce({ entitiesFound: 0, synced: 0, skipped: 0, errors: [] })
+    await connect({ ...base, type: 'backstage', client_id: 'oauth', refresh_token: 'stale' })
+    expect(signInWithBackstageOAuth).toHaveBeenCalled()
+    expect((statusUpdate()?.[1] as unknown[])[0]).toBe('acc2')
+  })
+
+  it('signing out of a backstage oauth source revokes and clears its tokens', async () => {
+    mockQ1.mockReturnValueOnce({ type: 'backstage', client_id: 'oauth' })
+    await handlers['postly:integrations:disconnect'](null, { id: 'i1' })
+    expect(session.signOutBackstageOAuth).toHaveBeenCalledWith('i1')
   })
 
   it('backstage with an unknown provider id falls back to token auth', async () => {

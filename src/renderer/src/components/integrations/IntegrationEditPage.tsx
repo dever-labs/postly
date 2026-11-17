@@ -1,4 +1,4 @@
-import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, UserRound } from 'lucide-react'
+import { Check, Database, GitBranch, GitFork, Globe, KeyRound, Loader2, LogIn, UserRound } from 'lucide-react'
 import React, { useState } from 'react'
 import type { Integration } from '@/types'
 import { Button } from '@/components/ui/Button'
@@ -7,11 +7,12 @@ import { useCollectionsStore } from '@/store/collections'
 import { useIntegrationsStore } from '@/store/integrations'
 import { useUIStore } from '@/store/ui'
 
-type BsProvider = 'guest' | 'token' | 'gitlab' | 'github' | 'google'
+type BsProvider = 'guest' | 'token' | 'oauth' | 'gitlab' | 'github' | 'google'
 
 const BS_PROVIDERS: { value: BsProvider; icon: React.ReactNode; label: string }[] = [
   { value: 'guest',  icon: <UserRound className="h-4 w-4" />,  label: 'Guest'  },
   { value: 'token',  icon: <KeyRound className="h-4 w-4" />,   label: 'Token'  },
+  { value: 'oauth',  icon: <LogIn className="h-4 w-4" />,      label: 'OAuth'  },
   { value: 'gitlab', icon: <GitBranch className="h-4 w-4" />,  label: 'GitLab' },
   { value: 'github', icon: <GitFork className="h-4 w-4" />,     label: 'GitHub' },
   { value: 'google', icon: <Globe className="h-4 w-4" />,      label: 'Google' },
@@ -65,7 +66,7 @@ const DEFAULTS: Record<string, { baseUrl: string }> = {
 }
 
 export function IntegrationEditPage({ integrationId }: { integrationId: string }) {
-  const { load: loadIntegrations, remove } = useIntegrationsStore()
+  const { load: loadIntegrations, remove, disconnect } = useIntegrationsStore()
   const { load: loadCollections } = useCollectionsStore()
   const { clearSelectedItem, addToast } = useUIStore()
   const integration = useIntegrationsStore((s) => s.integrations.find((i) => i.id === integrationId))
@@ -177,6 +178,13 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
     setReconnecting(false)
   }
 
+  const handleSignOut = async () => {
+    setError(null)
+    await disconnect(integrationId)
+    setConnectedUser(null)
+    addToast('Signed out of Backstage', 'success')
+  }
+
   const handleDelete = async () => {
     setDeleting(true)
     await remove(integrationId)
@@ -251,8 +259,18 @@ export function IntegrationEditPage({ integrationId }: { integrationId: string }
                       />
                     </div>
                   )}
+                  {clientId === 'oauth' && (
+                    <p className="text-xs text-th-text-subtle">Reconnect opens your browser to sign in to Backstage (OAuth 2.0 with PKCE) unless the saved session can still be refreshed.</p>
+                  )}
                   {connectedUser && (
-                    <p className="text-xs text-th-text-subtle">Connected as <span className="text-th-text-secondary">{connectedUser.name}</span></p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-th-text-subtle">Connected as <span className="text-th-text-secondary">{connectedUser.name}</span></p>
+                      {integration.clientId === 'oauth' && (
+                        <button type="button" onClick={handleSignOut} className="ml-auto text-xs text-th-text-subtle hover:text-rose-400 transition-colors focus:outline-hidden">
+                          Sign out
+                        </button>
+                      )}
+                    </div>
                   )}
                   <label className="flex cursor-pointer items-center gap-3">
                     <input

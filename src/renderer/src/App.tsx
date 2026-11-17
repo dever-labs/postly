@@ -14,6 +14,7 @@ import { useCollectionsStore } from './store/collections'
 import { useEnvironmentsStore } from './store/environments'
 import { useIntegrationsStore } from './store/integrations'
 import { useVariablesStore } from './store/variables'
+import { useUIStore } from './store/ui'
 
 export default function App(): React.ReactElement {
   const loadCollections = useCollectionsStore((s) => s.load)
@@ -22,6 +23,16 @@ export default function App(): React.ReactElement {
   const loadVariables = useVariablesStore((s) => s.load)
 
   useEffect(() => {
+    // postly:// deep links: main does the work (sign-in, sync, lookup) and tells us what to open.
+    // Subscribe before signalling readiness so no link is missed.
+    const offDeepLink = window.api.deepLink?.onOpen(({ collectionId }) => {
+      void Promise.all([loadIntegrations(), loadCollections()]).then(() => {
+        if (!collectionId) return
+        const ui = useUIStore.getState()
+        ui.setSidebarTab('apis')
+        ui.selectItem('collection', collectionId)
+      })
+    })
     window.api.waitForReady().then(() => {
       void Promise.all([
         loadCollections(),
@@ -29,7 +40,9 @@ export default function App(): React.ReactElement {
         loadIntegrations(),
         loadVariables(),
       ])
+      void window.api.deepLink?.ready()
     })
+    return () => offDeepLink?.()
   }, [loadCollections, loadEnvironments, loadIntegrations, loadVariables])
 
   return (

@@ -12,7 +12,7 @@ export interface BackstageSettings {
   token: string
   autoSync: boolean
   integrationId?: string
-  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google'
+  authProvider?: 'token' | 'guest' | 'gitlab' | 'github' | 'google' | 'oauth'
   connectedUser?: { name: string; email?: string; picture?: string }
   sslVerification?: boolean
 }
